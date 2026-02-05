@@ -807,13 +807,27 @@ export async function registerRoutes(
       const urlWithoutState = req.url.replace(/[&?]state=[^&]*/, '');
       const tokenSet = await xero.apiCallback(urlWithoutState);
       
-      await xero.updateTenants();
-      const activeTenant = xero.tenants[0];
+      // Get tenants directly from the connections endpoint instead of updateTenants()
+      // which tries to call Organisation API and may fail with insufficient scopes
+      const connectionsResponse = await fetch("https://api.xero.com/connections", {
+        headers: {
+          "Authorization": `Bearer ${tokenSet.access_token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      
+      if (!connectionsResponse.ok) {
+        console.error("Failed to get Xero connections:", await connectionsResponse.text());
+        return res.redirect("/admin?xero=error&reason=connections_failed");
+      }
+      
+      const connections = await connectionsResponse.json() as Array<{ tenantId: string; tenantName?: string; tenantType?: string }>;
+      const activeTenant = connections[0];
       
       if (activeTenant && tokenSet.access_token && tokenSet.refresh_token) {
         await saveXeroToken(
           activeTenant.tenantId,
-          activeTenant.tenantName,
+          activeTenant.tenantName || "Xero Organisation",
           tokenSet.access_token,
           tokenSet.refresh_token,
           new Date((tokenSet.expires_at || 0) * 1000)
