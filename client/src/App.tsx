@@ -37,6 +37,14 @@ import MarketingFormsPage from "@/pages/marketing/forms";
 import MarketingAnalyticsPage from "@/pages/marketing/analytics";
 import CommerceHubPage from "@/pages/commerce/hub";
 import ServiceHubPage from "@/pages/service/hub";
+import HelpDeskPage from "@/pages/service/help-desk";
+import CustomerSuccessPage from "@/pages/service/customer-success";
+import CustomerAgentPage from "@/pages/service/customer-agent";
+import ChatflowsPage from "@/pages/service/chatflows";
+import KnowledgeBasePage from "@/pages/service/knowledge-base";
+import CustomerPortalPage from "@/pages/service/customer-portal";
+import FeedbackSurveysPage from "@/pages/service/feedback-surveys";
+import ServiceAnalyticsPage from "@/pages/service/service-analytics";
 import DataAgentPage from "@/pages/data-management/data-agent";
 import DataIntegrationPage from "@/pages/data-management/data-integration";
 import EventManagementPage from "@/pages/data-management/event-management";
@@ -143,6 +151,14 @@ function AuthenticatedApp() {
         <Route path="/marketing/analytics" component={MarketingAnalyticsPage} />
         <Route path="/commerce/hub" component={CommerceHubPage} />
         <Route path="/service" component={ServiceHubPage} />
+        <Route path="/service/help-desk" component={HelpDeskPage} />
+        <Route path="/service/customer-success" component={CustomerSuccessPage} />
+        <Route path="/service/customer-agent" component={CustomerAgentPage} />
+        <Route path="/service/chatflows" component={ChatflowsPage} />
+        <Route path="/service/knowledge-base" component={KnowledgeBasePage} />
+        <Route path="/service/customer-portal" component={CustomerPortalPage} />
+        <Route path="/service/feedback-surveys" component={FeedbackSurveysPage} />
+        <Route path="/service/analytics" component={ServiceAnalyticsPage} />
         <Route path="/data-management/data-agent" component={DataAgentPage} />
         <Route path="/data-management/data-integration" component={DataIntegrationPage} />
         <Route path="/data-management/event-management" component={EventManagementPage} />

@@ -42,6 +42,13 @@ import {
   MessageSquareText,
   TextSelect,
   Contact,
+  HelpCircle,
+  Award,
+  Bot,
+  MessageCircle,
+  BookOpenCheck,
+  Globe,
+  ClipboardCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -104,6 +111,17 @@ const marketingItems = [
   { title: "Email", url: "/marketing/email", icon: Mail },
   { title: "Forms", url: "/marketing/forms", icon: ClipboardList },
   { title: "Marketing Analytics", url: "/marketing/analytics", icon: BarChart3 },
+];
+
+const serviceItems = [
+  { title: "Help Desk", url: "/service/help-desk", icon: HelpCircle },
+  { title: "Customer Success", url: "/service/customer-success", icon: Award },
+  { title: "Customer Agent", url: "/service/customer-agent", icon: Bot },
+  { title: "Chatflows", url: "/service/chatflows", icon: MessageCircle },
+  { title: "Knowledge Base", url: "/service/knowledge-base", icon: BookOpenCheck },
+  { title: "Customer Portal", url: "/service/customer-portal", icon: Globe },
+  { title: "Feedback Surveys", url: "/service/feedback-surveys", icon: ClipboardCheck },
+  { title: "Service Analytics", url: "/service/analytics", icon: BarChart3 },
 ];
 
 const reportingItems = [
@@ -392,18 +410,20 @@ export function AppSidebar() {
             <CollapsibleContent>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/service")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/service" data-testid="nav-service-hub">
-                        <Headphones className="w-4 h-4" />
-                        <span>Service Hub</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                  {serviceItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        data-active={isActive(item.url)}
+                        className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                      >
+                        <Link href={item.url} data-testid={`nav-service-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>
