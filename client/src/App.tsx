@@ -37,6 +37,13 @@ import MarketingFormsPage from "@/pages/marketing/forms";
 import MarketingAnalyticsPage from "@/pages/marketing/analytics";
 import CommerceHubPage from "@/pages/commerce/hub";
 import ServiceHubPage from "@/pages/service/hub";
+import DataAgentPage from "@/pages/data-management/data-agent";
+import DataIntegrationPage from "@/pages/data-management/data-integration";
+import EventManagementPage from "@/pages/data-management/event-management";
+import DataQualityPage from "@/pages/data-management/data-quality";
+import DataStudioPage from "@/pages/data-management/data-studio";
+import DataModelPage from "@/pages/data-management/data-model";
+import DataEnrichmentPage from "@/pages/data-management/data-enrichment";
 import NotFound from "@/pages/not-found";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -118,6 +125,13 @@ function AuthenticatedApp() {
         <Route path="/marketing/analytics" component={MarketingAnalyticsPage} />
         <Route path="/commerce/hub" component={CommerceHubPage} />
         <Route path="/service" component={ServiceHubPage} />
+        <Route path="/data-management/data-agent" component={DataAgentPage} />
+        <Route path="/data-management/data-integration" component={DataIntegrationPage} />
+        <Route path="/data-management/event-management" component={EventManagementPage} />
+        <Route path="/data-management/data-quality" component={DataQualityPage} />
+        <Route path="/data-management/data-studio" component={DataStudioPage} />
+        <Route path="/data-management/data-model" component={DataModelPage} />
+        <Route path="/data-management/data-enrichment" component={DataEnrichmentPage} />
         <Route path="/reporting/dashboards" component={ReportingDashboardsPage} />
         <Route path="/reporting/reports" component={ReportingReportsPage} />
         <Route path="/reporting/goals" component={ReportingGoalsPage} />

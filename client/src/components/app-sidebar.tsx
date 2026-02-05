@@ -26,6 +26,12 @@ import {
   Send,
   Store,
   Headphones,
+  Sparkles,
+  Plug,
+  CalendarCheck,
+  ShieldCheck,
+  Blocks,
+  Database,
 } from "lucide-react";
 import {
   Sidebar,
@@ -97,6 +103,7 @@ export function AppSidebar() {
   const isMarketingActive = location.startsWith("/marketing");
   const isCommerceActive = location.startsWith("/commerce");
   const isServiceActive = location.startsWith("/service");
+  const isDataMgmtActive = location.startsWith("/data-management");
   const isReportingActive = location.startsWith("/reporting") || location.startsWith("/reports");
 
   return (
@@ -333,6 +340,110 @@ export function AppSidebar() {
                       <Link href="/service" data-testid="nav-service-hub">
                         <Headphones className="w-4 h-4" />
                         <span>Service Hub</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <Collapsible defaultOpen={isDataMgmtActive} className="group/datamgmt">
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
+                <div className="flex items-center gap-2">
+                  <Database className="w-3.5 h-3.5" />
+                  <span>Data Management</span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/datamgmt:rotate-180" />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/data-management/data-agent")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/data-management/data-agent" data-testid="nav-data-agent">
+                        <Sparkles className="w-4 h-4" />
+                        <span>Data Agent</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/data-management/data-integration")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/data-management/data-integration" data-testid="nav-data-integration">
+                        <Plug className="w-4 h-4" />
+                        <span>Data Integration</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/data-management/event-management")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/data-management/event-management" data-testid="nav-event-management">
+                        <CalendarCheck className="w-4 h-4" />
+                        <span>Event Management</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/data-management/data-quality")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/data-management/data-quality" data-testid="nav-data-quality">
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Data Quality</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/data-management/data-studio")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/data-management/data-studio" data-testid="nav-data-studio">
+                        <BarChart3 className="w-4 h-4" />
+                        <span>Data Studio</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/data-management/data-model")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/data-management/data-model" data-testid="nav-data-model">
+                        <Blocks className="w-4 h-4" />
+                        <span>Data Model</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/data-management/data-enrichment")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/data-management/data-enrichment" data-testid="nav-data-enrichment">
+                        <Database className="w-4 h-4" />
+                        <span>Data Enrichment</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
