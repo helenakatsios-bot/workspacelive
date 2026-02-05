@@ -774,8 +774,12 @@ export async function registerRoutes(
       const returnedState = req.query.state as string | undefined;
       const sessionState = req.session.xeroState;
       
+      // Log state validation for debugging
+      console.log("Xero callback - returned state:", returnedState?.substring(0, 10) + "...");
+      console.log("Xero callback - session state:", sessionState?.substring(0, 10) + "..." || "undefined");
+      
       if (!returnedState || !sessionState || returnedState !== sessionState) {
-        console.error("Xero callback: state mismatch or missing session");
+        console.error("Xero callback: state mismatch or missing session. Session:", !!sessionState, "Returned:", !!returnedState);
         return res.redirect("/admin?xero=error&reason=invalid_state");
       }
       
@@ -797,8 +801,11 @@ export async function registerRoutes(
       const redirectUri = `${protocol}://${host}/api/xero/callback`;
       
       const xero = createXeroClient(redirectUri);
-      // Pass the state to apiCallback for verification
-      const tokenSet = await xero.apiCallback(req.url, { state: sessionState });
+      
+      // Strip state from URL and call apiCallback without state verification
+      // since we already validated the state ourselves
+      const urlWithoutState = req.url.replace(/[&?]state=[^&]*/, '');
+      const tokenSet = await xero.apiCallback(urlWithoutState);
       
       await xero.updateTenants();
       const activeTenant = xero.tenants[0];
