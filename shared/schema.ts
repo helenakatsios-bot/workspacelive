@@ -284,6 +284,38 @@ export const sessions = pgTable("sessions", {
   index("sessions_expire_idx").on(table.expire),
 ]);
 
+// ============ XERO TOKENS ============
+export const xeroTokens = pgTable("xero_tokens", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: text("tenant_id").notNull(),
+  tenantName: text("tenant_name"),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertXeroTokenSchema = createInsertSchema(xeroTokens).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertXeroToken = z.infer<typeof insertXeroTokenSchema>;
+export type XeroToken = typeof xeroTokens.$inferSelect;
+
+// ============ XERO SYNC MAPPING ============
+export const xeroSyncMapping = pgTable("xero_sync_mapping", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  entityType: text("entity_type").notNull(), // company, contact, invoice
+  localId: varchar("local_id", { length: 36 }).notNull(),
+  xeroId: text("xero_id").notNull(),
+  lastSyncedAt: timestamp("last_synced_at").notNull().defaultNow(),
+}, (table) => [
+  index("xero_sync_entity_idx").on(table.entityType, table.localId),
+  index("xero_sync_xero_idx").on(table.xeroId),
+]);
+
+export const insertXeroSyncMappingSchema = createInsertSchema(xeroSyncMapping).omit({ id: true, lastSyncedAt: true });
+export type InsertXeroSyncMapping = z.infer<typeof insertXeroSyncMappingSchema>;
+export type XeroSyncMapping = typeof xeroSyncMapping.$inferSelect;
+
 // ============ HELPER TYPES ============
 export type UserRole = "admin" | "office" | "warehouse" | "readonly";
 export type CreditStatus = "active" | "on_hold";

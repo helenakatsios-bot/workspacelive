@@ -1,7 +1,8 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight } from "lucide-react";
+import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, XCircle, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { User, AuditLog } from "@shared/schema";
 
 const roleLabels: Record<string, string> = {
@@ -40,8 +43,23 @@ interface AuditLogWithUser extends AuditLog {
   user?: User;
 }
 
+interface XeroStatus {
+  connected: boolean;
+  tenantName?: string;
+  expiresAt?: string;
+}
+
+interface ImportResult {
+  success: boolean;
+  imported: number;
+  skipped: number;
+  contacts: { name: string; isNew: boolean }[];
+}
+
 export default function AdminPage() {
   const { isAdmin } = useAuth();
+  const { toast } = useToast();
+  const [location] = useLocation();
   const [auditSearch, setAuditSearch] = useState("");
   const [actionFilter, setActionFilter] = useState<string>("all");
 
@@ -53,6 +71,68 @@ export default function AdminPage() {
   const { data: auditLogs, isLoading: loadingAudit } = useQuery<AuditLogWithUser[]>({
     queryKey: ["/api/admin/audit-logs"],
     enabled: isAdmin,
+  });
+
+  const { data: xeroStatus, isLoading: loadingXero, refetch: refetchXero } = useQuery<XeroStatus>({
+    queryKey: ["/api/xero/status"],
+    enabled: isAdmin,
+  });
+
+  // Handle Xero OAuth callback redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const xeroParam = params.get("xero");
+    if (xeroParam === "connected") {
+      toast({ title: "Xero connected successfully" });
+      refetchXero();
+      window.history.replaceState({}, "", "/admin");
+    } else if (xeroParam === "error") {
+      toast({ title: "Failed to connect Xero", variant: "destructive" });
+      window.history.replaceState({}, "", "/admin");
+    }
+  }, [location, toast, refetchXero]);
+
+  const connectXeroMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("GET", "/api/xero/auth-url");
+      return response.json();
+    },
+    onSuccess: (data: { url: string }) => {
+      window.location.href = data.url;
+    },
+    onError: () => {
+      toast({ title: "Failed to start Xero connection", variant: "destructive" });
+    },
+  });
+
+  const disconnectXeroMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/xero/disconnect");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/xero/status"] });
+      toast({ title: "Xero disconnected" });
+    },
+    onError: () => {
+      toast({ title: "Failed to disconnect Xero", variant: "destructive" });
+    },
+  });
+
+  const importContactsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/xero/import-contacts");
+      return response.json();
+    },
+    onSuccess: (data: ImportResult) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      toast({
+        title: "Contacts imported from Xero",
+        description: `${data.imported} new, ${data.skipped} already synced`,
+      });
+    },
+    onError: () => {
+      toast({ title: "Failed to import contacts", variant: "destructive" });
+    },
   });
 
   const filteredAuditLogs = useMemo(() => {
@@ -85,7 +165,7 @@ export default function AdminPage() {
       />
 
       <Tabs defaultValue="users">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="users" className="gap-2">
             <Users className="w-4 h-4" />
             Users
@@ -93,6 +173,10 @@ export default function AdminPage() {
           <TabsTrigger value="audit" className="gap-2">
             <Clock className="w-4 h-4" />
             Audit Log
+          </TabsTrigger>
+          <TabsTrigger value="integrations" className="gap-2" data-testid="tab-integrations">
+            <Link2 className="w-4 h-4" />
+            Integrations
           </TabsTrigger>
           <TabsTrigger value="exports" className="gap-2">
             <Download className="w-4 h-4" />
@@ -268,6 +352,92 @@ export default function AdminPage() {
                 <div className="p-12 text-center">
                   <Clock className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                   <p className="text-muted-foreground">No audit logs found</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="integrations" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Xero Accounting</CardTitle>
+              <CardDescription>Connect to Xero to sync contacts and invoices</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingXero ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Checking connection status...
+                </div>
+              ) : xeroStatus?.connected ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    <div className="flex-1">
+                      <p className="font-medium text-green-700 dark:text-green-300">Connected to Xero</p>
+                      {xeroStatus.tenantName && (
+                        <p className="text-sm text-green-600/80 dark:text-green-400/80">
+                          Organization: {xeroStatus.tenantName}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => disconnectXeroMutation.mutate()}
+                      disabled={disconnectXeroMutation.isPending}
+                      data-testid="button-xero-disconnect"
+                    >
+                      {disconnectXeroMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <Unlink className="w-4 h-4 mr-2" />
+                      )}
+                      Disconnect
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      onClick={() => importContactsMutation.mutate()}
+                      disabled={importContactsMutation.isPending}
+                      data-testid="button-xero-import-contacts"
+                    >
+                      {importContactsMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
+                      Import Contacts from Xero
+                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      Imports new customers from Xero as companies
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50 border">
+                    <XCircle className="w-5 h-5 text-muted-foreground" />
+                    <div className="flex-1">
+                      <p className="font-medium">Not connected</p>
+                      <p className="text-sm text-muted-foreground">
+                        Connect your Xero account to sync customers and invoices
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => connectXeroMutation.mutate()}
+                      disabled={connectXeroMutation.isPending}
+                      data-testid="button-xero-connect"
+                    >
+                      {connectXeroMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <Link2 className="w-4 h-4 mr-2" />
+                      )}
+                      Connect to Xero
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>

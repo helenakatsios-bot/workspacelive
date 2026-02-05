@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertActivitySchema } from "@shared/schema";
+import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero } from "./xero";
 
 declare module "express-session" {
   interface SessionData {
@@ -718,6 +719,180 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Get audit logs error:", error);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ==================== XERO INTEGRATION ROUTES ====================
+  
+  // Get Xero connection status
+  app.get("/api/xero/status", requireAdmin, async (req, res) => {
+    try {
+      const token = await getStoredToken();
+      if (token) {
+        res.json({
+          connected: true,
+          tenantName: token.tenantName,
+          expiresAt: token.expiresAt,
+        });
+      } else {
+        res.json({ connected: false });
+      }
+    } catch (error) {
+      console.error("Xero status error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get Xero OAuth authorization URL
+  app.get("/api/xero/auth-url", requireAdmin, async (req, res) => {
+    try {
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const redirectUri = `${protocol}://${host}/api/xero/callback`;
+      
+      const xero = createXeroClient(redirectUri);
+      const consentUrl = await xero.buildConsentUrl();
+      
+      res.json({ url: consentUrl });
+    } catch (error) {
+      console.error("Xero auth URL error:", error);
+      res.status(500).json({ message: "Failed to generate Xero authorization URL" });
+    }
+  });
+
+  // Xero OAuth callback
+  app.get("/api/xero/callback", async (req, res) => {
+    try {
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const redirectUri = `${protocol}://${host}/api/xero/callback`;
+      
+      const xero = createXeroClient(redirectUri);
+      const tokenSet = await xero.apiCallback(req.url);
+      
+      await xero.updateTenants();
+      const activeTenant = xero.tenants[0];
+      
+      if (activeTenant && tokenSet.access_token && tokenSet.refresh_token) {
+        await saveXeroToken(
+          activeTenant.tenantId,
+          activeTenant.tenantName,
+          tokenSet.access_token,
+          tokenSet.refresh_token,
+          new Date((tokenSet.expires_at || 0) * 1000)
+        );
+        
+        // Redirect back to admin page
+        res.redirect("/admin?xero=connected");
+      } else {
+        res.redirect("/admin?xero=error");
+      }
+    } catch (error) {
+      console.error("Xero callback error:", error);
+      res.redirect("/admin?xero=error");
+    }
+  });
+
+  // Disconnect Xero
+  app.post("/api/xero/disconnect", requireAdmin, async (req, res) => {
+    try {
+      await deleteXeroToken();
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Xero disconnect error:", error);
+      res.status(500).json({ message: "Failed to disconnect Xero" });
+    }
+  });
+
+  // Import contacts from Xero
+  app.post("/api/xero/import-contacts", requireAdmin, async (req, res) => {
+    try {
+      const token = await getStoredToken();
+      if (!token) {
+        return res.status(400).json({ message: "Xero not connected" });
+      }
+      
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const redirectUri = `${protocol}://${host}/api/xero/callback`;
+      
+      const xero = createXeroClient(redirectUri);
+      const refreshed = await refreshTokenIfNeeded(xero, token);
+      
+      if (!refreshed) {
+        return res.status(401).json({ message: "Xero token expired, please reconnect" });
+      }
+      
+      const imported = await importContactsFromXero(xero, token.tenantId);
+      
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "create",
+        entityType: "xero_import",
+        afterJson: { imported: imported.length },
+      });
+      
+      res.json({
+        success: true,
+        imported: imported.filter(i => i.isNew).length,
+        skipped: imported.filter(i => !i.isNew).length,
+        contacts: imported,
+      });
+    } catch (error) {
+      console.error("Xero import contacts error:", error);
+      res.status(500).json({ message: "Failed to import contacts from Xero" });
+    }
+  });
+
+  // Sync invoice to Xero
+  app.post("/api/xero/sync-invoice/:invoiceId", requireAdmin, async (req, res) => {
+    try {
+      const token = await getStoredToken();
+      if (!token) {
+        return res.status(400).json({ message: "Xero not connected" });
+      }
+      
+      const invoice = await storage.getInvoice(req.params.invoiceId);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      const company = await storage.getCompany(invoice.companyId);
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+      
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const redirectUri = `${protocol}://${host}/api/xero/callback`;
+      
+      const xero = createXeroClient(redirectUri);
+      const refreshed = await refreshTokenIfNeeded(xero, token);
+      
+      if (!refreshed) {
+        return res.status(401).json({ message: "Xero token expired, please reconnect" });
+      }
+      
+      // Get invoice line items if available (simplified for now)
+      const lineItems = [{
+        description: `Invoice ${invoice.invoiceNumber}`,
+        quantity: 1,
+        unitAmount: parseFloat(invoice.subtotal as string),
+      }];
+      
+      await syncInvoiceToXero(xero, token.tenantId, invoice, company, lineItems);
+      
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "update",
+        entityType: "xero_sync",
+        entityId: invoice.id,
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Xero sync invoice error:", error);
+      res.status(500).json({ message: "Failed to sync invoice to Xero" });
     }
   });
 
