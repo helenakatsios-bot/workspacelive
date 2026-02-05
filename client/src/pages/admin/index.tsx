@@ -158,6 +158,25 @@ export default function AdminPage() {
     },
   });
 
+  const importInvoicesMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/xero/import-invoices");
+      return response.json();
+    },
+    onSuccess: (data: { imported: number; skipped: number; errors: Array<{ invoiceNumber: string; error: string }> }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      const errorMsg = data.errors.length > 0 ? ` (${data.errors.length} errors)` : "";
+      toast({
+        title: "Orders imported from Xero",
+        description: `${data.imported} new orders created, ${data.skipped} already synced${errorMsg}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to import orders", description: error.message, variant: "destructive" });
+    },
+  });
+
   const connectOutlookMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("GET", "/api/outlook/auth-url");
@@ -479,6 +498,24 @@ export default function AdminPage() {
                     </Button>
                     <p className="text-sm text-muted-foreground">
                       Imports new customers from Xero as companies
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      onClick={() => importInvoicesMutation.mutate()}
+                      disabled={importInvoicesMutation.isPending}
+                      data-testid="button-xero-import-invoices"
+                    >
+                      {importInvoicesMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <Download className="w-4 h-4 mr-2" />
+                      )}
+                      {importInvoicesMutation.isPending ? "Importing orders..." : "Import All Orders from Xero"}
+                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      Imports all invoices from Xero as orders matched to customer profiles
                     </p>
                   </div>
                 </div>

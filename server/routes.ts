@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertActivitySchema } from "@shared/schema";
-import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero } from "./xero";
+import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, getEmailsForCompany, getEmailsForContact, getAllEmails } from "./outlook";
 
 declare module "express-session" {
@@ -942,6 +942,53 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Xero import contacts error:", error);
       res.status(500).json({ message: "Failed to import contacts from Xero" });
+    }
+  });
+
+  app.post("/api/xero/import-invoices", requireAdmin, async (req, res) => {
+    try {
+      const token = await getStoredToken();
+      if (!token) {
+        return res.status(400).json({ message: "Xero not connected" });
+      }
+      
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const redirectUri = `${protocol}://${host}/api/xero/callback`;
+      
+      const xero = createXeroClient(redirectUri);
+      const refreshed = await refreshTokenIfNeeded(xero, token);
+      
+      if (!refreshed) {
+        return res.status(401).json({ message: "Xero token expired, please reconnect" });
+      }
+      
+      const freshToken = await getStoredToken();
+      if (!freshToken) {
+        return res.status(400).json({ message: "Xero token not found after refresh" });
+      }
+      
+      const result = await importInvoicesFromXero(freshToken.accessToken, freshToken.tenantId);
+      
+      const newCount = result.imported.filter(i => i.isNew).length;
+      const existingCount = result.imported.filter(i => !i.isNew).length;
+      
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "create",
+        entityType: "xero_import_invoices",
+        afterJson: { newOrders: newCount, skipped: existingCount, errors: result.errors.length },
+      });
+      
+      res.json({
+        imported: newCount,
+        skipped: existingCount,
+        errors: result.errors,
+        details: result.imported,
+      });
+    } catch (error: any) {
+      console.error("Xero import invoices error:", error);
+      res.status(500).json({ message: error.message || "Failed to import invoices from Xero" });
     }
   });
 

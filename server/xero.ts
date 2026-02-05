@@ -1,7 +1,7 @@
 import { XeroClient, Contact as XeroContact, Invoice as XeroInvoice, LineItem, Invoices } from "xero-node";
 import { db } from "./db";
-import { xeroTokens, xeroSyncMapping, companies, contacts, invoices } from "@shared/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { xeroTokens, xeroSyncMapping, companies, contacts, invoices, orders, orderLines } from "@shared/schema";
+import { eq, and, desc, sql } from "drizzle-orm";
 
 const XERO_CLIENT_ID = process.env.XERO_CLIENT_ID;
 const XERO_CLIENT_SECRET = process.env.XERO_CLIENT_SECRET;
@@ -279,4 +279,161 @@ export async function syncInvoiceToXero(
   }
   
   return { success: true };
+}
+
+interface XeroInvoiceRaw {
+  InvoiceID: string;
+  InvoiceNumber?: string;
+  Type: string;
+  Contact?: { ContactID: string; Name?: string };
+  Date?: string;
+  DueDate?: string;
+  Status?: string;
+  SubTotal?: number;
+  TotalTax?: number;
+  Total?: number;
+  Reference?: string;
+  LineItems?: Array<{
+    Description?: string;
+    Quantity?: number;
+    UnitAmount?: number;
+    LineAmount?: number;
+    AccountCode?: string;
+  }>;
+}
+
+export async function importInvoicesFromXero(accessToken: string, tenantId: string) {
+  const imported: { invoiceNumber: string; companyName: string; isNew: boolean; total: number }[] = [];
+  const errors: { invoiceNumber: string; error: string }[] = [];
+  let page = 1;
+  let hasMore = true;
+
+  while (hasMore) {
+    const response = await fetch(
+      `https://api.xero.com/api.xro/2.0/Invoices?page=${page}&where=Type%3D%3D%22ACCREC%22&order=Date%20DESC`,
+      {
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Xero-Tenant-Id": tenantId,
+          "Accept": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Xero invoices API error (page ${page}):`, errorText);
+      throw new Error(`Failed to fetch invoices from Xero: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const xeroInvoices: XeroInvoiceRaw[] = data.Invoices || [];
+
+    if (xeroInvoices.length === 0) {
+      hasMore = false;
+      break;
+    }
+
+    for (const xInv of xeroInvoices) {
+      if (!xInv.InvoiceID) continue;
+
+      const invNumber = xInv.InvoiceNumber || xInv.InvoiceID.substring(0, 8);
+
+      const existingMapping = await getXeroSyncMappingByXeroId("order", xInv.InvoiceID);
+      if (existingMapping) {
+        imported.push({
+          invoiceNumber: invNumber,
+          companyName: xInv.Contact?.Name || "Unknown",
+          isNew: false,
+          total: xInv.Total || 0,
+        });
+        continue;
+      }
+
+      let companyId: string | undefined;
+      let companyName = xInv.Contact?.Name || "Unknown Company";
+
+      if (xInv.Contact?.ContactID) {
+        const companyMapping = await getXeroSyncMappingByXeroId("company", xInv.Contact.ContactID);
+        if (companyMapping) {
+          companyId = companyMapping.localId;
+        } else {
+          const [newCompany] = await db.insert(companies).values({
+            legalName: companyName,
+            tradingName: companyName,
+            internalNotes: `Auto-created during Xero invoice import on ${new Date().toLocaleDateString()}`,
+          }).returning();
+          companyId = newCompany.id;
+          await saveXeroSyncMapping("company", newCompany.id, xInv.Contact.ContactID);
+        }
+      }
+
+      if (!companyId) {
+        errors.push({ invoiceNumber: invNumber, error: "No contact associated with invoice" });
+        continue;
+      }
+
+      try {
+        const orderNumber = `XERO-${invNumber}`;
+
+        const existingOrder = await db.select().from(orders).where(eq(orders.orderNumber, orderNumber)).limit(1);
+        if (existingOrder.length > 0) {
+          await saveXeroSyncMapping("order", existingOrder[0].id, xInv.InvoiceID);
+          imported.push({ invoiceNumber: invNumber, companyName, isNew: false, total: xInv.Total || 0 });
+          continue;
+        }
+
+        let status = "completed";
+        if (xInv.Status === "DRAFT") status = "new";
+        else if (xInv.Status === "SUBMITTED" || xInv.Status === "AUTHORISED") status = "confirmed";
+        else if (xInv.Status === "PAID") status = "completed";
+        else if (xInv.Status === "VOIDED") status = "cancelled";
+
+        const subtotal = String(xInv.SubTotal || 0);
+        const tax = String(xInv.TotalTax || 0);
+        const total = String(xInv.Total || 0);
+
+        const orderDate = xInv.Date ? new Date(xInv.Date) : new Date();
+
+        const [newOrder] = await db.insert(orders).values({
+          orderNumber,
+          companyId,
+          status,
+          orderDate,
+          subtotal,
+          tax,
+          total,
+          internalNotes: `Imported from Xero invoice ${invNumber}${xInv.Reference ? ` (Ref: ${xInv.Reference})` : ""}`,
+        }).returning();
+
+        if (xInv.LineItems && xInv.LineItems.length > 0) {
+          for (const line of xInv.LineItems) {
+            if (!line.Description && !line.LineAmount) continue;
+            await db.insert(orderLines).values({
+              orderId: newOrder.id,
+              descriptionOverride: line.Description || "Line item",
+              quantity: Math.round(line.Quantity || 1),
+              unitPrice: String(line.UnitAmount || 0),
+              lineTotal: String(line.LineAmount || 0),
+            });
+          }
+        }
+
+        await saveXeroSyncMapping("order", newOrder.id, xInv.InvoiceID);
+
+        imported.push({ invoiceNumber: invNumber, companyName, isNew: true, total: xInv.Total || 0 });
+      } catch (err: any) {
+        console.error(`Error importing Xero invoice ${invNumber}:`, err);
+        errors.push({ invoiceNumber: invNumber, error: err.message || "Unknown error" });
+      }
+    }
+
+    if (xeroInvoices.length < 100) {
+      hasMore = false;
+    } else {
+      page++;
+    }
+  }
+
+  return { imported, errors };
 }
