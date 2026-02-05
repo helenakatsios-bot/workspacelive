@@ -141,6 +141,7 @@ export function AppSidebar() {
   };
 
   const isCrmActive = location.startsWith("/crm") || ["/contacts", "/companies", "/deals", "/orders"].some(p => location.startsWith(p));
+  const isTransactionsActive = ["/quotes", "/invoices"].some(p => location.startsWith(p));
   const isSalesActive = location.startsWith("/sales");
   const isMarketingActive = location.startsWith("/marketing");
   const isCommerceActive = location.startsWith("/commerce");
@@ -225,27 +226,37 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1">
-            Transactions
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {transactionItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    data-active={isActive(item.url)}
-                    className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                  >
-                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase()}`}>
-                      <item.icon className="w-4 h-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
+          <Collapsible defaultOpen={isTransactionsActive} className="group/transactions">
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
+                <div className="flex items-center gap-2">
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span>Transactions</span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/transactions:rotate-180" />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {transactionItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        data-active={isActive(item.url)}
+                        className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                      >
+                        <Link href={item.url} data-testid={`nav-${item.title.toLowerCase()}`}>
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
         </SidebarGroup>
 
         <SidebarGroup>
