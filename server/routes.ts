@@ -406,6 +406,32 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/contacts/:id", requireEdit, async (req, res) => {
+    try {
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      const deleted = await storage.deleteContact(req.params.id);
+      if (deleted) {
+        await storage.createAuditLog({
+          userId: req.session.userId,
+          action: "delete",
+          entityType: "contact",
+          entityId: req.params.id,
+          beforeJson: contact,
+          afterJson: null,
+        });
+        res.json({ message: "Contact deleted successfully" });
+      } else {
+        res.status(404).json({ message: "Contact not found" });
+      }
+    } catch (error) {
+      console.error("Delete contact error:", error);
+      res.status(500).json({ message: "Failed to delete contact" });
+    }
+  });
+
   // ==================== DEALS ROUTES ====================
   app.get("/api/deals", requireAuth, async (req, res) => {
     try {

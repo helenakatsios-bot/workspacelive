@@ -36,6 +36,7 @@ export interface IStorage {
   getContactsByCompany(companyId: string): Promise<Contact[]>;
   createContact(contact: InsertContact): Promise<Contact>;
   updateContact(id: string, data: Partial<InsertContact>): Promise<Contact | undefined>;
+  deleteContact(id: string): Promise<boolean>;
 
   // Deals
   getDeal(id: string): Promise<Deal | undefined>;
@@ -203,6 +204,11 @@ export class DatabaseStorage implements IStorage {
   async updateContact(id: string, data: Partial<InsertContact>): Promise<Contact | undefined> {
     const [updated] = await db.update(contacts).set(data).where(eq(contacts.id, id)).returning();
     return updated;
+  }
+
+  async deleteContact(id: string): Promise<boolean> {
+    const [deleted] = await db.delete(contacts).where(eq(contacts.id, id)).returning();
+    return !!deleted;
   }
 
   // Deals

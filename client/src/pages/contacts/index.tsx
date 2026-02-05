@@ -1,16 +1,19 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { format } from "date-fns";
-import { Users, MoreHorizontal, Eye, Edit, Mail, Phone, Building2 } from "lucide-react";
+import { Users, MoreHorizontal, Eye, Edit, Mail, Phone, Building2, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Contact, Company } from "@shared/schema";
 
 interface ContactWithCompany extends Contact {
@@ -20,7 +23,9 @@ interface ContactWithCompany extends Contact {
 export default function ContactsPage() {
   const [, navigate] = useLocation();
   const { canEdit } = useAuth();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const [contactToDelete, setContactToDelete] = useState<ContactWithCompany | null>(null);
 
   const { data: contacts, isLoading } = useQuery<ContactWithCompany[]>({
     queryKey: ["/api/contacts"],
@@ -38,6 +43,20 @@ export default function ContactsPage() {
       );
     });
   }, [contacts, search]);
+
+  const deleteContactMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/contacts/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      toast({ title: "Contact deleted successfully" });
+      setContactToDelete(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to delete contact", variant: "destructive" });
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -168,6 +187,22 @@ export default function ContactsPage() {
                               </Link>
                             </DropdownMenuItem>
                           )}
+                          {canEdit && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setContactToDelete(contact);
+                                }}
+                                data-testid={`button-delete-contact-${contact.id}`}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -178,6 +213,29 @@ export default function ContactsPage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!contactToDelete} onOpenChange={(open) => !open && setContactToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Contact</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete{" "}
+              <span className="font-semibold">{contactToDelete?.firstName} {contactToDelete?.lastName}</span>?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => contactToDelete && deleteContactMutation.mutate(contactToDelete.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              {deleteContactMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
