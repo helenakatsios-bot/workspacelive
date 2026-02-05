@@ -797,7 +797,8 @@ export async function registerRoutes(
       const redirectUri = `${protocol}://${host}/api/xero/callback`;
       
       const xero = createXeroClient(redirectUri);
-      const tokenSet = await xero.apiCallback(req.url);
+      // Pass the state to apiCallback for verification
+      const tokenSet = await xero.apiCallback(req.url, { state: sessionState });
       
       await xero.updateTenants();
       const activeTenant = xero.tenants[0];
