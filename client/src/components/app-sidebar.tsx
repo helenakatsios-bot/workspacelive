@@ -573,18 +573,6 @@ export function AppSidebar() {
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/reports/clients-since-july-2021")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/reports/clients-since-july-2021" data-testid="nav-clients-since-july-2021">
-                        <Calendar className="w-4 h-4" />
-                        <span>Clients Since July 2021</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>
