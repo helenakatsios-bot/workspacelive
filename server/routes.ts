@@ -571,6 +571,32 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/products/:id", requireEdit, async (req, res) => {
+    try {
+      const product = await storage.getProduct(req.params.id);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      const deleted = await storage.deleteProduct(req.params.id);
+      if (deleted) {
+        await storage.createAuditLog({
+          userId: req.session.userId,
+          action: "delete",
+          entityType: "product",
+          entityId: req.params.id,
+          beforeJson: product,
+          afterJson: null,
+        });
+        res.json({ message: "Product deleted successfully" });
+      } else {
+        res.status(404).json({ message: "Product not found" });
+      }
+    } catch (error) {
+      console.error("Delete product error:", error);
+      res.status(500).json({ message: "Failed to delete product" });
+    }
+  });
+
   // ==================== QUOTES ROUTES ====================
   app.get("/api/quotes", requireAuth, async (req, res) => {
     try {
