@@ -21,12 +21,15 @@ const OUTLOOK_SCOPES = [
   "Mail.ReadWrite",
 ];
 
+// Tenant ID for Purax Feather Holdings (single-tenant app)
+const OUTLOOK_TENANT_ID = "67838177-e1e4-42cd-9335-e66867ca148e";
+
 export function createMsalClient(redirectUri: string): ConfidentialClientApplication {
   const config: Configuration = {
     auth: {
       clientId: OUTLOOK_CLIENT_ID!,
       clientSecret: OUTLOOK_CLIENT_SECRET!,
-      authority: "https://login.microsoftonline.com/common",
+      authority: `https://login.microsoftonline.com/${OUTLOOK_TENANT_ID}`,
     },
   };
   return new ConfidentialClientApplication(config);
