@@ -1,18 +1,307 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// ============ USERS ============
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  role: text("role").notNull().default("office"), // admin, office, warehouse, readonly
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastLogin: timestamp("last_login"),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, lastLogin: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// ============ COMPANIES (CUSTOMERS) ============
+export const companies = pgTable("companies", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  legalName: text("legal_name").notNull(),
+  tradingName: text("trading_name"),
+  abn: text("abn"),
+  billingAddress: text("billing_address"),
+  shippingAddress: text("shipping_address"),
+  paymentTerms: text("payment_terms").default("Net 30"),
+  creditStatus: text("credit_status").notNull().default("active"), // active, on_hold
+  tags: text("tags").array(),
+  internalNotes: text("internal_notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("companies_legal_name_idx").on(table.legalName),
+  index("companies_credit_status_idx").on(table.creditStatus),
+]);
+
+export const insertCompanySchema = createInsertSchema(companies).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCompany = z.infer<typeof insertCompanySchema>;
+export type Company = typeof companies.$inferSelect;
+
+// ============ CONTACTS ============
+export const contacts = pgTable("contacts", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  position: text("position"),
+  preferredContactMethod: text("preferred_contact_method").default("email"), // email, phone, sms
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("contacts_company_idx").on(table.companyId),
+  index("contacts_email_idx").on(table.email),
+]);
+
+export const insertContactSchema = createInsertSchema(contacts).omit({ id: true, createdAt: true });
+export type InsertContact = z.infer<typeof insertContactSchema>;
+export type Contact = typeof contacts.$inferSelect;
+
+// ============ DEALS ============
+export const deals = pgTable("deals", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id),
+  contactId: varchar("contact_id", { length: 36 }).references(() => contacts.id),
+  dealName: text("deal_name").notNull(),
+  pipelineStage: text("pipeline_stage").notNull().default("lead"), // lead, qualified, quote_sent, negotiation, won, lost
+  estimatedValue: decimal("estimated_value", { precision: 12, scale: 2 }),
+  probability: integer("probability").default(0),
+  expectedCloseDate: timestamp("expected_close_date"),
+  ownerUserId: varchar("owner_user_id", { length: 36 }).references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("deals_company_idx").on(table.companyId),
+  index("deals_stage_idx").on(table.pipelineStage),
+]);
+
+export const insertDealSchema = createInsertSchema(deals).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDeal = z.infer<typeof insertDealSchema>;
+export type Deal = typeof deals.$inferSelect;
+
+// ============ PRODUCTS ============
+export const products = pgTable("products", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  sku: text("sku").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category"),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+  costPrice: decimal("cost_price", { precision: 12, scale: 2 }),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("products_sku_idx").on(table.sku),
+  index("products_category_idx").on(table.category),
+]);
+
+export const insertProductSchema = createInsertSchema(products).omit({ id: true, createdAt: true });
+export type InsertProduct = z.infer<typeof insertProductSchema>;
+export type Product = typeof products.$inferSelect;
+
+// ============ QUOTES ============
+export const quotes = pgTable("quotes", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  quoteNumber: text("quote_number").notNull().unique(),
+  companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id),
+  contactId: varchar("contact_id", { length: 36 }).references(() => contacts.id),
+  status: text("status").notNull().default("draft"), // draft, sent, accepted, declined
+  issueDate: timestamp("issue_date").notNull().defaultNow(),
+  expiryDate: timestamp("expiry_date"),
+  subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
+  tax: decimal("tax", { precision: 12, scale: 2 }).notNull().default("0"),
+  total: decimal("total", { precision: 12, scale: 2 }).notNull().default("0"),
+  notes: text("notes"),
+  createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("quotes_company_idx").on(table.companyId),
+  index("quotes_status_idx").on(table.status),
+]);
+
+export const insertQuoteSchema = createInsertSchema(quotes).omit({ id: true, createdAt: true });
+export type InsertQuote = z.infer<typeof insertQuoteSchema>;
+export type Quote = typeof quotes.$inferSelect;
+
+// ============ QUOTE LINES ============
+export const quoteLines = pgTable("quote_lines", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  quoteId: varchar("quote_id", { length: 36 }).notNull().references(() => quotes.id, { onDelete: "cascade" }),
+  productId: varchar("product_id", { length: 36 }).references(() => products.id),
+  descriptionOverride: text("description_override"),
+  quantity: integer("quantity").notNull().default(1),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+  discount: decimal("discount", { precision: 5, scale: 2 }).default("0"),
+  lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
+});
+
+export const insertQuoteLineSchema = createInsertSchema(quoteLines).omit({ id: true });
+export type InsertQuoteLine = z.infer<typeof insertQuoteLineSchema>;
+export type QuoteLine = typeof quoteLines.$inferSelect;
+
+// ============ ORDERS (CORE TABLE) ============
+export const orders = pgTable("orders", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  orderNumber: text("order_number").notNull().unique(),
+  companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id),
+  contactId: varchar("contact_id", { length: 36 }).references(() => contacts.id),
+  quoteId: varchar("quote_id", { length: 36 }).references(() => quotes.id),
+  status: text("status").notNull().default("new"), // new, confirmed, in_production, ready, dispatched, completed, cancelled, on_hold
+  orderDate: timestamp("order_date").notNull().defaultNow(), // THIS DRIVES DATE FILTERS
+  requestedShipDate: timestamp("requested_ship_date"),
+  shippingMethod: text("shipping_method"),
+  trackingNumber: text("tracking_number"),
+  subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
+  tax: decimal("tax", { precision: 12, scale: 2 }).notNull().default("0"),
+  total: decimal("total", { precision: 12, scale: 2 }).notNull().default("0"),
+  internalNotes: text("internal_notes"),
+  customerNotes: text("customer_notes"),
+  createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("orders_company_idx").on(table.companyId),
+  index("orders_status_idx").on(table.status),
+  index("orders_order_date_idx").on(table.orderDate),
+  index("orders_order_number_idx").on(table.orderNumber),
+]);
+
+export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertOrder = z.infer<typeof insertOrderSchema>;
+export type Order = typeof orders.$inferSelect;
+
+// ============ ORDER LINES ============
+export const orderLines = pgTable("order_lines", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id", { length: 36 }).notNull().references(() => orders.id, { onDelete: "cascade" }),
+  productId: varchar("product_id", { length: 36 }).references(() => products.id),
+  descriptionOverride: text("description_override"),
+  quantity: integer("quantity").notNull().default(1),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+  discount: decimal("discount", { precision: 5, scale: 2 }).default("0"),
+  lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
+});
+
+export const insertOrderLineSchema = createInsertSchema(orderLines).omit({ id: true });
+export type InsertOrderLine = z.infer<typeof insertOrderLineSchema>;
+export type OrderLine = typeof orderLines.$inferSelect;
+
+// ============ INVOICES ============
+export const invoices = pgTable("invoices", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  invoiceNumber: text("invoice_number").notNull().unique(),
+  orderId: varchar("order_id", { length: 36 }).references(() => orders.id),
+  companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id),
+  status: text("status").notNull().default("draft"), // draft, sent, paid, overdue, void
+  issueDate: timestamp("issue_date").notNull().defaultNow(),
+  dueDate: timestamp("due_date"),
+  subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
+  tax: decimal("tax", { precision: 12, scale: 2 }).notNull().default("0"),
+  total: decimal("total", { precision: 12, scale: 2 }).notNull().default("0"),
+  balanceDue: decimal("balance_due", { precision: 12, scale: 2 }).notNull().default("0"),
+  xeroInvoiceId: text("xero_invoice_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("invoices_company_idx").on(table.companyId),
+  index("invoices_status_idx").on(table.status),
+  index("invoices_order_idx").on(table.orderId),
+]);
+
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true });
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type Invoice = typeof invoices.$inferSelect;
+
+// ============ ATTACHMENTS ============
+export const attachments = pgTable("attachments", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  entityType: text("entity_type").notNull(), // company, contact, deal, quote, order, invoice
+  entityId: varchar("entity_id", { length: 36 }).notNull(),
+  fileName: text("file_name").notNull(),
+  fileType: text("file_type").notNull(),
+  fileSize: integer("file_size").notNull(),
+  storagePath: text("storage_path").notNull(),
+  uploadedBy: varchar("uploaded_by", { length: 36 }).references(() => users.id),
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+  description: text("description"),
+}, (table) => [
+  index("attachments_entity_idx").on(table.entityType, table.entityId),
+]);
+
+export const insertAttachmentSchema = createInsertSchema(attachments).omit({ id: true, uploadedAt: true });
+export type InsertAttachment = z.infer<typeof insertAttachmentSchema>;
+export type Attachment = typeof attachments.$inferSelect;
+
+// ============ ACTIVITY TIMELINE ============
+export const activities = pgTable("activities", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  entityType: text("entity_type").notNull(), // company, contact, deal, quote, order, invoice
+  entityId: varchar("entity_id", { length: 36 }).notNull(),
+  activityType: text("activity_type").notNull(), // note, email, call, status_change, file_upload, system
+  content: text("content").notNull(),
+  createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("activities_entity_idx").on(table.entityType, table.entityId),
+  index("activities_created_at_idx").on(table.createdAt),
+]);
+
+export const insertActivitySchema = createInsertSchema(activities).omit({ id: true, createdAt: true });
+export type InsertActivity = z.infer<typeof insertActivitySchema>;
+export type Activity = typeof activities.$inferSelect;
+
+// ============ AUDIT LOG ============
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 36 }).references(() => users.id),
+  action: text("action").notNull(), // create, update, delete, restore, login
+  entityType: text("entity_type"),
+  entityId: varchar("entity_id", { length: 36 }),
+  beforeJson: jsonb("before_json"),
+  afterJson: jsonb("after_json"),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+}, (table) => [
+  index("audit_logs_user_idx").on(table.userId),
+  index("audit_logs_entity_idx").on(table.entityType, table.entityId),
+  index("audit_logs_timestamp_idx").on(table.timestamp),
+]);
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, timestamp: true });
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
+
+// ============ SESSIONS (for authentication) ============
+export const sessions = pgTable("sessions", {
+  sid: varchar("sid", { length: 255 }).primaryKey(),
+  sess: jsonb("sess").notNull(),
+  expire: timestamp("expire").notNull(),
+}, (table) => [
+  index("sessions_expire_idx").on(table.expire),
+]);
+
+// ============ HELPER TYPES ============
+export type UserRole = "admin" | "office" | "warehouse" | "readonly";
+export type CreditStatus = "active" | "on_hold";
+export type DealStage = "lead" | "qualified" | "quote_sent" | "negotiation" | "won" | "lost";
+export type QuoteStatus = "draft" | "sent" | "accepted" | "declined";
+export type OrderStatus = "new" | "confirmed" | "in_production" | "ready" | "dispatched" | "completed" | "cancelled" | "on_hold";
+export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "void";
+export type ActivityType = "note" | "email" | "call" | "status_change" | "file_upload" | "system";
+
+// ============ VALIDATION SCHEMAS ============
+export const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+export type LoginInput = z.infer<typeof loginSchema>;
+
+export const dateRangeSchema = z.object({
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+});
+export type DateRange = z.infer<typeof dateRangeSchema>;

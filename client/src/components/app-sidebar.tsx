@@ -1,0 +1,208 @@
+import { Link, useLocation } from "wouter";
+import {
+  Building2,
+  Users,
+  Target,
+  FileText,
+  Package,
+  Receipt,
+  LayoutDashboard,
+  Settings,
+  LogOut,
+  ShoppingCart,
+  Moon,
+  Sun,
+  Calendar,
+} from "lucide-react";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarHeader,
+  SidebarFooter,
+} from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/components/theme-provider";
+
+const mainNavItems = [
+  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Companies", url: "/companies", icon: Building2 },
+  { title: "Contacts", url: "/contacts", icon: Users },
+  { title: "Deals", url: "/deals", icon: Target },
+  { title: "Products", url: "/products", icon: Package },
+];
+
+const transactionItems = [
+  { title: "Quotes", url: "/quotes", icon: FileText },
+  { title: "Orders", url: "/orders", icon: ShoppingCart },
+  { title: "Invoices", url: "/invoices", icon: Receipt },
+];
+
+const reportItems = [
+  { title: "Clients Since July 2021", url: "/reports/clients-since-july-2021", icon: Calendar },
+];
+
+export function AppSidebar() {
+  const [location] = useLocation();
+  const { user, logout, isAdmin } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+
+  const isActive = (url: string) => {
+    if (url === "/") return location === "/";
+    return location.startsWith(url);
+  };
+
+  return (
+    <Sidebar>
+      <SidebarHeader className="p-4 border-b border-sidebar-border">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
+            <Building2 className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <div className="flex flex-col">
+            <span className="font-semibold text-sm">Business CRM</span>
+            <span className="text-xs text-muted-foreground">Order Management</span>
+          </div>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent className="px-2">
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1">
+            Main
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {mainNavItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    data-active={isActive(item.url)}
+                    className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                  >
+                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase()}`}>
+                      <item.icon className="w-4 h-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1">
+            Transactions
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {transactionItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    data-active={isActive(item.url)}
+                    className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                  >
+                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase()}`}>
+                      <item.icon className="w-4 h-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1">
+            Reports
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {reportItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    data-active={isActive(item.url)}
+                    className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                  >
+                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                      <item.icon className="w-4 h-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1">
+              Admin
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    data-active={isActive("/admin")}
+                    className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                  >
+                    <Link href="/admin" data-testid="nav-admin">
+                      <Settings className="w-4 h-4" />
+                      <span>Settings</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+      </SidebarContent>
+
+      <SidebarFooter className="p-3 border-t border-sidebar-border">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-medium text-primary">
+                {user?.name?.charAt(0).toUpperCase() || "U"}
+              </span>
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-medium truncate">{user?.name || "User"}</span>
+              <span className="text-xs text-muted-foreground capitalize">{user?.role || "user"}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={toggleTheme}
+              data-testid="button-theme-toggle"
+            >
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={logout}
+              data-testid="button-logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
