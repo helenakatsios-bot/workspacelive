@@ -116,6 +116,24 @@ export default function CompanyDetailPage() {
     },
   });
 
+  const deleteCompanyMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/companies/${params?.id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      toast({ title: "Company deleted successfully" });
+      navigate("/companies");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to delete company",
+        description: error?.message || "Remove all related contacts, deals, orders, quotes, and invoices first.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAddNote = async () => {
     if (!newNote.trim()) return;
     setIsSubmittingNote(true);
@@ -237,6 +255,36 @@ export default function CompanyDetailPage() {
               <Edit className="w-4 h-4 mr-1" />
               Edit
             </Button>
+          )}
+          {isAdmin && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" data-testid="button-delete-company">
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Company</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete{" "}
+                    <span className="font-semibold">{company.tradingName || company.legalName}</span>?
+                    This action cannot be undone. All related contacts, deals, orders, quotes and invoices must be removed first.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="button-cancel-delete-company">Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => deleteCompanyMutation.mutate()}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    data-testid="button-confirm-delete-company"
+                  >
+                    {deleteCompanyMutation.isPending ? "Deleting..." : "Delete"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </div>
       </div>
