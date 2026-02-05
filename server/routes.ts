@@ -10,6 +10,7 @@ import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refre
 declare module "express-session" {
   interface SessionData {
     userId: string;
+    xeroState?: string;
   }
 }
 
@@ -750,8 +751,12 @@ export async function registerRoutes(
       const host = req.headers["x-forwarded-host"] || req.headers.host;
       const redirectUri = `${protocol}://${host}/api/xero/callback`;
       
+      // Generate and store state for CSRF protection
+      const state = Math.random().toString(36).substring(2) + Date.now().toString(36);
+      req.session.xeroState = state;
+      
       const xero = createXeroClient(redirectUri);
-      const consentUrl = await xero.buildConsentUrl();
+      const consentUrl = await xero.buildConsentUrl() + `&state=${encodeURIComponent(state)}`;
       
       res.json({ url: consentUrl });
     } catch (error) {
@@ -760,9 +765,31 @@ export async function registerRoutes(
     }
   });
 
-  // Xero OAuth callback
+  // Xero OAuth callback - requires valid session with matching state
   app.get("/api/xero/callback", async (req, res) => {
     try {
+      // Validate state parameter for CSRF protection
+      const returnedState = req.query.state as string | undefined;
+      const sessionState = req.session.xeroState;
+      
+      if (!returnedState || !sessionState || returnedState !== sessionState) {
+        console.error("Xero callback: state mismatch or missing session");
+        return res.redirect("/admin?xero=error&reason=invalid_state");
+      }
+      
+      // Clear state after validation
+      delete req.session.xeroState;
+      
+      // Verify user is still logged in as admin
+      if (!req.session.userId) {
+        return res.redirect("/admin?xero=error&reason=not_authenticated");
+      }
+      
+      const user = await storage.getUser(req.session.userId);
+      if (!user || user.role !== "admin") {
+        return res.redirect("/admin?xero=error&reason=not_admin");
+      }
+      
       const protocol = req.headers["x-forwarded-proto"] || req.protocol;
       const host = req.headers["x-forwarded-host"] || req.headers.host;
       const redirectUri = `${protocol}://${host}/api/xero/callback`;
@@ -781,6 +808,13 @@ export async function registerRoutes(
           tokenSet.refresh_token,
           new Date((tokenSet.expires_at || 0) * 1000)
         );
+        
+        // Audit log the connection
+        await storage.createAuditLog({
+          userId: req.session.userId,
+          action: "create",
+          entityType: "xero_connection",
+        });
         
         // Redirect back to admin page
         res.redirect("/admin?xero=connected");
