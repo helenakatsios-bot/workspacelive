@@ -15,6 +15,15 @@ import {
   Calendar,
   BarChart3,
   ChevronDown,
+  Briefcase,
+  FolderOpen,
+  Activity,
+  TrendingUp,
+  Megaphone,
+  Mail,
+  ClipboardList,
+  BarChart2,
+  Send,
 } from "lucide-react";
 import {
   Sidebar,
@@ -51,6 +60,21 @@ const transactionItems = [
   { title: "Invoices", url: "/invoices", icon: Receipt },
 ];
 
+const salesItems = [
+  { title: "Sales Workspace", url: "/sales/workspace", icon: Briefcase },
+  { title: "Documents", url: "/sales/documents", icon: FolderOpen },
+  { title: "Activity Feed", url: "/sales/activity-feed", icon: Activity },
+  { title: "Forecast", url: "/sales/forecast", icon: TrendingUp },
+  { title: "Sales Analytics", url: "/sales/analytics", icon: BarChart2 },
+];
+
+const marketingItems = [
+  { title: "Campaigns", url: "/marketing/campaigns", icon: Megaphone },
+  { title: "Email", url: "/marketing/email", icon: Mail },
+  { title: "Forms", url: "/marketing/forms", icon: ClipboardList },
+  { title: "Marketing Analytics", url: "/marketing/analytics", icon: BarChart3 },
+];
+
 const reportingItems = [
   { title: "Dashboards", url: "/reporting/dashboards", icon: BarChart3 },
   { title: "Reports", url: "/reporting/reports", icon: FileText },
@@ -67,6 +91,8 @@ export function AppSidebar() {
     return location.startsWith(url);
   };
 
+  const isSalesActive = location.startsWith("/sales");
+  const isMarketingActive = location.startsWith("/marketing");
   const isReportingActive = location.startsWith("/reporting") || location.startsWith("/reports");
 
   return (
@@ -133,14 +159,82 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <Collapsible defaultOpen={isReportingActive}>
+          <Collapsible defaultOpen={isSalesActive} className="group/sales">
             <CollapsibleTrigger className="w-full">
-              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between w-full">
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
+                <div className="flex items-center gap-2">
+                  <Briefcase className="w-3.5 h-3.5" />
+                  <span>Sales</span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/sales:rotate-180" />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {salesItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        data-active={isActive(item.url)}
+                        className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                      >
+                        <Link href={item.url} data-testid={`nav-sales-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <Collapsible defaultOpen={isMarketingActive} className="group/marketing">
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
+                <div className="flex items-center gap-2">
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Marketing</span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/marketing:rotate-180" />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {marketingItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        data-active={isActive(item.url)}
+                        className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                      >
+                        <Link href={item.url} data-testid={`nav-marketing-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <Collapsible defaultOpen={isReportingActive} className="group/reporting">
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
                 <div className="flex items-center gap-2">
                   <BarChart3 className="w-3.5 h-3.5" />
                   <span>Reporting</span>
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]:rotate-180" />
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/reporting:rotate-180" />
               </SidebarGroupLabel>
             </CollapsibleTrigger>
             <CollapsibleContent>

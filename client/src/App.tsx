@@ -26,6 +26,15 @@ import ClientsSinceJuly2021Page from "@/pages/reports/clients-since-july-2021";
 import ReportingDashboardsPage from "@/pages/reporting/dashboards";
 import ReportingReportsPage from "@/pages/reporting/reports";
 import ReportingGoalsPage from "@/pages/reporting/goals";
+import SalesWorkspacePage from "@/pages/sales/workspace";
+import SalesDocumentsPage from "@/pages/sales/documents";
+import SalesActivityFeedPage from "@/pages/sales/activity-feed";
+import SalesForecastPage from "@/pages/sales/forecast";
+import SalesAnalyticsPage from "@/pages/sales/analytics";
+import MarketingCampaignsPage from "@/pages/marketing/campaigns";
+import MarketingEmailPage from "@/pages/marketing/email";
+import MarketingFormsPage from "@/pages/marketing/forms";
+import MarketingAnalyticsPage from "@/pages/marketing/analytics";
 import NotFound from "@/pages/not-found";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -96,6 +105,15 @@ function AuthenticatedApp() {
         <Route path="/invoices" component={InvoicesPage} />
         <Route path="/invoices/new" component={InvoicesPage} />
         <Route path="/invoices/:id" component={InvoicesPage} />
+        <Route path="/sales/workspace" component={SalesWorkspacePage} />
+        <Route path="/sales/documents" component={SalesDocumentsPage} />
+        <Route path="/sales/activity-feed" component={SalesActivityFeedPage} />
+        <Route path="/sales/forecast" component={SalesForecastPage} />
+        <Route path="/sales/analytics" component={SalesAnalyticsPage} />
+        <Route path="/marketing/campaigns" component={MarketingCampaignsPage} />
+        <Route path="/marketing/email" component={MarketingEmailPage} />
+        <Route path="/marketing/forms" component={MarketingFormsPage} />
+        <Route path="/marketing/analytics" component={MarketingAnalyticsPage} />
         <Route path="/reporting/dashboards" component={ReportingDashboardsPage} />
         <Route path="/reporting/reports" component={ReportingReportsPage} />
         <Route path="/reporting/goals" component={ReportingGoalsPage} />
