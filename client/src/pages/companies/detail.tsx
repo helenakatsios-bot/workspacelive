@@ -23,6 +23,21 @@ import {
   ChevronDown,
   ChevronRight,
   Trash2,
+  Sparkles,
+  Bot,
+  Zap,
+  Eye,
+  Search,
+  Globe,
+  Briefcase,
+  DollarSign,
+  Factory,
+  Share2,
+  ExternalLink,
+  Play,
+  Signal,
+  TrendingUp,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -383,10 +398,11 @@ export default function CompanyDetailPage() {
         {/* CENTER PANEL - Main Content Tabs */}
         <div>
           <Tabs defaultValue="about">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="about" data-testid="tab-about">About</TabsTrigger>
               <TabsTrigger value="activity" data-testid="tab-activity">Activity</TabsTrigger>
               <TabsTrigger value="orders" data-testid="tab-orders">Orders</TabsTrigger>
+              <TabsTrigger value="data" data-testid="tab-data">Data</TabsTrigger>
               <TabsTrigger value="files" data-testid="tab-files">Files</TabsTrigger>
             </TabsList>
 
@@ -553,6 +569,259 @@ export default function CompanyDetailPage() {
                       <p className="text-sm">No orders yet</p>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="data" className="mt-4 space-y-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <span>This record is up-to-date with the latest enrichment data.</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Employees</p>
+                      <p className="text-sm font-medium" data-testid="text-employees">--</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Annual revenue</p>
+                      <p className="text-sm font-medium" data-testid="text-annual-revenue">--</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="p-4 pb-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Bot className="w-4 h-4 text-primary" />
+                      <CardTitle className="text-base">Data Agent</CardTitle>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => navigate("/data-management/data-agent")} data-testid="link-data-agent">
+                      View data agent
+                    </Button>
+                  </div>
+                  <CardDescription className="text-xs mt-1">
+                    Data agent will help fill in enrichment, create smart properties, research your records, fix data quality issues, and show and fill available signals and intent.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-4 pt-2 space-y-4">
+                  <div className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      <h4 className="text-sm font-medium">Create a Smart Property</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Ask a question about your company or contact records to fill a property with Data Agent. Include as much detail as possible.
+                    </p>
+                    <p className="text-xs text-muted-foreground italic">
+                      Example: "I need a property named 'Subscription Level'. This property should be a dropdown select and the options should include 'Bronze', 'Gold', 'Silver', and 'Platinum'. Options should appear as colored badges."
+                    </p>
+                    <div className="flex items-center gap-2 pt-1">
+                      <Sparkles className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">Data agent insights with smart properties</span>
+                    </div>
+                    <Button variant="outline" size="sm" className="mt-1" data-testid="button-view-prompt-library">
+                      <BookOpen className="w-3 h-3 mr-1" />
+                      View prompt library
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-lg border p-3 hover-elevate cursor-pointer" data-testid="prompt-open-jobs">
+                      <div>
+                        <h4 className="text-sm font-medium">Open Jobs</h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Summarize the open roles at this company, highlighting which positions have the most openings and in which areas the company is primarily focusing its hiring.
+                        </p>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        <Play className="w-3 h-3 mr-1" />
+                        Use prompt
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border p-3 hover-elevate cursor-pointer" data-testid="prompt-champion-contact">
+                      <div>
+                        <h4 className="text-sm font-medium">Champion Contact</h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Who is the champion at this company?
+                        </p>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        <Play className="w-3 h-3 mr-1" />
+                        Use prompt
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border p-3 hover-elevate cursor-pointer" data-testid="prompt-company-purpose">
+                      <div>
+                        <h4 className="text-sm font-medium">Company Purpose</h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Identify the fundamental activity or purpose of the company — what it primarily exists to do.
+                        </p>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        <Play className="w-3 h-3 mr-1" />
+                        Use prompt
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border p-3 hover-elevate cursor-pointer" data-testid="prompt-competitors">
+                      <div>
+                        <h4 className="text-sm font-medium">Competitors Mentioned</h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          What competitors were mentioned?
+                        </p>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        <Play className="w-3 h-3 mr-1" />
+                        Use prompt
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="p-4 pb-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-primary" />
+                      <CardTitle className="text-base">Buyer Intent</CardTitle>
+                    </div>
+                    <Button variant="outline" size="sm" data-testid="button-view-buyer-intent">
+                      View buyer intent
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 pt-2 space-y-4">
+                  <div className="rounded-lg border p-3">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2">
+                        <Signal className="w-4 h-4 text-muted-foreground" />
+                        <h4 className="text-sm font-medium">Intent Signals</h4>
+                      </div>
+                      <Button variant="outline" size="sm" data-testid="button-view-intent-signals">
+                        View all intent signals
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">Intent signal tracking</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Signals received (last 30 days)</p>
+                        <p className="text-2xl font-bold" data-testid="text-signals-count">0</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Latest signal</p>
+                        <p className="text-sm font-medium">-</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp className="w-4 h-4 text-muted-foreground" />
+                      <h4 className="text-sm font-medium">Real-time intent signals</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Start tracking to continuously enrich this company with real-time intent data like recent funding, website visits and more to help sales, marketing, and ops teams prioritise the right accounts.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="p-4 pb-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Eye className="w-4 h-4 text-primary" />
+                      <CardTitle className="text-base">Visitor Intent</CardTitle>
+                    </div>
+                    <Button variant="outline" size="sm" data-testid="button-view-visit-activity">
+                      View all visit activity
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 pt-2">
+                  <div className="text-center py-4 text-muted-foreground">
+                    <Globe className="w-6 h-6 mx-auto mb-1 opacity-50" />
+                    <p className="text-xs">No website activity available.</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="p-4 pb-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Search className="w-4 h-4 text-primary" />
+                      <CardTitle className="text-base">Research Intent</CardTitle>
+                    </div>
+                    <Button variant="outline" size="sm" data-testid="button-view-research-activity">
+                      View all research activity
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 pt-2 space-y-3">
+                  <p className="text-xs text-muted-foreground">Research activity (last 30 days)</p>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground italic">
+                      Example research activity
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Configure research intent to find companies researching the topics you care about.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="p-4 pb-2">
+                  <CardTitle className="text-base">Company Information</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-0">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2">
+                      <Factory className="w-4 h-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Industry</p>
+                        <p className="text-sm" data-testid="text-data-industry">--</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Financials</p>
+                        <p className="text-sm" data-testid="text-data-financials">--</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Location</p>
+                        <p className="text-sm" data-testid="text-data-location">
+                          {company.shippingAddress || company.billingAddress || "--"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Technology</p>
+                        <p className="text-sm" data-testid="text-data-technology">--</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Share2 className="w-4 h-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Social channels</p>
+                        <p className="text-sm" data-testid="text-data-social">--</p>
+                      </div>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
