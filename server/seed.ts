@@ -24,7 +24,7 @@ export async function seedDatabase() {
   const warehouseHash = await bcrypt.hash("warehouse123", 10);
 
   const [adminUser] = await db.insert(users).values([
-    { name: "John Admin", email: "admin@company.com", passwordHash, role: "admin", active: true },
+    { name: "Helena Katsios", email: "admin@company.com", passwordHash, role: "admin", active: true },
     { name: "Sarah Office", email: "office@company.com", passwordHash: officeHash, role: "office", active: true },
     { name: "Mike Warehouse", email: "warehouse@company.com", passwordHash: warehouseHash, role: "warehouse", active: true },
     { name: "Jane Viewer", email: "viewer@company.com", passwordHash: await bcrypt.hash("viewer123", 10), role: "readonly", active: true },
