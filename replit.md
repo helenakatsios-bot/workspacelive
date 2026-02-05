@@ -102,3 +102,10 @@ Preferred communication style: Simple, everyday language.
 - **@replit/vite-plugin-runtime-error-modal**: Error overlay in development
 - **@replit/vite-plugin-cartographer**: Development tooling for Replit
 - **@replit/vite-plugin-dev-banner**: Development banner display
+
+## Pending Integrations
+
+### Email Integration (Outlook)
+- **Status**: Not connected - Microsoft OAuth flow encountered an error during Replit's connector setup
+- **Future Option**: Can retry Outlook connection later, or explore Gmail, SendGrid, or Resend as alternatives
+- **Note**: CRM fully functional without email integration - this is optional enhancement
