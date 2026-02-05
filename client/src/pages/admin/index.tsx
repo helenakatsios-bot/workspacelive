@@ -120,12 +120,8 @@ export default function AdminPage() {
       return response.json();
     },
     onSuccess: (data: { url: string }) => {
-      // Open in same window at top level to avoid iframe blocking
-      if (window.top) {
-        window.top.location.href = data.url;
-      } else {
-        window.location.href = data.url;
-      }
+      // Open in new window to avoid iframe blocking from Replit webview
+      window.open(data.url, "_blank");
     },
     onError: () => {
       toast({ title: "Failed to start Xero connection", variant: "destructive" });
@@ -168,12 +164,8 @@ export default function AdminPage() {
       return response.json();
     },
     onSuccess: (data: { url: string }) => {
-      // Open in same window at top level to avoid iframe blocking
-      if (window.top) {
-        window.top.location.href = data.url;
-      } else {
-        window.location.href = data.url;
-      }
+      // Open in new window to avoid iframe blocking from Replit webview
+      window.open(data.url, "_blank");
     },
     onError: () => {
       toast({ title: "Failed to start Outlook connection", variant: "destructive" });
