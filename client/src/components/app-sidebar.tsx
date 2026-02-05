@@ -24,6 +24,8 @@ import {
   ClipboardList,
   BarChart2,
   Send,
+  Store,
+  Headphones,
 } from "lucide-react";
 import {
   Sidebar,
@@ -93,6 +95,8 @@ export function AppSidebar() {
 
   const isSalesActive = location.startsWith("/sales");
   const isMarketingActive = location.startsWith("/marketing");
+  const isCommerceActive = location.startsWith("/commerce");
+  const isServiceActive = location.startsWith("/service");
   const isReportingActive = location.startsWith("/reporting") || location.startsWith("/reports");
 
   return (
@@ -220,6 +224,118 @@ export function AppSidebar() {
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <Collapsible defaultOpen={isCommerceActive} className="group/commerce">
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
+                <div className="flex items-center gap-2">
+                  <Store className="w-3.5 h-3.5" />
+                  <span>Commerce</span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/commerce:rotate-180" />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/commerce/hub")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/commerce/hub" data-testid="nav-commerce-hub">
+                        <Store className="w-4 h-4" />
+                        <span>Commerce Hub</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/quotes")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/quotes" data-testid="nav-commerce-quotes">
+                        <FileText className="w-4 h-4" />
+                        <span>Quotes</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/orders")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/orders" data-testid="nav-commerce-orders">
+                        <ShoppingCart className="w-4 h-4" />
+                        <span>Orders</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/invoices")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/invoices" data-testid="nav-commerce-invoices">
+                        <Receipt className="w-4 h-4" />
+                        <span>Invoices</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/products")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/products" data-testid="nav-commerce-products">
+                        <Package className="w-4 h-4" />
+                        <span>Products</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <Collapsible defaultOpen={isServiceActive} className="group/service">
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
+                <div className="flex items-center gap-2">
+                  <Headphones className="w-3.5 h-3.5" />
+                  <span>Service</span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/service:rotate-180" />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/service")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/service" data-testid="nav-service-hub">
+                        <Headphones className="w-4 h-4" />
+                        <span>Service Hub</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>

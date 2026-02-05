@@ -35,6 +35,8 @@ import MarketingCampaignsPage from "@/pages/marketing/campaigns";
 import MarketingEmailPage from "@/pages/marketing/email";
 import MarketingFormsPage from "@/pages/marketing/forms";
 import MarketingAnalyticsPage from "@/pages/marketing/analytics";
+import CommerceHubPage from "@/pages/commerce/hub";
+import ServiceHubPage from "@/pages/service/hub";
 import NotFound from "@/pages/not-found";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -114,6 +116,8 @@ function AuthenticatedApp() {
         <Route path="/marketing/email" component={MarketingEmailPage} />
         <Route path="/marketing/forms" component={MarketingFormsPage} />
         <Route path="/marketing/analytics" component={MarketingAnalyticsPage} />
+        <Route path="/commerce/hub" component={CommerceHubPage} />
+        <Route path="/service" component={ServiceHubPage} />
         <Route path="/reporting/dashboards" component={ReportingDashboardsPage} />
         <Route path="/reporting/reports" component={ReportingReportsPage} />
         <Route path="/reporting/goals" component={ReportingGoalsPage} />
