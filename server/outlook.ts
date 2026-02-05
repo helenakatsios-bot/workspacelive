@@ -141,20 +141,6 @@ export async function refreshOutlookTokenIfNeeded(
   try {
     const msalClient = createMsalClient(redirectUri);
     
-    const tokenCache = msalClient.getTokenCache();
-    const cacheContent = {
-      RefreshToken: {
-        "refresh_token_key": {
-          home_account_id: "",
-          environment: "login.microsoftonline.com",
-          credential_type: "RefreshToken",
-          client_id: OUTLOOK_CLIENT_ID,
-          secret: token.refreshToken,
-        }
-      }
-    };
-    tokenCache.deserialize(JSON.stringify(cacheContent));
-
     const response = await msalClient.acquireTokenByRefreshToken({
       refreshToken: token.refreshToken,
       scopes: OUTLOOK_SCOPES,
@@ -169,12 +155,16 @@ export async function refreshOutlookTokenIfNeeded(
     
     let newRefreshToken = token.refreshToken;
     const newTokenCache = msalClient.getTokenCache().serialize();
-    const cacheData = JSON.parse(newTokenCache);
-    if (cacheData.RefreshToken) {
-      const refreshTokenKeys = Object.keys(cacheData.RefreshToken);
-      if (refreshTokenKeys.length > 0) {
-        newRefreshToken = cacheData.RefreshToken[refreshTokenKeys[0]].secret;
+    try {
+      const cacheData = JSON.parse(newTokenCache);
+      if (cacheData.RefreshToken) {
+        const refreshTokenKeys = Object.keys(cacheData.RefreshToken);
+        if (refreshTokenKeys.length > 0) {
+          newRefreshToken = cacheData.RefreshToken[refreshTokenKeys[0]].secret;
+        }
       }
+    } catch {
+      // Keep the original refresh token if cache parsing fails
     }
 
     await saveOutlookToken(userId, response.accessToken, newRefreshToken, newExpiresAt, token.emailAddress || undefined);

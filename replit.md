@@ -103,9 +103,27 @@ Preferred communication style: Simple, everyday language.
 - **@replit/vite-plugin-cartographer**: Development tooling for Replit
 - **@replit/vite-plugin-dev-banner**: Development banner display
 
-## Pending Integrations
+## Integrations
 
-### Email Integration (Outlook)
-- **Status**: Not connected - Microsoft OAuth flow encountered an error during Replit's connector setup
-- **Future Option**: Can retry Outlook connection later, or explore Gmail, SendGrid, or Resend as alternatives
-- **Note**: CRM fully functional without email integration - this is optional enhancement
+### Xero Accounting
+- **Status**: Ready to connect
+- **Features**: Contact import, invoice sync
+- **Location**: Admin → Integrations tab
+
+### Outlook Email
+- **Status**: Ready to connect
+- **Features**: OAuth 2.0 authentication, email sync, send emails from CRM
+- **Location**: Admin → Integrations tab
+- **API Routes**:
+  - `GET /api/outlook/status` - Check connection status
+  - `GET /api/outlook/auth-url` - Get OAuth authorization URL
+  - `GET /api/outlook/callback` - OAuth callback handler
+  - `POST /api/outlook/disconnect` - Disconnect Outlook
+  - `POST /api/outlook/sync` - Sync emails from Outlook
+  - `GET /api/emails` - Get synced emails
+  - `POST /api/outlook/send` - Send email via Outlook
+- **Database Tables**:
+  - `outlook_tokens` - Stores OAuth tokens per user
+  - `emails` - Cached emails synced from Outlook
+- **Dependencies**: @azure/msal-node, @microsoft/microsoft-graph-client
+- **Environment Variables**: OUTLOOK_CLIENT_ID, OUTLOOK_CLIENT_SECRET

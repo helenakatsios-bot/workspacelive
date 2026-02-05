@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, XCircle, RefreshCw } from "lucide-react";
+import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, XCircle, RefreshCw, Mail } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,12 @@ interface XeroStatus {
   expiresAt?: string;
 }
 
+interface OutlookStatus {
+  connected: boolean;
+  email?: string;
+  expiresAt?: string;
+}
+
 interface ImportResult {
   success: boolean;
   imported: number;
@@ -78,10 +84,16 @@ export default function AdminPage() {
     enabled: isAdmin,
   });
 
-  // Handle Xero OAuth callback redirect
+  const { data: outlookStatus, isLoading: loadingOutlook, refetch: refetchOutlook } = useQuery<OutlookStatus>({
+    queryKey: ["/api/outlook/status"],
+  });
+
+  // Handle OAuth callback redirects
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const xeroParam = params.get("xero");
+    const outlookParam = params.get("outlook");
+    
     if (xeroParam === "connected") {
       toast({ title: "Xero connected successfully" });
       refetchXero();
@@ -90,7 +102,17 @@ export default function AdminPage() {
       toast({ title: "Failed to connect Xero", variant: "destructive" });
       window.history.replaceState({}, "", "/admin");
     }
-  }, [location, toast, refetchXero]);
+    
+    if (outlookParam === "success") {
+      toast({ title: "Outlook connected successfully" });
+      refetchOutlook();
+      window.history.replaceState({}, "", "/admin");
+    } else if (outlookParam === "error") {
+      const reason = params.get("reason") || "unknown";
+      toast({ title: "Failed to connect Outlook", description: reason, variant: "destructive" });
+      window.history.replaceState({}, "", "/admin");
+    }
+  }, [location, toast, refetchXero, refetchOutlook]);
 
   const connectXeroMutation = useMutation({
     mutationFn: async () => {
@@ -132,6 +154,49 @@ export default function AdminPage() {
     },
     onError: () => {
       toast({ title: "Failed to import contacts", variant: "destructive" });
+    },
+  });
+
+  const connectOutlookMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("GET", "/api/outlook/auth-url");
+      return response.json();
+    },
+    onSuccess: (data: { url: string }) => {
+      window.location.href = data.url;
+    },
+    onError: () => {
+      toast({ title: "Failed to start Outlook connection", variant: "destructive" });
+    },
+  });
+
+  const disconnectOutlookMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/outlook/disconnect");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/outlook/status"] });
+      toast({ title: "Outlook disconnected" });
+    },
+    onError: () => {
+      toast({ title: "Failed to disconnect Outlook", variant: "destructive" });
+    },
+  });
+
+  const syncEmailsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/outlook/sync", { folder: "inbox" });
+      return response.json();
+    },
+    onSuccess: (data: { synced: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
+      toast({
+        title: "Emails synced",
+        description: `${data.synced} new emails imported`,
+      });
+    },
+    onError: () => {
+      toast({ title: "Failed to sync emails", variant: "destructive" });
     },
   });
 
@@ -436,6 +501,93 @@ export default function AdminPage() {
                         <Link2 className="w-4 h-4 mr-2" />
                       )}
                       Connect to Xero
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Mail className="w-5 h-5" />
+                Outlook Email
+              </CardTitle>
+              <CardDescription>Connect your Outlook account to send and receive emails within the CRM</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingOutlook ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Checking connection status...
+                </div>
+              ) : outlookStatus?.connected ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    <div className="flex-1">
+                      <p className="font-medium text-green-700 dark:text-green-300">Connected to Outlook</p>
+                      {outlookStatus.email && (
+                        <p className="text-sm text-green-600/80 dark:text-green-400/80">
+                          {outlookStatus.email}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => disconnectOutlookMutation.mutate()}
+                      disabled={disconnectOutlookMutation.isPending}
+                      data-testid="button-outlook-disconnect"
+                    >
+                      {disconnectOutlookMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <Unlink className="w-4 h-4 mr-2" />
+                      )}
+                      Disconnect
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      onClick={() => syncEmailsMutation.mutate()}
+                      disabled={syncEmailsMutation.isPending}
+                      data-testid="button-outlook-sync"
+                    >
+                      {syncEmailsMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
+                      Sync Emails
+                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      Import recent emails from your inbox
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50 border">
+                    <XCircle className="w-5 h-5 text-muted-foreground" />
+                    <div className="flex-1">
+                      <p className="font-medium">Not connected</p>
+                      <p className="text-sm text-muted-foreground">
+                        Connect your Outlook account to send and receive emails
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => connectOutlookMutation.mutate()}
+                      disabled={connectOutlookMutation.isPending}
+                      data-testid="button-outlook-connect"
+                    >
+                      {connectOutlookMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <Mail className="w-4 h-4 mr-2" />
+                      )}
+                      Connect to Outlook
                     </Button>
                   </div>
                 </div>
