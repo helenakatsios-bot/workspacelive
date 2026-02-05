@@ -19,6 +19,10 @@ import {
   MessageSquare,
   Paperclip,
   Loader2,
+  Target,
+  ChevronDown,
+  ChevronRight,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -37,10 +41,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Company, Contact, Order, Activity } from "@shared/schema";
+import type { Company, Contact, Order, Activity, Deal } from "@shared/schema";
 
 export default function CompanyDetailPage() {
   const [, params] = useRoute("/companies/:id");
@@ -49,6 +58,9 @@ export default function CompanyDetailPage() {
   const { isAdmin, canEdit } = useAuth();
   const [newNote, setNewNote] = useState("");
   const [isSubmittingNote, setIsSubmittingNote] = useState(false);
+  const [contactsOpen, setContactsOpen] = useState(true);
+  const [dealsOpen, setDealsOpen] = useState(true);
+  const [ordersOpen, setOrdersOpen] = useState(true);
 
   const { data: company, isLoading } = useQuery<Company>({
     queryKey: ["/api/companies", params?.id],
@@ -62,6 +74,11 @@ export default function CompanyDetailPage() {
 
   const { data: orders } = useQuery<Order[]>({
     queryKey: ["/api/companies", params?.id, "orders"],
+    enabled: !!params?.id,
+  });
+
+  const { data: deals } = useQuery<Deal[]>({
+    queryKey: ["/api/companies", params?.id, "deals"],
     enabled: !!params?.id,
   });
 
@@ -121,6 +138,18 @@ export default function CompanyDetailPage() {
     return colors[status] || "bg-gray-500/10 text-gray-700";
   };
 
+  const getDealStageColor = (stage: string) => {
+    const colors: Record<string, string> = {
+      prospecting: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+      qualification: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400",
+      proposal: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+      negotiation: "bg-orange-500/10 text-orange-700 dark:text-orange-400",
+      closed_won: "bg-green-500/10 text-green-700 dark:text-green-400",
+      closed_lost: "bg-red-500/10 text-red-700 dark:text-red-400",
+    };
+    return colors[stage] || "bg-gray-500/10 text-gray-700";
+  };
+
   const formatCurrency = (value: string | number) => {
     const num = typeof value === "string" ? parseFloat(value) : value;
     return new Intl.NumberFormat("en-AU", {
@@ -139,9 +168,10 @@ export default function CompanyDetailPage() {
             <Skeleton className="h-4 w-32" />
           </div>
         </div>
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Skeleton className="h-48" />
-          <Skeleton className="h-48 lg:col-span-2" />
+        <div className="grid gap-4 lg:grid-cols-[280px_1fr_280px]">
+          <Skeleton className="h-96" />
+          <Skeleton className="h-96" />
+          <Skeleton className="h-96" />
         </div>
       </div>
     );
@@ -161,41 +191,22 @@ export default function CompanyDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/companies")} data-testid="button-back">
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Building2 className="w-6 h-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold" data-testid="text-company-name">
-              {company.tradingName || company.legalName}
-            </h1>
-            {company.tradingName && (
-              <p className="text-sm text-muted-foreground">{company.legalName}</p>
-            )}
-          </div>
-          {company.creditStatus === "on_hold" ? (
-            <Badge variant="destructive" className="gap-1">
-              <AlertTriangle className="w-3 h-3" />
-              On Hold
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="gap-1">
-              <CheckCircle className="w-3 h-3" />
-              Active
-            </Badge>
-          )}
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <Link href="/companies">
+            <span className="text-sm text-primary hover:underline cursor-pointer" data-testid="link-back-companies">Companies</span>
+          </Link>
+          <ChevronRight className="w-3 h-3 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground truncate max-w-[200px]">{company.tradingName || company.legalName}</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {isAdmin && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button
                   variant={company.creditStatus === "active" ? "destructive" : "default"}
+                  size="sm"
                   data-testid="button-toggle-credit"
                 >
                   {company.creditStatus === "active" ? "Put On Hold" : "Activate"}
@@ -222,185 +233,195 @@ export default function CompanyDetailPage() {
             </AlertDialog>
           )}
           {canEdit && (
-            <Button variant="outline" onClick={() => navigate(`/companies/${params?.id}/edit`)} data-testid="button-edit">
-              <Edit className="w-4 h-4 mr-2" />
+            <Button variant="outline" size="sm" onClick={() => navigate(`/companies/${params?.id}/edit`)} data-testid="button-edit">
+              <Edit className="w-4 h-4 mr-1" />
               Edit
             </Button>
           )}
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Company Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {company.abn && (
-              <div className="flex items-start gap-3">
-                <FileText className="w-4 h-4 text-muted-foreground mt-0.5" />
+      <div className="grid gap-4 lg:grid-cols-[280px_1fr_280px]">
+        {/* LEFT PANEL - Company Info */}
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="p-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Building2 className="w-6 h-6 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-lg font-bold leading-tight truncate" data-testid="text-company-name">
+                    {company.tradingName || company.legalName}
+                  </h1>
+                  {company.tradingName && (
+                    <p className="text-xs text-muted-foreground truncate">{company.legalName}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {company.creditStatus === "on_hold" ? (
+                  <Badge variant="destructive" className="gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    On Hold
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    Active
+                  </Badge>
+                )}
+              </div>
+
+              {canEdit && (
+                <div className="flex flex-wrap gap-1">
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => navigate(`/contacts/new?companyId=${params?.id}`)} data-testid="button-quick-add-contact">
+                    <Users className="w-3 h-3 mr-1" />
+                    Contact
+                  </Button>
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => navigate(`/orders/new?companyId=${params?.id}`)} data-testid="button-quick-new-order">
+                    <ShoppingCart className="w-3 h-3 mr-1" />
+                    Order
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-sm font-medium">Key Information</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-0 space-y-3">
+              {company.abn && (
                 <div>
                   <p className="text-xs text-muted-foreground">ABN</p>
-                  <p className="text-sm font-medium">{company.abn}</p>
+                  <p className="text-sm font-medium" data-testid="text-abn">{company.abn}</p>
                 </div>
-              </div>
-            )}
-            <div className="flex items-start gap-3">
-              <Calendar className="w-4 h-4 text-muted-foreground mt-0.5" />
+              )}
               <div>
                 <p className="text-xs text-muted-foreground">Payment Terms</p>
-                <p className="text-sm font-medium">{company.paymentTerms || "Net 30"}</p>
+                <p className="text-sm font-medium" data-testid="text-payment-terms">{company.paymentTerms || "Net 30"}</p>
               </div>
-            </div>
-            {company.billingAddress && (
-              <div className="flex items-start gap-3">
-                <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Billing Address</p>
-                  <p className="text-sm whitespace-pre-line">{company.billingAddress}</p>
-                </div>
-              </div>
-            )}
-            {company.shippingAddress && (
-              <div className="flex items-start gap-3">
-                <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Shipping Address</p>
-                  <p className="text-sm whitespace-pre-line">{company.shippingAddress}</p>
-                </div>
-              </div>
-            )}
-            {company.tags && company.tags.length > 0 && (
               <div>
-                <p className="text-xs text-muted-foreground mb-2">Tags</p>
-                <div className="flex flex-wrap gap-1">
-                  {company.tags.map((tag, i) => (
-                    <Badge key={i} variant="secondary" className="text-xs">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
+                <p className="text-xs text-muted-foreground">Credit Status</p>
+                <p className="text-sm font-medium capitalize" data-testid="text-credit-status">
+                  {company.creditStatus === "on_hold" ? "On Hold" : "Active"}
+                </p>
               </div>
-            )}
-          </CardContent>
-        </Card>
+              <div>
+                <p className="text-xs text-muted-foreground">Created</p>
+                <p className="text-sm font-medium" data-testid="text-created-date">
+                  {format(new Date(company.createdAt), "MMM d, yyyy")}
+                </p>
+              </div>
+              {company.tags && company.tags.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Tags</p>
+                  <div className="flex flex-wrap gap-1">
+                    {company.tags.map((tag, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
-        <div className="lg:col-span-2">
-          <Tabs defaultValue="contacts">
+        {/* CENTER PANEL - Main Content Tabs */}
+        <div>
+          <Tabs defaultValue="about">
             <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="contacts" className="gap-1">
-                <Users className="w-4 h-4" />
-                <span className="hidden sm:inline">Contacts</span>
-              </TabsTrigger>
-              <TabsTrigger value="orders" className="gap-1">
-                <ShoppingCart className="w-4 h-4" />
-                <span className="hidden sm:inline">Orders</span>
-              </TabsTrigger>
-              <TabsTrigger value="activity" className="gap-1">
-                <MessageSquare className="w-4 h-4" />
-                <span className="hidden sm:inline">Activity</span>
-              </TabsTrigger>
-              <TabsTrigger value="files" className="gap-1">
-                <Paperclip className="w-4 h-4" />
-                <span className="hidden sm:inline">Files</span>
-              </TabsTrigger>
+              <TabsTrigger value="about" data-testid="tab-about">About</TabsTrigger>
+              <TabsTrigger value="activity" data-testid="tab-activity">Activity</TabsTrigger>
+              <TabsTrigger value="orders" data-testid="tab-orders">Orders</TabsTrigger>
+              <TabsTrigger value="files" data-testid="tab-files">Files</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="contacts" className="mt-4">
+            <TabsContent value="about" className="mt-4 space-y-4">
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-base">Contacts</CardTitle>
-                  {canEdit && (
-                    <Button size="sm" onClick={() => navigate(`/contacts/new?companyId=${params?.id}`)} data-testid="button-add-contact">
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add
-                    </Button>
-                  )}
+                <CardHeader className="p-4 pb-2">
+                  <CardTitle className="text-base">Company Profile</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  {contacts && contacts.length > 0 ? (
-                    <div className="space-y-3">
-                      {contacts.map((contact) => (
-                        <Link key={contact.id} href={`/contacts/${contact.id}`}>
-                          <div className="flex items-center justify-between p-3 rounded-lg border hover-elevate cursor-pointer">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                                <span className="text-xs font-medium text-primary">
-                                  {contact.firstName.charAt(0)}{contact.lastName.charAt(0)}
-                                </span>
-                              </div>
-                              <div>
-                                <p className="font-medium text-sm">{contact.firstName} {contact.lastName}</p>
-                                <p className="text-xs text-muted-foreground">{contact.position || "Contact"}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              {contact.email && <Mail className="w-4 h-4" />}
-                              {contact.phone && <Phone className="w-4 h-4" />}
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
+                <CardContent className="p-4 pt-0">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Legal Name</p>
+                      <p className="text-sm" data-testid="text-legal-name">{company.legalName}</p>
                     </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">No contacts yet</p>
+                    {company.tradingName && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Trading Name</p>
+                        <p className="text-sm" data-testid="text-trading-name">{company.tradingName}</p>
+                      </div>
+                    )}
+                    {company.abn && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">ABN</p>
+                        <p className="text-sm">{company.abn}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-muted-foreground">Payment Terms</p>
+                      <p className="text-sm">{company.paymentTerms || "Net 30"}</p>
                     </div>
-                  )}
+                  </div>
                 </CardContent>
               </Card>
-            </TabsContent>
 
-            <TabsContent value="orders" className="mt-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-base">Orders</CardTitle>
-                  {canEdit && company.creditStatus === "active" && (
-                    <Button size="sm" onClick={() => navigate(`/orders/new?companyId=${params?.id}`)} data-testid="button-new-order">
-                      <Plus className="w-4 h-4 mr-1" />
-                      New Order
-                    </Button>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  {orders && orders.length > 0 ? (
-                    <div className="space-y-3">
-                      {orders.map((order) => (
-                        <Link key={order.id} href={`/orders/${order.id}`}>
-                          <div className="flex items-center justify-between p-3 rounded-lg border hover-elevate cursor-pointer">
-                            <div>
-                              <p className="font-medium text-sm">{order.orderNumber}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {format(new Date(order.orderDate), "MMM d, yyyy")}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{formatCurrency(order.total)}</span>
-                              <Badge className={getStatusColor(order.status)}>
-                                {order.status.replace("_", " ")}
-                              </Badge>
-                            </div>
+              {(company.billingAddress || company.shippingAddress) && (
+                <Card>
+                  <CardHeader className="p-4 pb-2">
+                    <CardTitle className="text-base">Addresses</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {company.billingAddress && (
+                        <div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <MapPin className="w-3 h-3 text-muted-foreground" />
+                            <p className="text-xs text-muted-foreground">Billing Address</p>
                           </div>
-                        </Link>
-                      ))}
+                          <p className="text-sm whitespace-pre-line" data-testid="text-billing-address">{company.billingAddress}</p>
+                        </div>
+                      )}
+                      {company.shippingAddress && (
+                        <div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <MapPin className="w-3 h-3 text-muted-foreground" />
+                            <p className="text-xs text-muted-foreground">Shipping Address</p>
+                          </div>
+                          <p className="text-sm whitespace-pre-line" data-testid="text-shipping-address">{company.shippingAddress}</p>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">No orders yet</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
+
+              {company.internalNotes && (
+                <Card>
+                  <CardHeader className="p-4 pb-2">
+                    <CardTitle className="text-base">Internal Notes</CardTitle>
+                    <CardDescription className="text-xs">For internal use only</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <p className="text-sm whitespace-pre-wrap" data-testid="text-internal-notes">{company.internalNotes}</p>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             <TabsContent value="activity" className="mt-4">
               <Card>
-                <CardHeader className="pb-2">
+                <CardHeader className="p-4 pb-2">
                   <CardTitle className="text-base">Activity Timeline</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="p-4 pt-2 space-y-4">
                   {canEdit && (
                     <div className="space-y-2">
                       <Textarea
@@ -445,9 +466,52 @@ export default function CompanyDetailPage() {
               </Card>
             </TabsContent>
 
+            <TabsContent value="orders" className="mt-4">
+              <Card>
+                <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between gap-2">
+                  <CardTitle className="text-base">All Orders</CardTitle>
+                  {canEdit && company.creditStatus === "active" && (
+                    <Button size="sm" onClick={() => navigate(`/orders/new?companyId=${params?.id}`)} data-testid="button-new-order">
+                      <Plus className="w-4 h-4 mr-1" />
+                      New Order
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent className="p-4 pt-0">
+                  {orders && orders.length > 0 ? (
+                    <div className="space-y-2">
+                      {orders.map((order) => (
+                        <Link key={order.id} href={`/orders/${order.id}`}>
+                          <div className="flex items-center justify-between p-3 rounded-lg border hover-elevate cursor-pointer" data-testid={`row-order-${order.id}`}>
+                            <div>
+                              <p className="font-medium text-sm">{order.orderNumber}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(order.orderDate), "MMM d, yyyy")}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{formatCurrency(order.total)}</span>
+                              <Badge className={getStatusColor(order.status)}>
+                                {order.status.replace("_", " ")}
+                              </Badge>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No orders yet</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="files" className="mt-4">
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between gap-2">
                   <CardTitle className="text-base">Files & Attachments</CardTitle>
                   {canEdit && (
                     <Button size="sm" data-testid="button-upload-file">
@@ -456,7 +520,7 @@ export default function CompanyDetailPage() {
                     </Button>
                   )}
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-4 pt-0">
                   <div className="text-center py-8 text-muted-foreground">
                     <Paperclip className="w-8 h-8 mx-auto mb-2 opacity-50" />
                     <p className="text-sm">No files attached</p>
@@ -466,19 +530,170 @@ export default function CompanyDetailPage() {
             </TabsContent>
           </Tabs>
         </div>
-      </div>
 
-      {company.internalNotes && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Internal Notes</CardTitle>
-            <CardDescription>For internal use only</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm whitespace-pre-wrap">{company.internalNotes}</p>
-          </CardContent>
-        </Card>
-      )}
+        {/* RIGHT PANEL - Related Records */}
+        <div className="space-y-3">
+          <Collapsible open={contactsOpen} onOpenChange={setContactsOpen}>
+            <Card>
+              <CollapsibleTrigger className="w-full">
+                <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between gap-2 cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${contactsOpen ? "" : "-rotate-90"}`} />
+                    <CardTitle className="text-sm font-medium">
+                      Contacts ({contacts?.length || 0})
+                    </CardTitle>
+                  </div>
+                  {canEdit && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/contacts/new?companyId=${params?.id}`);
+                      }}
+                      data-testid="button-add-contact"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Add
+                    </Button>
+                  )}
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="p-3 pt-0">
+                  {contacts && contacts.length > 0 ? (
+                    <div className="space-y-2">
+                      {contacts.map((contact) => (
+                        <Link key={contact.id} href={`/contacts/${contact.id}`}>
+                          <div className="flex items-center gap-2 p-2 rounded-md hover-elevate cursor-pointer" data-testid={`row-contact-${contact.id}`}>
+                            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs font-medium text-primary">
+                                {contact.firstName.charAt(0)}{contact.lastName.charAt(0)}
+                              </span>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm truncate">{contact.firstName} {contact.lastName}</p>
+                              <p className="text-xs text-muted-foreground truncate">{contact.position || contact.email || "Contact"}</p>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <Users className="w-6 h-6 mx-auto mb-1 opacity-50" />
+                      <p className="text-xs">No contacts associated</p>
+                    </div>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          <Collapsible open={dealsOpen} onOpenChange={setDealsOpen}>
+            <Card>
+              <CollapsibleTrigger className="w-full">
+                <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between gap-2 cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${dealsOpen ? "" : "-rotate-90"}`} />
+                    <CardTitle className="text-sm font-medium">
+                      Deals ({deals?.length || 0})
+                    </CardTitle>
+                  </div>
+                  {canEdit && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/deals/new?companyId=${params?.id}`);
+                      }}
+                      data-testid="button-add-deal"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Add
+                    </Button>
+                  )}
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="p-3 pt-0">
+                  {deals && deals.length > 0 ? (
+                    <div className="space-y-2">
+                      {deals.map((deal) => (
+                        <Link key={deal.id} href={`/deals/${deal.id}`}>
+                          <div className="flex items-center justify-between p-2 rounded-md hover-elevate cursor-pointer" data-testid={`row-deal-${deal.id}`}>
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm truncate">{deal.dealName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {deal.estimatedValue ? formatCurrency(deal.estimatedValue) : "No value"}
+                              </p>
+                            </div>
+                            <Badge className={`text-xs ${getDealStageColor(deal.pipelineStage)}`}>
+                              {deal.pipelineStage.replace("_", " ")}
+                            </Badge>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <Target className="w-6 h-6 mx-auto mb-1 opacity-50" />
+                      <p className="text-xs">No deals associated</p>
+                    </div>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          <Collapsible open={ordersOpen} onOpenChange={setOrdersOpen}>
+            <Card>
+              <CollapsibleTrigger className="w-full">
+                <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between gap-2 cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${ordersOpen ? "" : "-rotate-90"}`} />
+                    <CardTitle className="text-sm font-medium">
+                      Recent Orders ({orders?.length || 0})
+                    </CardTitle>
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="p-3 pt-0">
+                  {orders && orders.length > 0 ? (
+                    <div className="space-y-2">
+                      {orders.slice(0, 5).map((order) => (
+                        <Link key={order.id} href={`/orders/${order.id}`}>
+                          <div className="flex items-center justify-between p-2 rounded-md hover-elevate cursor-pointer" data-testid={`row-recent-order-${order.id}`}>
+                            <div className="min-w-0">
+                              <p className="font-medium text-xs truncate">{order.orderNumber}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(order.orderDate), "MMM d, yyyy")}
+                              </p>
+                            </div>
+                            <span className="text-xs font-medium">{formatCurrency(order.total)}</span>
+                          </div>
+                        </Link>
+                      ))}
+                      {orders.length > 5 && (
+                        <p className="text-xs text-center text-muted-foreground pt-1">
+                          +{orders.length - 5} more orders
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <ShoppingCart className="w-6 h-6 mx-auto mb-1 opacity-50" />
+                      <p className="text-xs">No orders yet</p>
+                    </div>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+        </div>
+      </div>
     </div>
   );
 }

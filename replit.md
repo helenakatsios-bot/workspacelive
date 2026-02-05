@@ -7,7 +7,9 @@ A professional B2B CRM and order management system designed for wholesale manufa
 ## Key Features
 
 ### Critical Business Requirements
-- **"Clients Since July 2021" Report**: One-click access to all companies that have placed orders from July 1, 2021 to today. Located in the Reports section of the sidebar with CSV export capability.
+- **Reporting Section**: Collapsible sidebar section with Dashboards (key metrics, order status, deal pipeline), Reports (categorized report listing), Goals (yearly revenue/order tracking with monthly bar charts), and Clients Since July 2021 report
+- **"Clients Since July 2021" Report**: One-click access to all companies that have placed orders from July 1, 2021 to today. Located in the Reporting section of the sidebar with CSV export capability.
+- **HubSpot-style Company Profile**: 3-column layout - left panel (company info, status, quick actions), center panel (About/Activity/Orders/Files tabs), right panel (collapsible Contacts/Deals/Orders panels)
 - **Date-Based Order Filtering**: Orders page includes powerful date range filtering with preset options including "Since July 2021"
 - **Role-Based Access Control**: Four user roles with different permissions:
   - **Admin**: Full access to all features including user management and settings

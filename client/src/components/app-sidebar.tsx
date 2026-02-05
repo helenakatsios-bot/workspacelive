@@ -13,6 +13,8 @@ import {
   Moon,
   Sun,
   Calendar,
+  BarChart3,
+  ChevronDown,
 } from "lucide-react";
 import {
   Sidebar,
@@ -26,6 +28,11 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/components/theme-provider";
@@ -44,8 +51,10 @@ const transactionItems = [
   { title: "Invoices", url: "/invoices", icon: Receipt },
 ];
 
-const reportItems = [
-  { title: "Clients Since July 2021", url: "/reports/clients-since-july-2021", icon: Calendar },
+const reportingItems = [
+  { title: "Dashboards", url: "/reporting/dashboards", icon: BarChart3 },
+  { title: "Reports", url: "/reporting/reports", icon: FileText },
+  { title: "Goals", url: "/reporting/goals", icon: Target },
 ];
 
 export function AppSidebar() {
@@ -57,6 +66,8 @@ export function AppSidebar() {
     if (url === "/") return location === "/";
     return location.startsWith(url);
   };
+
+  const isReportingActive = location.startsWith("/reporting") || location.startsWith("/reports");
 
   return (
     <Sidebar>
@@ -122,27 +133,49 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1">
-            Reports
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {reportItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    data-active={isActive(item.url)}
-                    className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                  >
-                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                      <item.icon className="w-4 h-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
+          <Collapsible defaultOpen={isReportingActive}>
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between w-full">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  <span>Reporting</span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]:rotate-180" />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {reportingItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        data-active={isActive(item.url)}
+                        className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                      >
+                        <Link href={item.url} data-testid={`nav-reporting-${item.title.toLowerCase()}`}>
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/reports/clients-since-july-2021")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/reports/clients-since-july-2021" data-testid="nav-clients-since-july-2021">
+                        <Calendar className="w-4 h-4" />
+                        <span>Clients Since July 2021</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
         </SidebarGroup>
 
         {isAdmin && (

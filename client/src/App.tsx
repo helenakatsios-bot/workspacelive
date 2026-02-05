@@ -23,6 +23,9 @@ import OrderDetailPage from "@/pages/orders/detail";
 import InvoicesPage from "@/pages/invoices/index";
 import AdminPage from "@/pages/admin/index";
 import ClientsSinceJuly2021Page from "@/pages/reports/clients-since-july-2021";
+import ReportingDashboardsPage from "@/pages/reporting/dashboards";
+import ReportingReportsPage from "@/pages/reporting/reports";
+import ReportingGoalsPage from "@/pages/reporting/goals";
 import NotFound from "@/pages/not-found";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -93,6 +96,9 @@ function AuthenticatedApp() {
         <Route path="/invoices" component={InvoicesPage} />
         <Route path="/invoices/new" component={InvoicesPage} />
         <Route path="/invoices/:id" component={InvoicesPage} />
+        <Route path="/reporting/dashboards" component={ReportingDashboardsPage} />
+        <Route path="/reporting/reports" component={ReportingReportsPage} />
+        <Route path="/reporting/goals" component={ReportingGoalsPage} />
         <Route path="/reports/clients-since-july-2021" component={ClientsSinceJuly2021Page} />
         <Route path="/admin" component={AdminPage} />
         <Route component={NotFound} />

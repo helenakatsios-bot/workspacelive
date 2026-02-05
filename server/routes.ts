@@ -197,6 +197,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/companies/:id/deals", requireAuth, async (req, res) => {
+    try {
+      const deals = await storage.getDealsByCompany(req.params.id);
+      res.json(deals);
+    } catch (error) {
+      console.error("Get company deals error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/companies/:id/activities", requireAuth, async (req, res) => {
     try {
       const activities = await storage.getActivitiesByEntity("company", req.params.id);
