@@ -27,6 +27,8 @@ export interface IStorage {
   getAllCompanies(): Promise<Company[]>;
   createCompany(company: InsertCompany): Promise<Company>;
   updateCompany(id: string, data: Partial<InsertCompany>): Promise<Company | undefined>;
+  deleteCompany(id: string): Promise<boolean>;
+  getCompanyRelatedCounts(id: string): Promise<{ contacts: number; deals: number; orders: number; quotes: number; invoices: number }>;
 
   // Contacts
   getContact(id: string): Promise<Contact | undefined>;
@@ -157,6 +159,26 @@ export class DatabaseStorage implements IStorage {
       .where(eq(companies.id, id))
       .returning();
     return updated;
+  }
+
+  async getCompanyRelatedCounts(id: string): Promise<{ contacts: number; deals: number; orders: number; quotes: number; invoices: number }> {
+    const [contactCount] = await db.select({ count: sql<number>`count(*)::int` }).from(contacts).where(eq(contacts.companyId, id));
+    const [dealCount] = await db.select({ count: sql<number>`count(*)::int` }).from(deals).where(eq(deals.companyId, id));
+    const [orderCount] = await db.select({ count: sql<number>`count(*)::int` }).from(orders).where(eq(orders.companyId, id));
+    const [quoteCount] = await db.select({ count: sql<number>`count(*)::int` }).from(quotes).where(eq(quotes.companyId, id));
+    const [invoiceCount] = await db.select({ count: sql<number>`count(*)::int` }).from(invoices).where(eq(invoices.companyId, id));
+    return {
+      contacts: contactCount?.count || 0,
+      deals: dealCount?.count || 0,
+      orders: orderCount?.count || 0,
+      quotes: quoteCount?.count || 0,
+      invoices: invoiceCount?.count || 0,
+    };
+  }
+
+  async deleteCompany(id: string): Promise<boolean> {
+    const [deleted] = await db.delete(companies).where(eq(companies.id, id)).returning();
+    return !!deleted;
   }
 
   // Contacts

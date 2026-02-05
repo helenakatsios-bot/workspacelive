@@ -266,6 +266,49 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/companies/:id/related-counts", requireAuth, async (req, res) => {
+    try {
+      const counts = await storage.getCompanyRelatedCounts(req.params.id);
+      res.json(counts);
+    } catch (error) {
+      console.error("Get company related counts error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/companies/:id", requireAdmin, async (req, res) => {
+    try {
+      const company = await storage.getCompany(req.params.id);
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+      const counts = await storage.getCompanyRelatedCounts(req.params.id);
+      const totalRelated = counts.contacts + counts.deals + counts.orders + counts.quotes + counts.invoices;
+      if (totalRelated > 0) {
+        return res.status(400).json({
+          message: "Cannot delete company with related records. Remove all contacts, deals, orders, quotes, and invoices first.",
+          counts,
+        });
+      }
+      const deleted = await storage.deleteCompany(req.params.id);
+      if (deleted) {
+        await storage.createAuditLog({
+          userId: req.session.userId,
+          action: "delete",
+          entityType: "company",
+          entityId: req.params.id,
+          beforeJson: company,
+        });
+        res.json({ success: true });
+      } else {
+        res.status(500).json({ message: "Failed to delete company" });
+      }
+    } catch (error) {
+      console.error("Delete company error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/companies/:id/activities", requireEdit, async (req, res) => {
     try {
       const activity = await storage.createActivity({

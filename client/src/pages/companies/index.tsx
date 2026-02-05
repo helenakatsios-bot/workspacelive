@@ -1,26 +1,68 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { format } from "date-fns";
-import { Building2, MoreHorizontal, Eye, Edit, AlertCircle } from "lucide-react";
+import { Building2, MoreHorizontal, Eye, Edit, AlertCircle, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Company } from "@shared/schema";
 
 export default function CompaniesPage() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [creditFilter, setCreditFilter] = useState<string>("all");
+  const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
+  const [relatedCounts, setRelatedCounts] = useState<{ contacts: number; deals: number; orders: number; quotes: number; invoices: number } | null>(null);
+  const [loadingCounts, setLoadingCounts] = useState(false);
+  const { toast } = useToast();
+  const { isAdmin } = useAuth();
 
   const { data: companies, isLoading } = useQuery<Company[]>({
     queryKey: ["/api/companies"],
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/companies/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      toast({ title: "Company deleted", description: `${deleteTarget?.tradingName || deleteTarget?.legalName} has been removed.` });
+      setDeleteTarget(null);
+      setRelatedCounts(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Cannot delete", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleDeleteClick = async (company: Company, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeleteTarget(company);
+    setLoadingCounts(true);
+    try {
+      const res = await fetch(`/api/companies/${company.id}/related-counts`, { credentials: "include" });
+      const counts = await res.json();
+      setRelatedCounts(counts);
+    } catch {
+      setRelatedCounts({ contacts: 0, deals: 0, orders: 0, quotes: 0, invoices: 0 });
+    } finally {
+      setLoadingCounts(false);
+    }
+  };
 
   const filteredCompanies = useMemo(() => {
     if (!companies) return [];
@@ -33,6 +75,8 @@ export default function CompaniesPage() {
       return matchesSearch && matchesCredit;
     });
   }, [companies, search, creditFilter]);
+
+  const hasRelatedRecords = relatedCounts && (relatedCounts.contacts + relatedCounts.deals + relatedCounts.orders + relatedCounts.quotes + relatedCounts.invoices) > 0;
 
   return (
     <div className="space-y-6">
@@ -161,6 +205,19 @@ export default function CompaniesPage() {
                               Edit
                             </Link>
                           </DropdownMenuItem>
+                          {isAdmin && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={(e) => handleDeleteClick(company, e)}
+                                data-testid={`button-delete-company-${company.id}`}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -171,6 +228,48 @@ export default function CompaniesPage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) { setDeleteTarget(null); setRelatedCounts(null); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleteTarget?.tradingName || deleteTarget?.legalName}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                {loadingCounts ? (
+                  <p>Checking for related records...</p>
+                ) : hasRelatedRecords ? (
+                  <div className="space-y-3">
+                    <p className="font-medium text-destructive">This company cannot be deleted because it has related records:</p>
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                      {relatedCounts!.contacts > 0 && <li>{relatedCounts!.contacts} contact{relatedCounts!.contacts !== 1 ? "s" : ""}</li>}
+                      {relatedCounts!.deals > 0 && <li>{relatedCounts!.deals} deal{relatedCounts!.deals !== 1 ? "s" : ""}</li>}
+                      {relatedCounts!.orders > 0 && <li>{relatedCounts!.orders} order{relatedCounts!.orders !== 1 ? "s" : ""}</li>}
+                      {relatedCounts!.quotes > 0 && <li>{relatedCounts!.quotes} quote{relatedCounts!.quotes !== 1 ? "s" : ""}</li>}
+                      {relatedCounts!.invoices > 0 && <li>{relatedCounts!.invoices} invoice{relatedCounts!.invoices !== 1 ? "s" : ""}</li>}
+                    </ul>
+                    <p className="text-sm">Please remove all related records before deleting this company.</p>
+                  </div>
+                ) : (
+                  <p>This action cannot be undone. This will permanently delete the company and all its data.</p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            {!hasRelatedRecords && !loadingCounts && (
+              <AlertDialogAction
+                onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+                className="bg-destructive text-destructive-foreground border-destructive-border"
+                disabled={deleteMutation.isPending}
+                data-testid="button-confirm-delete"
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
