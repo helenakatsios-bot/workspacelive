@@ -44,6 +44,15 @@ import DataQualityPage from "@/pages/data-management/data-quality";
 import DataStudioPage from "@/pages/data-management/data-studio";
 import DataModelPage from "@/pages/data-management/data-model";
 import DataEnrichmentPage from "@/pages/data-management/data-enrichment";
+import TicketsPage from "@/pages/crm/tickets";
+import ProjectsPage from "@/pages/crm/projects";
+import SegmentsPage from "@/pages/crm/segments";
+import InboxPage from "@/pages/crm/inbox";
+import CallsPage from "@/pages/crm/calls";
+import TasksPage from "@/pages/crm/tasks";
+import PlaybooksPage from "@/pages/crm/playbooks";
+import MessageTemplatesPage from "@/pages/crm/message-templates";
+import SnippetsPage from "@/pages/crm/snippets";
 import NotFound from "@/pages/not-found";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -114,6 +123,15 @@ function AuthenticatedApp() {
         <Route path="/invoices" component={InvoicesPage} />
         <Route path="/invoices/new" component={InvoicesPage} />
         <Route path="/invoices/:id" component={InvoicesPage} />
+        <Route path="/crm/tickets" component={TicketsPage} />
+        <Route path="/crm/projects" component={ProjectsPage} />
+        <Route path="/crm/segments" component={SegmentsPage} />
+        <Route path="/crm/inbox" component={InboxPage} />
+        <Route path="/crm/calls" component={CallsPage} />
+        <Route path="/crm/tasks" component={TasksPage} />
+        <Route path="/crm/playbooks" component={PlaybooksPage} />
+        <Route path="/crm/message-templates" component={MessageTemplatesPage} />
+        <Route path="/crm/snippets" component={SnippetsPage} />
         <Route path="/sales/workspace" component={SalesWorkspacePage} />
         <Route path="/sales/documents" component={SalesDocumentsPage} />
         <Route path="/sales/activity-feed" component={SalesActivityFeedPage} />

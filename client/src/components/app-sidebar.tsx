@@ -32,6 +32,16 @@ import {
   ShieldCheck,
   Blocks,
   Database,
+  Ticket,
+  FolderKanban,
+  ListFilter,
+  Inbox,
+  Phone,
+  CheckSquare,
+  BookOpen,
+  MessageSquareText,
+  TextSelect,
+  Contact,
 } from "lucide-react";
 import {
   Sidebar,
@@ -51,20 +61,33 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/components/theme-provider";
 
 const mainNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Companies", url: "/companies", icon: Building2 },
-  { title: "Contacts", url: "/contacts", icon: Users },
-  { title: "Deals", url: "/deals", icon: Target },
   { title: "Products", url: "/products", icon: Package },
+];
+
+const crmItems = [
+  { title: "Contacts", url: "/contacts", icon: Users },
+  { title: "Companies", url: "/companies", icon: Building2 },
+  { title: "Deals", url: "/deals", icon: Target },
+  { title: "Tickets", url: "/crm/tickets", icon: Ticket },
+  { title: "Orders", url: "/orders", icon: ShoppingCart },
+  { title: "Projects", url: "/crm/projects", icon: FolderKanban, badge: "BETA" },
+  { title: "Segments (Lists)", url: "/crm/segments", icon: ListFilter },
+  { title: "Inbox", url: "/crm/inbox", icon: Inbox },
+  { title: "Calls", url: "/crm/calls", icon: Phone },
+  { title: "Tasks", url: "/crm/tasks", icon: CheckSquare },
+  { title: "Playbooks", url: "/crm/playbooks", icon: BookOpen },
+  { title: "Message Templates", url: "/crm/message-templates", icon: MessageSquareText },
+  { title: "Snippets", url: "/crm/snippets", icon: TextSelect },
 ];
 
 const transactionItems = [
   { title: "Quotes", url: "/quotes", icon: FileText },
-  { title: "Orders", url: "/orders", icon: ShoppingCart },
   { title: "Invoices", url: "/invoices", icon: Receipt },
 ];
 
@@ -99,6 +122,7 @@ export function AppSidebar() {
     return location.startsWith(url);
   };
 
+  const isCrmActive = location.startsWith("/crm") || ["/contacts", "/companies", "/deals", "/orders"].some(p => location.startsWith(p));
   const isSalesActive = location.startsWith("/sales");
   const isMarketingActive = location.startsWith("/marketing");
   const isCommerceActive = location.startsWith("/commerce");
@@ -143,6 +167,43 @@ export function AppSidebar() {
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <Collapsible defaultOpen={isCrmActive} className="group/crm">
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
+                <div className="flex items-center gap-2">
+                  <Contact className="w-3.5 h-3.5" />
+                  <span>CRM</span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/crm:rotate-180" />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {crmItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        data-active={isActive(item.url)}
+                        className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                      >
+                        <Link href={item.url} data-testid={`nav-crm-${item.title.toLowerCase().replace(/[\s()]+/g, "-")}`}>
+                          <item.icon className="w-4 h-4" />
+                          <span className="flex-1">{item.title}</span>
+                          {"badge" in item && item.badge && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{item.badge}</Badge>
+                          )}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
         </SidebarGroup>
 
         <SidebarGroup>
