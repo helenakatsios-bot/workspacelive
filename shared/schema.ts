@@ -316,6 +316,56 @@ export const insertXeroSyncMappingSchema = createInsertSchema(xeroSyncMapping).o
 export type InsertXeroSyncMapping = z.infer<typeof insertXeroSyncMappingSchema>;
 export type XeroSyncMapping = typeof xeroSyncMapping.$inferSelect;
 
+// ============ OUTLOOK TOKENS ============
+export const outlookTokens = pgTable("outlook_tokens", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  emailAddress: text("email_address"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("outlook_tokens_user_idx").on(table.userId),
+]);
+
+export const insertOutlookTokenSchema = createInsertSchema(outlookTokens).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertOutlookToken = z.infer<typeof insertOutlookTokenSchema>;
+export type OutlookToken = typeof outlookTokens.$inferSelect;
+
+// ============ EMAILS (cached from Outlook) ============
+export const emails = pgTable("emails", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  outlookMessageId: text("outlook_message_id").notNull().unique(),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id),
+  fromAddress: text("from_address").notNull(),
+  fromName: text("from_name"),
+  toAddresses: text("to_addresses").array(),
+  ccAddresses: text("cc_addresses").array(),
+  subject: text("subject"),
+  bodyPreview: text("body_preview"),
+  bodyHtml: text("body_html"),
+  isRead: boolean("is_read").notNull().default(false),
+  isDraft: boolean("is_draft").notNull().default(false),
+  sentAt: timestamp("sent_at"),
+  receivedAt: timestamp("received_at"),
+  folder: text("folder").default("inbox"), // inbox, sent, drafts
+  companyId: varchar("company_id", { length: 36 }).references(() => companies.id),
+  contactId: varchar("contact_id", { length: 36 }).references(() => contacts.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("emails_user_idx").on(table.userId),
+  index("emails_outlook_id_idx").on(table.outlookMessageId),
+  index("emails_company_idx").on(table.companyId),
+  index("emails_contact_idx").on(table.contactId),
+  index("emails_received_idx").on(table.receivedAt),
+]);
+
+export const insertEmailSchema = createInsertSchema(emails).omit({ id: true, createdAt: true });
+export type InsertEmail = z.infer<typeof insertEmailSchema>;
+export type Email = typeof emails.$inferSelect;
+
 // ============ HELPER TYPES ============
 export type UserRole = "admin" | "office" | "warehouse" | "readonly";
 export type CreditStatus = "active" | "on_hold";

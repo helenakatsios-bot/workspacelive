@@ -6,11 +6,13 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertActivitySchema } from "@shared/schema";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero } from "./xero";
+import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, getEmailsForCompany, getEmailsForContact, getAllEmails } from "./outlook";
 
 declare module "express-session" {
   interface SessionData {
     userId: string;
     xeroState?: string;
+    outlookState?: string;
   }
 }
 
@@ -927,6 +929,187 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Xero sync invoice error:", error);
       res.status(500).json({ message: "Failed to sync invoice to Xero" });
+    }
+  });
+
+  // ============ OUTLOOK EMAIL INTEGRATION ============
+  
+  // Get Outlook connection status
+  app.get("/api/outlook/status", requireAuth, async (req, res) => {
+    try {
+      const token = await getStoredOutlookToken(req.session.userId!);
+      if (token) {
+        res.json({
+          connected: true,
+          email: token.emailAddress,
+          expiresAt: token.expiresAt,
+        });
+      } else {
+        res.json({ connected: false });
+      }
+    } catch (error) {
+      console.error("Outlook status error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get Outlook OAuth authorization URL
+  app.get("/api/outlook/auth-url", requireAuth, async (req, res) => {
+    try {
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const redirectUri = `${protocol}://${host}/api/outlook/callback`;
+      
+      const state = Math.random().toString(36).substring(2) + Date.now().toString(36);
+      req.session.outlookState = state;
+      
+      const authUrl = await getOutlookAuthUrl(redirectUri, state);
+      
+      res.json({ url: authUrl });
+    } catch (error) {
+      console.error("Outlook auth URL error:", error);
+      res.status(500).json({ message: "Failed to generate Outlook authorization URL" });
+    }
+  });
+
+  // Handle Outlook OAuth callback
+  app.get("/api/outlook/callback", async (req, res) => {
+    try {
+      const returnedState = req.query.state as string | undefined;
+      const sessionState = req.session.outlookState;
+      
+      if (!returnedState || !sessionState || returnedState !== sessionState) {
+        console.error("Outlook callback: state mismatch or missing session");
+        return res.redirect("/admin?outlook=error&reason=invalid_state");
+      }
+      
+      delete req.session.outlookState;
+      
+      if (!req.session.userId) {
+        return res.redirect("/admin?outlook=error&reason=not_authenticated");
+      }
+      
+      const code = req.query.code as string | undefined;
+      if (!code) {
+        const error = req.query.error as string;
+        console.error("Outlook OAuth error:", error);
+        return res.redirect(`/admin?outlook=error&reason=${encodeURIComponent(error || "no_code")}`);
+      }
+      
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const redirectUri = `${protocol}://${host}/api/outlook/callback`;
+      
+      const tokens = await exchangeCodeForTokens(redirectUri, code);
+      
+      await saveOutlookToken(
+        req.session.userId,
+        tokens.accessToken,
+        tokens.refreshToken,
+        tokens.expiresAt,
+        tokens.email
+      );
+      
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "create",
+        entityType: "outlook_connection",
+        entityId: req.session.userId,
+      });
+      
+      res.redirect("/admin?outlook=success");
+    } catch (error) {
+      console.error("Outlook callback error:", error);
+      res.redirect("/admin?outlook=error&reason=token_exchange_failed");
+    }
+  });
+
+  // Disconnect Outlook
+  app.post("/api/outlook/disconnect", requireAuth, async (req, res) => {
+    try {
+      await deleteOutlookToken(req.session.userId!);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Outlook disconnect error:", error);
+      res.status(500).json({ message: "Failed to disconnect Outlook" });
+    }
+  });
+
+  // Sync emails from Outlook
+  app.post("/api/outlook/sync", requireAuth, async (req, res) => {
+    try {
+      const { folder = "inbox" } = req.body;
+      
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const redirectUri = `${protocol}://${host}/api/outlook/callback`;
+      
+      const accessToken = await refreshOutlookTokenIfNeeded(req.session.userId!, redirectUri);
+      if (!accessToken) {
+        return res.status(401).json({ message: "Outlook not connected or token expired" });
+      }
+      
+      const synced = await syncEmailsToDatabase(req.session.userId!, accessToken, folder);
+      
+      res.json({ success: true, synced });
+    } catch (error) {
+      console.error("Outlook sync error:", error);
+      res.status(500).json({ message: "Failed to sync emails from Outlook" });
+    }
+  });
+
+  // Get emails
+  app.get("/api/emails", requireAuth, async (req, res) => {
+    try {
+      const { folder, companyId, contactId, limit = "50" } = req.query;
+      
+      let emailList;
+      if (companyId) {
+        emailList = await getEmailsForCompany(companyId as string, parseInt(limit as string));
+      } else if (contactId) {
+        emailList = await getEmailsForContact(contactId as string, parseInt(limit as string));
+      } else {
+        emailList = await getAllEmails(req.session.userId!, folder as string | undefined, parseInt(limit as string));
+      }
+      
+      res.json(emailList);
+    } catch (error) {
+      console.error("Get emails error:", error);
+      res.status(500).json({ message: "Failed to get emails" });
+    }
+  });
+
+  // Send email
+  app.post("/api/outlook/send", requireAuth, async (req, res) => {
+    try {
+      const { to, subject, body, cc } = req.body;
+      
+      if (!to || !to.length || !subject || !body) {
+        return res.status(400).json({ message: "Missing required fields: to, subject, body" });
+      }
+      
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const redirectUri = `${protocol}://${host}/api/outlook/callback`;
+      
+      const accessToken = await refreshOutlookTokenIfNeeded(req.session.userId!, redirectUri);
+      if (!accessToken) {
+        return res.status(401).json({ message: "Outlook not connected or token expired" });
+      }
+      
+      await sendEmail(accessToken, to, subject, body, cc);
+      
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "create",
+        entityType: "email_sent",
+        entityId: to[0],
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Send email error:", error);
+      res.status(500).json({ message: "Failed to send email" });
     }
   });
 
