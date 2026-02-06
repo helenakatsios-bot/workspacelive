@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink } from "lucide-react";
+import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/lib/auth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -68,6 +71,66 @@ export default function AdminPage() {
   const [location] = useLocation();
   const [auditSearch, setAuditSearch] = useState("");
   const [actionFilter, setActionFilter] = useState<string>("all");
+  const [userDialogOpen, setUserDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userName, setUserName] = useState("");
+  const [userEmail, setUserEmail] = useState("");
+  const [userPassword, setUserPassword] = useState("");
+  const [userRole, setUserRole] = useState("office");
+  const [userActive, setUserActive] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const openAddUser = () => {
+    setEditingUser(null);
+    setUserName("");
+    setUserEmail("");
+    setUserPassword("");
+    setUserRole("office");
+    setUserActive(true);
+    setShowPassword(false);
+    setUserDialogOpen(true);
+  };
+
+  const openEditUser = (user: User) => {
+    setEditingUser(user);
+    setUserName(user.name);
+    setUserEmail(user.email);
+    setUserPassword("");
+    setUserRole(user.role);
+    setUserActive(user.active);
+    setShowPassword(false);
+    setUserDialogOpen(true);
+  };
+
+  const saveUserMutation = useMutation({
+    mutationFn: async () => {
+      if (editingUser) {
+        const body: any = { name: userName, email: userEmail, role: userRole, active: userActive };
+        if (userPassword) body.password = userPassword;
+        return apiRequest("PATCH", `/api/admin/users/${editingUser.id}`, body);
+      } else {
+        return apiRequest("POST", "/api/admin/users", {
+          name: userName,
+          email: userEmail,
+          password: userPassword,
+          role: userRole,
+          active: userActive,
+        });
+      }
+    },
+    onSuccess: () => {
+      toast({ title: editingUser ? "User updated" : "User created", description: `${userName} has been ${editingUser ? "updated" : "added"} successfully.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setUserDialogOpen(false);
+    },
+    onError: async (error: any) => {
+      let message = "Something went wrong.";
+      try {
+        if (error?.message) message = error.message;
+      } catch {}
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
 
   const { data: users, isLoading: loadingUsers } = useQuery<User[]>({
     queryKey: ["/api/admin/users"],
@@ -281,7 +344,8 @@ export default function AdminPage() {
                 <CardTitle className="text-lg">User Management</CardTitle>
                 <CardDescription>Manage user accounts and permissions</CardDescription>
               </div>
-              <Button data-testid="button-add-user">
+              <Button data-testid="button-add-user" onClick={openAddUser}>
+                <Plus className="w-4 h-4 mr-2" />
                 Add User
               </Button>
             </CardHeader>
@@ -338,7 +402,7 @@ export default function AdminPage() {
                           {user.lastLogin ? format(new Date(user.lastLogin), "MMM d, yyyy h:mm a") : "Never"}
                         </TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" onClick={() => openEditUser(user)} data-testid={`button-edit-user-${user.id}`}>
                             <ChevronRight className="w-4 h-4" />
                           </Button>
                         </TableCell>
@@ -719,6 +783,100 @@ export default function AdminPage() {
           <OrderFormSettings />
         </TabsContent>
       </Tabs>
+
+      <Dialog open={userDialogOpen} onOpenChange={setUserDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingUser ? "Edit User" : "Add New User"}</DialogTitle>
+            <DialogDescription>
+              {editingUser ? "Update this user's details, role, or password." : "Create a new user account with a role and password."}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveUserMutation.mutate();
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="user-name">Full Name</Label>
+              <Input
+                id="user-name"
+                placeholder="e.g. Helena Katsios"
+                value={userName}
+                onChange={e => setUserName(e.target.value)}
+                required
+                data-testid="input-user-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="user-email">Email</Label>
+              <Input
+                id="user-email"
+                type="email"
+                placeholder="e.g. helena@purax.com"
+                value={userEmail}
+                onChange={e => setUserEmail(e.target.value)}
+                required
+                data-testid="input-user-email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="user-password">{editingUser ? "New Password (leave blank to keep current)" : "Password"}</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="user-password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder={editingUser ? "Leave blank to keep current" : "Min 6 characters"}
+                  value={userPassword}
+                  onChange={e => setUserPassword(e.target.value)}
+                  required={!editingUser}
+                  minLength={editingUser && !userPassword ? 0 : 6}
+                  data-testid="input-user-password"
+                />
+                <Button type="button" variant="outline" size="icon" onClick={() => setShowPassword(!showPassword)} data-testid="button-toggle-password">
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={userRole} onValueChange={setUserRole}>
+                <SelectTrigger data-testid="select-user-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Administrator</SelectItem>
+                  <SelectItem value="office">Office / Sales</SelectItem>
+                  <SelectItem value="warehouse">Warehouse</SelectItem>
+                  <SelectItem value="readonly">Read Only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {editingUser && (
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="user-active">Account Active</Label>
+                <Switch
+                  id="user-active"
+                  checked={userActive}
+                  onCheckedChange={setUserActive}
+                  data-testid="switch-user-active"
+                />
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setUserDialogOpen(false)} data-testid="button-cancel-user">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saveUserMutation.isPending} data-testid="button-save-user">
+                {saveUserMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                {editingUser ? "Save Changes" : "Create User"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

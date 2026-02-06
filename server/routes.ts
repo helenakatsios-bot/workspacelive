@@ -1052,6 +1052,102 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/users", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1, "Name is required"),
+        email: z.string().email("Valid email is required"),
+        password: z.string().min(6, "Password must be at least 6 characters"),
+        role: z.enum(["admin", "office", "warehouse", "readonly"]),
+        active: z.boolean().default(true),
+      });
+
+      const data = schema.parse(req.body);
+
+      const existing = await storage.getUserByEmail(data.email);
+      if (existing) {
+        return res.status(400).json({ message: "A user with this email already exists." });
+      }
+
+      const passwordHash = await bcrypt.hash(data.password, 10);
+      const user = await storage.createUser({
+        name: data.name,
+        email: data.email,
+        passwordHash,
+        role: data.role,
+        active: data.active,
+      });
+
+      await storage.createAuditLog({
+        userId: req.session.userId!,
+        action: "create",
+        entityType: "user",
+        entityId: user.id,
+        details: { name: user.name, email: user.email, role: user.role },
+      });
+
+      const { passwordHash: _, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Create user error:", error);
+      res.status(500).json({ message: "Failed to create user" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).optional(),
+        email: z.string().email().optional(),
+        password: z.string().min(6).optional(),
+        role: z.enum(["admin", "office", "warehouse", "readonly"]).optional(),
+        active: z.boolean().optional(),
+      });
+
+      const data = schema.parse(req.body);
+      const updateData: any = {};
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.email !== undefined) updateData.email = data.email;
+      if (data.role !== undefined) updateData.role = data.role;
+      if (data.active !== undefined) updateData.active = data.active;
+      if (data.password) {
+        updateData.passwordHash = await bcrypt.hash(data.password, 10);
+      }
+
+      if (data.email) {
+        const existing = await storage.getUserByEmail(data.email);
+        if (existing && existing.id !== req.params.id) {
+          return res.status(400).json({ message: "A user with this email already exists." });
+        }
+      }
+
+      const user = await storage.updateUser(req.params.id, updateData);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      await storage.createAuditLog({
+        userId: req.session.userId!,
+        action: "update",
+        entityType: "user",
+        entityId: user.id,
+        details: { name: user.name, email: user.email, role: user.role, active: user.active },
+      });
+
+      const { passwordHash: _, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Update user error:", error);
+      res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
   app.get("/api/admin/audit-logs", requireAdmin, async (req, res) => {
     try {
       const logs = await storage.getAuditLogs(100);
