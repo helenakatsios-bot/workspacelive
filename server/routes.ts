@@ -770,6 +770,52 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== ORDER PDF DOWNLOAD ====================
+  app.get("/api/orders/:id/pdf", requireAuth, async (req, res) => {
+    try {
+      const order = await storage.getOrder(req.params.id);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      const company = await storage.getCompany(order.companyId);
+      const contact = order.contactId ? await storage.getContact(order.contactId) : null;
+      const lines = await storage.getOrderLines(order.id);
+
+      const linesWithProducts = await Promise.all(
+        lines.map(async (line) => {
+          let productName = line.descriptionOverride || "Unknown Item";
+          let productSku = "";
+          if (line.productId) {
+            const product = await storage.getProduct(line.productId);
+            if (product) {
+              productName = line.descriptionOverride || product.name;
+              productSku = product.sku;
+            }
+          }
+          return { ...line, productName, productSku };
+        })
+      );
+
+      const { generateOrderPdf } = await import("./pdf");
+      const pdfBuffer = await generateOrderPdf({
+        order,
+        company,
+        contact,
+        lines: linesWithProducts,
+      });
+
+      const filename = `Order-${order.orderNumber.replace(/[^a-zA-Z0-9-]/g, "_")}.pdf`;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", pdfBuffer.length);
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("PDF generation error:", error);
+      res.status(500).json({ message: "Failed to generate PDF" });
+    }
+  });
+
   // ==================== PURAX SYNC ROUTES ====================
   app.post("/api/orders/:id/sync-purax", requireEdit, async (req, res) => {
     try {
@@ -789,7 +835,32 @@ export async function registerRoutes(
       const contact = order.contactId ? await storage.getContact(order.contactId) : null;
       const lines = await storage.getOrderLines(order.id);
 
-      const payload = {
+      const linesWithProducts = await Promise.all(
+        lines.map(async (line) => {
+          let productName = line.descriptionOverride || "Unknown Item";
+          let productSku = "";
+          if (line.productId) {
+            const product = await storage.getProduct(line.productId);
+            if (product) {
+              productName = line.descriptionOverride || product.name;
+              productSku = product.sku;
+            }
+          }
+          return { ...line, productName, productSku };
+        })
+      );
+
+      const { generateOrderPdf } = await import("./pdf");
+      const pdfBuffer = await generateOrderPdf({
+        order,
+        company,
+        contact,
+        lines: linesWithProducts,
+      });
+
+      const boundary = "----PuraxCRMBoundary" + Date.now().toString(36);
+
+      const metadata = {
         source: "purax-crm",
         orderNumber: order.orderNumber,
         crmOrderId: order.id,
@@ -818,8 +889,10 @@ export async function registerRoutes(
           phone: contact.phone,
           position: contact.position,
         } : null,
-        lines: lines.map(line => ({
+        lines: linesWithProducts.map(line => ({
           productId: line.productId,
+          productName: line.productName,
+          productSku: line.productSku,
           descriptionOverride: line.descriptionOverride,
           quantity: line.quantity,
           unitPrice: line.unitPrice,
@@ -828,8 +901,27 @@ export async function registerRoutes(
         })),
       };
 
+      const pdfFilename = `Order-${order.orderNumber.replace(/[^a-zA-Z0-9-]/g, "_")}.pdf`;
+
+      let body = "";
+      body += `--${boundary}\r\n`;
+      body += `Content-Disposition: form-data; name="metadata"\r\n`;
+      body += `Content-Type: application/json\r\n\r\n`;
+      body += JSON.stringify(metadata) + "\r\n";
+
+      const metadataPart = Buffer.from(body, "utf-8");
+      const pdfPartHeader = Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="orderPdf"; filename="${pdfFilename}"\r\n` +
+        `Content-Type: application/pdf\r\n\r\n`,
+        "utf-8"
+      );
+      const pdfPartFooter = Buffer.from(`\r\n--${boundary}--\r\n`, "utf-8");
+
+      const multipartBody = Buffer.concat([metadataPart, pdfPartHeader, pdfBuffer, pdfPartFooter]);
+
       const headers: Record<string, string> = {
-        "Content-Type": "application/json",
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
       };
       if (puraxApiKey) {
         headers["X-API-Key"] = puraxApiKey;
@@ -842,7 +934,7 @@ export async function registerRoutes(
         response = await fetch(`${puraxApiUrl}/api/webhook/crm-order`, {
           method: "POST",
           headers,
-          body: JSON.stringify(payload),
+          body: multipartBody,
           signal: controller.signal,
         });
       } finally {

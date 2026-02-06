@@ -141,13 +141,17 @@ Preferred communication style: Simple, everyday language.
 - **Status**: Configured
 - **Flow**: CRM Order → Purax App → Xero
 - **Features**: Push orders from CRM to the Purax order management app, which handles Xero invoice creation
+- **PDF Sync**: Orders are sent as multipart/form-data with a generated PDF attachment (field: "orderPdf") and JSON metadata (field: "metadata"). The PDF includes company info, contact, line items, totals, and notes.
+- **Order PDF Download**: GET `/api/orders/:id/pdf` generates and downloads an order as a PDF from within the CRM
 - **Location**: Admin → Integrations tab
 - **API Routes**:
-  - `POST /api/orders/:id/sync-purax` - Send order to Purax app
+  - `POST /api/orders/:id/sync-purax` - Send order to Purax app (multipart with PDF)
+  - `GET /api/orders/:id/pdf` - Download order as PDF
 - **Schema Fields on Orders**:
   - `purax_sync_status` - not_sent, sent, failed
   - `purax_synced_at` - Timestamp of last sync
   - `purax_order_id` - ID returned from Purax app
 - **Environment Variables**: PURAX_API_URL (set to https://order-manager-pro.replit.app)
 - **Webhook Endpoint Required on Purax App**: `POST /api/webhook/crm-order`
-- **Note**: The Purax app needs to implement a webhook receiver at `/api/webhook/crm-order` that accepts the order payload from this CRM
+- **Note**: The Purax app needs to implement a webhook receiver at `/api/webhook/crm-order` that accepts multipart/form-data with "metadata" (JSON) and "orderPdf" (PDF file) fields
+- **PDF Generation**: Uses PDFKit (server/pdf.ts) to generate professional order PDFs

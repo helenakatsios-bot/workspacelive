@@ -210,7 +210,17 @@ export default function OrderDetailPage() {
             {order.status.replace("_", " ")}
           </Badge>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              window.open(`/api/orders/${params?.id}/pdf`, "_blank");
+            }}
+            data-testid="button-download-pdf"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Download PDF
+          </Button>
           {canEdit && (
             <>
               <Select value={order.status} onValueChange={(v) => updateStatusMutation.mutate(v)}>
