@@ -804,8 +804,8 @@ function OrderFormSettings() {
         <CardContent className="space-y-4">
           <div className="flex items-center gap-2">
             <Input
-              type="email"
-              placeholder="Enter notification email address"
+              type="text"
+              placeholder="e.g. helena@purax.com, sales@purax.com"
               value={notificationEmail}
               onChange={e => setNotificationEmail(e.target.value)}
               data-testid="input-notification-email"
@@ -815,7 +815,7 @@ function OrderFormSettings() {
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            When Outlook is connected, order notifications will be sent to this email address. Make sure Outlook is connected in the Integrations tab.
+            Enter one or more email addresses separated by commas. When Outlook is connected, order notifications will be sent to all listed addresses. Make sure Outlook is connected in the Integrations tab.
           </p>
         </CardContent>
       </Card>

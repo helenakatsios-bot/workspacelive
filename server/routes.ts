@@ -1595,53 +1595,59 @@ export async function registerRoutes(
 
       // Send email notification
       try {
-        const notificationEmail = await storage.getSetting("notification_email");
-        if (notificationEmail) {
-          // Find any user with an active Outlook token to send the email
-          const allUsers = await storage.getAllUsers();
-          let emailSent = false;
-          for (const user of allUsers) {
-            if (emailSent) break;
-            try {
-              const token = await getStoredOutlookToken(user.id);
-              if (token) {
-                const refreshedToken = await refreshOutlookTokenIfNeeded(user.id, token);
-                if (refreshedToken) {
-                  const itemsList = validatedItems.map((item: { sku: string; productName: string; quantity: number }) =>
-                    `<tr><td style="padding:8px;border:1px solid #ddd;">${item.sku}</td><td style="padding:8px;border:1px solid #ddd;">${item.productName}</td><td style="padding:8px;border:1px solid #ddd;">${item.quantity}</td></tr>`
-                  ).join("");
+        const notificationEmailSetting = await storage.getSetting("notification_email");
+        if (notificationEmailSetting) {
+          const recipientEmails = notificationEmailSetting
+            .split(",")
+            .map((e: string) => e.trim())
+            .filter((e: string) => e.length > 0 && e.includes("@"));
 
-                const emailBody = `
-                  <h2>New Customer Order Request</h2>
-                  <p><strong>Company:</strong> ${data.companyName}</p>
-                  <p><strong>Contact:</strong> ${data.contactName}</p>
-                  <p><strong>Email:</strong> ${data.contactEmail}</p>
-                  ${data.contactPhone ? `<p><strong>Phone:</strong> ${data.contactPhone}</p>` : ""}
-                  ${data.shippingAddress ? `<p><strong>Shipping Address:</strong> ${data.shippingAddress}</p>` : ""}
-                  ${data.customerNotes ? `<p><strong>Notes:</strong> ${data.customerNotes}</p>` : ""}
-                  <h3>Items Ordered:</h3>
-                  <table style="border-collapse:collapse;width:100%;">
-                    <tr><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">SKU</th><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Product</th><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Qty</th></tr>
-                    ${itemsList}
-                  </table>
-                  <p style="margin-top:16px;"><em>Log in to the CRM to review and convert this order.</em></p>
-                `;
+          if (recipientEmails.length > 0) {
+            const allUsers = await storage.getAllUsers();
+            let emailSent = false;
+            for (const user of allUsers) {
+              if (emailSent) break;
+              try {
+                const token = await getStoredOutlookToken(user.id);
+                if (token) {
+                  const refreshedToken = await refreshOutlookTokenIfNeeded(user.id, token);
+                  if (refreshedToken) {
+                    const itemsList = validatedItems.map((item: { sku: string; productName: string; quantity: number }) =>
+                      `<tr><td style="padding:8px;border:1px solid #ddd;">${item.sku}</td><td style="padding:8px;border:1px solid #ddd;">${item.productName}</td><td style="padding:8px;border:1px solid #ddd;">${item.quantity}</td></tr>`
+                    ).join("");
 
-                await sendEmail(
-                  refreshedToken.accessToken,
-                  [notificationEmail],
-                  `New Order Request from ${data.companyName}`,
-                  emailBody
-                );
-                emailSent = true;
+                    const emailBody = `
+                      <h2>New Customer Order Request</h2>
+                      <p><strong>Company:</strong> ${data.companyName}</p>
+                      <p><strong>Contact:</strong> ${data.contactName}</p>
+                      <p><strong>Email:</strong> ${data.contactEmail}</p>
+                      ${data.contactPhone ? `<p><strong>Phone:</strong> ${data.contactPhone}</p>` : ""}
+                      ${data.shippingAddress ? `<p><strong>Shipping Address:</strong> ${data.shippingAddress}</p>` : ""}
+                      ${data.customerNotes ? `<p><strong>Notes:</strong> ${data.customerNotes}</p>` : ""}
+                      <h3>Items Ordered:</h3>
+                      <table style="border-collapse:collapse;width:100%;">
+                        <tr><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">SKU</th><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Product</th><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Qty</th></tr>
+                        ${itemsList}
+                      </table>
+                      <p style="margin-top:16px;"><em>Log in to the CRM to review and convert this order.</em></p>
+                    `;
+
+                    await sendEmail(
+                      refreshedToken.accessToken,
+                      recipientEmails,
+                      `New Order Request from ${data.companyName}`,
+                      emailBody
+                    );
+                    emailSent = true;
+                  }
                 }
+              } catch (tokenError) {
+                // Try next user
               }
-            } catch (tokenError) {
-              // Try next user
             }
-          }
-          if (!emailSent) {
-            console.log("No Outlook token available to send order notification to:", notificationEmail);
+            if (!emailSent) {
+              console.log("No Outlook token available to send order notifications to:", recipientEmails.join(", "));
+            }
           }
         }
       } catch (emailError) {
