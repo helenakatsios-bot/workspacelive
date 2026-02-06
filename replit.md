@@ -131,3 +131,18 @@ Preferred communication style: Simple, everyday language.
   - `emails` - Cached emails synced from Outlook
 - **Dependencies**: @azure/msal-node, @microsoft/microsoft-graph-client
 - **Environment Variables**: OUTLOOK_CLIENT_ID, OUTLOOK_CLIENT_SECRET
+
+### Purax Feather Holdings App
+- **Status**: Configured
+- **Flow**: CRM Order → Purax App → Xero
+- **Features**: Push orders from CRM to the Purax order management app, which handles Xero invoice creation
+- **Location**: Admin → Integrations tab
+- **API Routes**:
+  - `POST /api/orders/:id/sync-purax` - Send order to Purax app
+- **Schema Fields on Orders**:
+  - `purax_sync_status` - not_sent, sent, failed
+  - `purax_synced_at` - Timestamp of last sync
+  - `purax_order_id` - ID returned from Purax app
+- **Environment Variables**: PURAX_API_URL (set to https://order-manager-pro.replit.app)
+- **Webhook Endpoint Required on Purax App**: `POST /api/webhook/crm-order`
+- **Note**: The Purax app needs to implement a webhook receiver at `/api/webhook/crm-order` that accepts the order payload from this CRM

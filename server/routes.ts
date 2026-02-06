@@ -770,6 +770,152 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== PURAX SYNC ROUTES ====================
+  app.post("/api/orders/:id/sync-purax", requireEdit, async (req, res) => {
+    try {
+      const order = await storage.getOrder(req.params.id);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      const puraxApiUrl = process.env.PURAX_API_URL;
+      const puraxApiKey = process.env.PURAX_API_KEY;
+
+      if (!puraxApiUrl) {
+        return res.status(400).json({ message: "Purax API URL not configured. Go to Admin > Integrations to set it up." });
+      }
+
+      const company = await storage.getCompany(order.companyId);
+      const contact = order.contactId ? await storage.getContact(order.contactId) : null;
+      const lines = await storage.getOrderLines(order.id);
+
+      const payload = {
+        source: "purax-crm",
+        orderNumber: order.orderNumber,
+        crmOrderId: order.id,
+        status: order.status,
+        orderDate: order.orderDate,
+        requestedShipDate: order.requestedShipDate,
+        shippingMethod: order.shippingMethod,
+        trackingNumber: order.trackingNumber,
+        subtotal: order.subtotal,
+        tax: order.tax,
+        total: order.total,
+        internalNotes: order.internalNotes,
+        customerNotes: order.customerNotes,
+        company: company ? {
+          legalName: company.legalName,
+          tradingName: company.tradingName,
+          abn: company.abn,
+          billingAddress: company.billingAddress,
+          shippingAddress: company.shippingAddress,
+          paymentTerms: company.paymentTerms,
+        } : null,
+        contact: contact ? {
+          firstName: contact.firstName,
+          lastName: contact.lastName,
+          email: contact.email,
+          phone: contact.phone,
+          position: contact.position,
+        } : null,
+        lines: lines.map(line => ({
+          productId: line.productId,
+          descriptionOverride: line.descriptionOverride,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          discount: line.discount,
+          lineTotal: line.lineTotal,
+        })),
+      };
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (puraxApiKey) {
+        headers["X-API-Key"] = puraxApiKey;
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      let response: Response;
+      try {
+        response = await fetch(`${puraxApiUrl}/api/webhook/crm-order`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const now = new Date();
+        await storage.updateOrder(order.id, {
+          puraxSyncStatus: "failed",
+          puraxSyncedAt: now,
+        });
+        await storage.createActivity({
+          entityType: "order",
+          entityId: order.id,
+          activityType: "system",
+          content: `Failed to sync to Purax: ${response.status} - ${errorText}`,
+          createdBy: req.session.userId,
+        });
+        await storage.createAuditLog({
+          userId: req.session.userId,
+          action: "update",
+          entityType: "order",
+          entityId: order.id,
+          afterJson: { puraxSyncStatus: "failed", puraxSyncedAt: now },
+        });
+        return res.status(502).json({ message: `Purax sync failed: ${response.status} - ${errorText}` });
+      }
+
+      let puraxOrderId: string | null = null;
+      try {
+        const responseData = await response.json();
+        puraxOrderId = responseData.orderId || responseData.id || null;
+      } catch {
+        // response may not be JSON
+      }
+
+      const syncedAt = new Date();
+      await storage.updateOrder(order.id, {
+        puraxSyncStatus: "sent",
+        puraxSyncedAt: syncedAt,
+        puraxOrderId: puraxOrderId,
+      });
+
+      await storage.createActivity({
+        entityType: "order",
+        entityId: order.id,
+        activityType: "system",
+        content: "Order synced to Purax Feather Holdings app",
+        createdBy: req.session.userId,
+      });
+
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "update",
+        entityType: "order",
+        entityId: order.id,
+        afterJson: { puraxSyncStatus: "sent", puraxSyncedAt: syncedAt, puraxOrderId },
+      });
+
+      res.json({ message: "Order synced to Purax successfully", puraxOrderId });
+    } catch (error) {
+      console.error("Purax sync error:", error);
+      try {
+        await storage.updateOrder(req.params.id, {
+          puraxSyncStatus: "failed",
+        });
+      } catch {}
+      res.status(500).json({ message: "Failed to sync order to Purax" });
+    }
+  });
+
   // ==================== INVOICES ROUTES ====================
   app.get("/api/invoices", requireAuth, async (req, res) => {
     try {

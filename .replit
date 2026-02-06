@@ -43,3 +43,4 @@ waitForPort = 5000
 [userenv.shared]
 XERO_CLIENT_ID = "61053FD2AC5D4D6EA1A04B743F30AABD"
 XERO_CLIENT_SECRET = "l3MPeGBFbA4AJW_XvlnYownJVtYbsbTuwc8SwjK5fZOaK1Z5"
+PURAX_API_URL = "https://order-manager-pro.replit.app"

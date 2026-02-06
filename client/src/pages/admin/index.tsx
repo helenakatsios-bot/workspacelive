@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, XCircle, RefreshCw, Mail } from "lucide-react";
+import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -631,6 +631,44 @@ export default function AdminPage() {
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-lg">Purax Feather Holdings App</CardTitle>
+              <CardDescription>Sync orders from this CRM to your Purax order management app, which then sends them to Xero</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/10 border border-green-200 dark:border-green-800">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  <div className="flex-1">
+                    <p className="font-medium text-green-700 dark:text-green-300">Configured</p>
+                    <p className="text-sm text-muted-foreground">
+                      Orders can be sent to <span className="font-mono text-xs">order-manager-pro.replit.app</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="rounded-lg border p-4 space-y-2">
+                  <h4 className="text-sm font-medium">How it works</h4>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">1</span>
+                    Create an order in this CRM
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">2</span>
+                    Click "Send to Purax" on the order detail page
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">3</span>
+                    Purax app processes the order and sends it to Xero
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  The Purax app needs a webhook endpoint at <span className="font-mono">/api/webhook/crm-order</span> to receive orders. Contact your administrator if this hasn't been set up yet.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

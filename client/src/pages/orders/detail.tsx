@@ -18,6 +18,10 @@ import {
   FileText,
   Download,
   Image,
+  Send,
+  CheckCircle,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -94,6 +98,25 @@ export default function OrderDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id, "activities"] });
       setNewNote("");
       toast({ title: "Note added" });
+    },
+  });
+
+  const syncPuraxMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/orders/${params?.id}/sync-purax`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id, "activities"] });
+      toast({ title: "Order sent to Purax", description: "The order has been synced to the Purax Feather Holdings app." });
+    },
+    onError: (error: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id] });
+      toast({
+        title: "Sync failed",
+        description: error?.message || "Failed to sync order to Purax. Check your integration settings.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -206,6 +229,29 @@ export default function OrderDetailPage() {
                 <Edit className="w-4 h-4 mr-2" />
                 Edit
               </Button>
+              <Button
+                variant={order.puraxSyncStatus === "sent" ? "outline" : "default"}
+                onClick={() => syncPuraxMutation.mutate()}
+                disabled={syncPuraxMutation.isPending}
+                data-testid="button-sync-purax"
+              >
+                {syncPuraxMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : order.puraxSyncStatus === "sent" ? (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                ) : order.puraxSyncStatus === "failed" ? (
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                ) : (
+                  <Send className="w-4 h-4 mr-2" />
+                )}
+                {syncPuraxMutation.isPending
+                  ? "Sending..."
+                  : order.puraxSyncStatus === "sent"
+                    ? "Re-send to Purax"
+                    : order.puraxSyncStatus === "failed"
+                      ? "Retry Purax"
+                      : "Send to Purax"}
+              </Button>
             </>
           )}
         </div>
@@ -271,6 +317,34 @@ export default function OrderDetailPage() {
                   <p className="text-sm font-medium font-mono">{order.trackingNumber}</p>
                 </div>
               )}
+              <div className="flex items-start gap-3 pt-2 border-t">
+                <Send className="w-4 h-4 text-muted-foreground mt-0.5" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Purax Sync</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    {order.puraxSyncStatus === "sent" ? (
+                      <Badge variant="outline" className="gap-1 text-green-600 border-green-300 dark:text-green-400 dark:border-green-700">
+                        <CheckCircle className="w-3 h-3" />
+                        Sent
+                      </Badge>
+                    ) : order.puraxSyncStatus === "failed" ? (
+                      <Badge variant="outline" className="gap-1 text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
+                        <AlertTriangle className="w-3 h-3" />
+                        Failed
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="gap-1">
+                        Not sent
+                      </Badge>
+                    )}
+                  </div>
+                  {order.puraxSyncedAt && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {format(new Date(order.puraxSyncedAt), "MMM d, yyyy 'at' h:mm a")}
+                    </p>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
 
