@@ -1551,34 +1551,28 @@ export async function registerRoutes(
         contactEmail: z.string().email("Valid email is required"),
         contactPhone: z.string().optional(),
         shippingAddress: z.string().optional(),
+        streetAddress: z.string().optional(),
+        cityStateZip: z.string().optional(),
         customerNotes: z.string().optional(),
         items: z.array(z.object({
-          productId: z.string(),
-          productName: z.string(),
-          sku: z.string(),
           quantity: z.number().min(1),
+          description: z.string().min(1),
+          unitPrice: z.number().min(0).optional(),
+          lineTotal: z.number().min(0).optional(),
         })).min(1, "At least one item is required"),
+        subtotal: z.number().optional(),
+        gst: z.number().optional(),
+        total: z.number().optional(),
       });
 
       const data = schema.parse(req.body);
 
-      // Validate product IDs against database and use DB values for name/sku
-      const validatedItems = [];
-      for (const item of data.items) {
-        const product = await storage.getProduct(item.productId);
-        if (!product || !product.active) {
-          return res.status(400).json({ message: `Product "${item.productName}" is no longer available.` });
-        }
-        if (item.quantity > 99999) {
-          return res.status(400).json({ message: `Quantity for "${product.name}" exceeds maximum allowed.` });
-        }
-        validatedItems.push({
-          productId: product.id,
-          productName: product.name,
-          sku: product.sku,
-          quantity: item.quantity,
-        });
-      }
+      const validatedItems = data.items.map(item => ({
+        quantity: item.quantity,
+        description: item.description,
+        unitPrice: item.unitPrice || 0,
+        lineTotal: item.lineTotal || 0,
+      }));
 
       const orderRequest = await storage.createCustomerOrderRequest({
         companyName: data.companyName,
@@ -1612,23 +1606,30 @@ export async function registerRoutes(
                 if (token) {
                   const refreshedToken = await refreshOutlookTokenIfNeeded(user.id, token);
                   if (refreshedToken) {
-                    const itemsList = validatedItems.map((item: { sku: string; productName: string; quantity: number }) =>
-                      `<tr><td style="padding:8px;border:1px solid #ddd;">${item.sku}</td><td style="padding:8px;border:1px solid #ddd;">${item.productName}</td><td style="padding:8px;border:1px solid #ddd;">${item.quantity}</td></tr>`
+                    const itemsList = validatedItems.map((item: { quantity: number; description: string; unitPrice: number; lineTotal: number }) =>
+                      `<tr><td style="padding:8px;border:1px solid #ddd;">${item.quantity}</td><td style="padding:8px;border:1px solid #ddd;">${item.description}</td><td style="padding:8px;border:1px solid #ddd;">$${item.unitPrice.toFixed(2)}</td><td style="padding:8px;border:1px solid #ddd;text-align:right;">$${item.lineTotal.toFixed(2)}</td></tr>`
                     ).join("");
+
+                    const deliveryInfo = data.shippingAddress || "";
+                    const addressInfo = [data.streetAddress, data.cityStateZip].filter(Boolean).join(", ");
 
                     const emailBody = `
                       <h2>New Customer Order Request</h2>
                       <p><strong>Company:</strong> ${data.companyName}</p>
+                      ${addressInfo ? `<p><strong>Address:</strong> ${addressInfo}</p>` : ""}
                       <p><strong>Contact:</strong> ${data.contactName}</p>
                       <p><strong>Email:</strong> ${data.contactEmail}</p>
                       ${data.contactPhone ? `<p><strong>Phone:</strong> ${data.contactPhone}</p>` : ""}
-                      ${data.shippingAddress ? `<p><strong>Shipping Address:</strong> ${data.shippingAddress}</p>` : ""}
+                      ${deliveryInfo ? `<p><strong>Delivery Address:</strong> ${deliveryInfo}</p>` : ""}
                       ${data.customerNotes ? `<p><strong>Notes:</strong> ${data.customerNotes}</p>` : ""}
                       <h3>Items Ordered:</h3>
                       <table style="border-collapse:collapse;width:100%;">
-                        <tr><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">SKU</th><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Product</th><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Qty</th></tr>
+                        <tr><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Qty</th><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Description</th><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Unit Price</th><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;text-align:right;">Line Total</th></tr>
                         ${itemsList}
                       </table>
+                      ${data.subtotal ? `<p style="margin-top:12px;text-align:right;"><strong>Subtotal:</strong> $${data.subtotal.toFixed(2)}</p>` : ""}
+                      ${data.gst ? `<p style="text-align:right;"><strong>GST (10%):</strong> $${data.gst.toFixed(2)}</p>` : ""}
+                      ${data.total ? `<p style="text-align:right;font-size:1.1em;"><strong>TOTAL: $${data.total.toFixed(2)}</strong></p>` : ""}
                       <p style="margin-top:16px;"><em>Log in to the CRM to review and convert this order.</em></p>
                     `;
 

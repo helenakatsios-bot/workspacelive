@@ -854,7 +854,14 @@ function OrderFormSettings() {
                       <div className="text-xs text-muted-foreground">{req.contactEmail}</div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{Array.isArray(req.items) ? req.items.length : 0} items</Badge>
+                      <div className="space-y-0.5">
+                        {Array.isArray(req.items) ? req.items.map((item: any, idx: number) => (
+                          <div key={idx} className="text-xs">
+                            {item.quantity}x {item.description || item.productName || "Item"}
+                            {item.unitPrice > 0 ? ` @ $${Number(item.unitPrice).toFixed(2)}` : ""}
+                          </div>
+                        )) : <span className="text-xs text-muted-foreground">No items</span>}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge className={
