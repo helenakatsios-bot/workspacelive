@@ -30,17 +30,24 @@ export default function ProductsPage() {
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
-    return products.filter((product) => {
-      const matchesSearch =
-        product.name.toLowerCase().includes(search.toLowerCase()) ||
-        product.sku.toLowerCase().includes(search.toLowerCase()) ||
-        product.category?.toLowerCase().includes(search.toLowerCase());
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "active" && product.active) ||
-        (statusFilter === "inactive" && !product.active);
-      return matchesSearch && matchesStatus;
-    });
+    return products
+      .filter((product) => {
+        const matchesSearch =
+          product.name.toLowerCase().includes(search.toLowerCase()) ||
+          product.sku.toLowerCase().includes(search.toLowerCase()) ||
+          product.category?.toLowerCase().includes(search.toLowerCase());
+        const matchesStatus =
+          statusFilter === "all" ||
+          (statusFilter === "active" && product.active) ||
+          (statusFilter === "inactive" && !product.active);
+        return matchesSearch && matchesStatus;
+      })
+      .sort((a, b) => {
+        const catA = (a.category || "").toLowerCase();
+        const catB = (b.category || "").toLowerCase();
+        if (catA !== catB) return catA.localeCompare(catB);
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      });
   }, [products, search, statusFilter]);
 
   const deleteProductMutation = useMutation({
