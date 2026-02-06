@@ -3,13 +3,15 @@ import { eq, and, gte, lte, desc, ilike, or, sql } from "drizzle-orm";
 import {
   users, companies, contacts, deals, products, quotes, quoteLines,
   orders, orderLines, invoices, attachments, activities, auditLogs,
+  customerOrderRequests, crmSettings,
   type User, type InsertUser, type Company, type InsertCompany,
   type Contact, type InsertContact, type Deal, type InsertDeal,
   type Product, type InsertProduct, type Quote, type InsertQuote,
   type QuoteLine, type InsertQuoteLine, type Order, type InsertOrder,
   type OrderLine, type InsertOrderLine, type Invoice, type InsertInvoice,
   type Attachment, type InsertAttachment, type Activity, type InsertActivity,
-  type AuditLog, type InsertAuditLog
+  type AuditLog, type InsertAuditLog,
+  type CustomerOrderRequest, type InsertCustomerOrderRequest, type CrmSetting
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcrypt";
@@ -95,6 +97,19 @@ export interface IStorage {
 
   // Reports
   getCompaniesWithOrdersInDateRange(startDate: Date, endDate: Date): Promise<Company[]>;
+
+  // Customer Order Requests
+  getCustomerOrderRequest(id: string): Promise<CustomerOrderRequest | undefined>;
+  getAllCustomerOrderRequests(): Promise<CustomerOrderRequest[]>;
+  createCustomerOrderRequest(request: InsertCustomerOrderRequest): Promise<CustomerOrderRequest>;
+  updateCustomerOrderRequest(id: string, data: Partial<InsertCustomerOrderRequest>): Promise<CustomerOrderRequest | undefined>;
+
+  // CRM Settings
+  getSetting(key: string): Promise<string | undefined>;
+  setSetting(key: string, value: string): Promise<void>;
+
+  // Public
+  getActiveProducts(): Promise<Product[]>;
 
   // Dashboard Stats
   getDashboardStats(): Promise<{
@@ -424,6 +439,46 @@ export class DatabaseStorage implements IStorage {
       .orderBy(companies.tradingName);
     
     return result;
+  }
+
+  // Customer Order Requests
+  async getCustomerOrderRequest(id: string): Promise<CustomerOrderRequest | undefined> {
+    const [request] = await db.select().from(customerOrderRequests).where(eq(customerOrderRequests.id, id));
+    return request;
+  }
+
+  async getAllCustomerOrderRequests(): Promise<CustomerOrderRequest[]> {
+    return db.select().from(customerOrderRequests).orderBy(desc(customerOrderRequests.createdAt));
+  }
+
+  async createCustomerOrderRequest(request: InsertCustomerOrderRequest): Promise<CustomerOrderRequest> {
+    const [created] = await db.insert(customerOrderRequests).values(request).returning();
+    return created;
+  }
+
+  async updateCustomerOrderRequest(id: string, data: Partial<InsertCustomerOrderRequest>): Promise<CustomerOrderRequest | undefined> {
+    const [updated] = await db.update(customerOrderRequests)
+      .set(data)
+      .where(eq(customerOrderRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  // CRM Settings
+  async getSetting(key: string): Promise<string | undefined> {
+    const [setting] = await db.select().from(crmSettings).where(eq(crmSettings.key, key));
+    return setting?.value;
+  }
+
+  async setSetting(key: string, value: string): Promise<void> {
+    await db.insert(crmSettings)
+      .values({ key, value, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: crmSettings.key, set: { value, updatedAt: new Date() } });
+  }
+
+  // Public
+  async getActiveProducts(): Promise<Product[]> {
+    return db.select().from(products).where(eq(products.active, true)).orderBy(products.category, products.name);
   }
 
   // Dashboard Stats

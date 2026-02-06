@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -61,6 +61,7 @@ import TasksPage from "@/pages/crm/tasks";
 import PlaybooksPage from "@/pages/crm/playbooks";
 import MessageTemplatesPage from "@/pages/crm/message-templates";
 import SnippetsPage from "@/pages/crm/snippets";
+import PublicOrderFormPage from "@/pages/public/order-form";
 import NotFound from "@/pages/not-found";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -177,6 +178,16 @@ function AuthenticatedApp() {
   );
 }
 
+function AppRouter() {
+  const [location] = useLocation();
+
+  if (location === "/order" || location.startsWith("/order?")) {
+    return <PublicOrderFormPage />;
+  }
+
+  return <AuthenticatedApp />;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -184,7 +195,7 @@ function App() {
         <AuthProvider>
           <TooltipProvider>
             <Toaster />
-            <AuthenticatedApp />
+            <AppRouter />
           </TooltipProvider>
         </AuthProvider>
       </ThemeProvider>

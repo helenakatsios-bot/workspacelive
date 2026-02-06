@@ -1433,5 +1433,195 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== PUBLIC ORDER FORM ROUTES (NO AUTH) ====================
+  app.get("/api/public/products", async (_req, res) => {
+    try {
+      const products = await storage.getActiveProducts();
+      const publicProducts = products.map(p => ({
+        id: p.id,
+        sku: p.sku,
+        name: p.name,
+        category: p.category,
+        unitPrice: p.unitPrice,
+      }));
+      res.json(publicProducts);
+    } catch (error) {
+      console.error("Public products error:", error);
+      res.status(500).json({ message: "Failed to load products" });
+    }
+  });
+
+  app.post("/api/public/order-request", async (req, res) => {
+    try {
+      const schema = z.object({
+        companyName: z.string().min(1, "Company name is required"),
+        contactName: z.string().min(1, "Contact name is required"),
+        contactEmail: z.string().email("Valid email is required"),
+        contactPhone: z.string().optional(),
+        shippingAddress: z.string().optional(),
+        customerNotes: z.string().optional(),
+        items: z.array(z.object({
+          productId: z.string(),
+          productName: z.string(),
+          sku: z.string(),
+          quantity: z.number().min(1),
+        })).min(1, "At least one item is required"),
+      });
+
+      const data = schema.parse(req.body);
+
+      // Validate product IDs against database and use DB values for name/sku
+      const validatedItems = [];
+      for (const item of data.items) {
+        const product = await storage.getProduct(item.productId);
+        if (!product || !product.active) {
+          return res.status(400).json({ message: `Product "${item.productName}" is no longer available.` });
+        }
+        if (item.quantity > 99999) {
+          return res.status(400).json({ message: `Quantity for "${product.name}" exceeds maximum allowed.` });
+        }
+        validatedItems.push({
+          productId: product.id,
+          productName: product.name,
+          sku: product.sku,
+          quantity: item.quantity,
+        });
+      }
+
+      const orderRequest = await storage.createCustomerOrderRequest({
+        companyName: data.companyName,
+        contactName: data.contactName,
+        contactEmail: data.contactEmail,
+        contactPhone: data.contactPhone || null,
+        shippingAddress: data.shippingAddress || null,
+        customerNotes: data.customerNotes || null,
+        items: validatedItems,
+        status: "pending",
+        convertedOrderId: null,
+        reviewedBy: null,
+      });
+
+      // Send email notification
+      try {
+        const notificationEmail = await storage.getSetting("notification_email");
+        if (notificationEmail) {
+          // Find any user with an active Outlook token to send the email
+          const allUsers = await storage.getAllUsers();
+          let emailSent = false;
+          for (const user of allUsers) {
+            if (emailSent) break;
+            try {
+              const token = await getStoredOutlookToken(user.id);
+              if (token) {
+                const refreshedToken = await refreshOutlookTokenIfNeeded(user.id, token);
+                if (refreshedToken) {
+                  const itemsList = validatedItems.map((item: { sku: string; productName: string; quantity: number }) =>
+                    `<tr><td style="padding:8px;border:1px solid #ddd;">${item.sku}</td><td style="padding:8px;border:1px solid #ddd;">${item.productName}</td><td style="padding:8px;border:1px solid #ddd;">${item.quantity}</td></tr>`
+                  ).join("");
+
+                const emailBody = `
+                  <h2>New Customer Order Request</h2>
+                  <p><strong>Company:</strong> ${data.companyName}</p>
+                  <p><strong>Contact:</strong> ${data.contactName}</p>
+                  <p><strong>Email:</strong> ${data.contactEmail}</p>
+                  ${data.contactPhone ? `<p><strong>Phone:</strong> ${data.contactPhone}</p>` : ""}
+                  ${data.shippingAddress ? `<p><strong>Shipping Address:</strong> ${data.shippingAddress}</p>` : ""}
+                  ${data.customerNotes ? `<p><strong>Notes:</strong> ${data.customerNotes}</p>` : ""}
+                  <h3>Items Ordered:</h3>
+                  <table style="border-collapse:collapse;width:100%;">
+                    <tr><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">SKU</th><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Product</th><th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Qty</th></tr>
+                    ${itemsList}
+                  </table>
+                  <p style="margin-top:16px;"><em>Log in to the CRM to review and convert this order.</em></p>
+                `;
+
+                await sendEmail(
+                  refreshedToken.accessToken,
+                  [notificationEmail],
+                  `New Order Request from ${data.companyName}`,
+                  emailBody
+                );
+                emailSent = true;
+                }
+              }
+            } catch (tokenError) {
+              // Try next user
+            }
+          }
+          if (!emailSent) {
+            console.log("No Outlook token available to send order notification to:", notificationEmail);
+          }
+        }
+      } catch (emailError) {
+        console.error("Failed to send notification email:", emailError);
+      }
+
+      res.json({ success: true, id: orderRequest.id, message: "Your order has been submitted successfully! We will be in touch shortly." });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Order request error:", error);
+      res.status(500).json({ message: "Failed to submit order" });
+    }
+  });
+
+  // ==================== CUSTOMER ORDER REQUESTS (ADMIN) ====================
+  app.get("/api/customer-order-requests", requireAuth, async (_req, res) => {
+    try {
+      const requests = await storage.getAllCustomerOrderRequests();
+      res.json(requests);
+    } catch (error) {
+      console.error("Get order requests error:", error);
+      res.status(500).json({ message: "Failed to load order requests" });
+    }
+  });
+
+  app.get("/api/customer-order-requests/:id", requireAuth, async (req, res) => {
+    try {
+      const request = await storage.getCustomerOrderRequest(req.params.id);
+      if (!request) return res.status(404).json({ message: "Order request not found" });
+      res.json(request);
+    } catch (error) {
+      console.error("Get order request error:", error);
+      res.status(500).json({ message: "Failed to load order request" });
+    }
+  });
+
+  app.patch("/api/customer-order-requests/:id", requireEdit, async (req, res) => {
+    try {
+      const updated = await storage.updateCustomerOrderRequest(req.params.id, {
+        ...req.body,
+        reviewedBy: req.session.userId,
+        reviewedAt: new Date(),
+      });
+      if (!updated) return res.status(404).json({ message: "Order request not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Update order request error:", error);
+      res.status(500).json({ message: "Failed to update order request" });
+    }
+  });
+
+  // ==================== CRM SETTINGS ====================
+  app.get("/api/settings/:key", requireAuth, async (req, res) => {
+    try {
+      const value = await storage.getSetting(req.params.key);
+      res.json({ key: req.params.key, value: value || "" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to load setting" });
+    }
+  });
+
+  app.put("/api/settings/:key", requireAdmin, async (req, res) => {
+    try {
+      const { value } = req.body;
+      await storage.setSetting(req.params.key, value);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save setting" });
+    }
+  });
+
   return httpServer;
 }

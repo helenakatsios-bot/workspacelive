@@ -369,6 +369,39 @@ export const insertEmailSchema = createInsertSchema(emails).omit({ id: true, cre
 export type InsertEmail = z.infer<typeof insertEmailSchema>;
 export type Email = typeof emails.$inferSelect;
 
+// ============ CUSTOMER ORDER REQUESTS (PUBLIC FORM SUBMISSIONS) ============
+export const customerOrderRequests = pgTable("customer_order_requests", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  companyName: text("company_name").notNull(),
+  contactName: text("contact_name").notNull(),
+  contactEmail: text("contact_email").notNull(),
+  contactPhone: text("contact_phone"),
+  shippingAddress: text("shipping_address"),
+  customerNotes: text("customer_notes"),
+  items: jsonb("items").notNull(), // Array of { productId, productName, sku, quantity }
+  status: text("status").notNull().default("pending"), // pending, reviewed, converted, rejected
+  convertedOrderId: varchar("converted_order_id", { length: 36 }).references(() => orders.id),
+  reviewedBy: varchar("reviewed_by", { length: 36 }).references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("customer_order_requests_status_idx").on(table.status),
+  index("customer_order_requests_created_idx").on(table.createdAt),
+]);
+
+export const insertCustomerOrderRequestSchema = createInsertSchema(customerOrderRequests).omit({ id: true, createdAt: true, reviewedAt: true });
+export type InsertCustomerOrderRequest = z.infer<typeof insertCustomerOrderRequestSchema>;
+export type CustomerOrderRequest = typeof customerOrderRequests.$inferSelect;
+
+// ============ CRM SETTINGS ============
+export const crmSettings = pgTable("crm_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type CrmSetting = typeof crmSettings.$inferSelect;
+
 // ============ HELPER TYPES ============
 export type UserRole = "admin" | "office" | "warehouse" | "readonly";
 export type CreditStatus = "active" | "on_hold";

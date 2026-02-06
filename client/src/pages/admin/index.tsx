@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail } from "lucide-react";
+import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -267,6 +267,10 @@ export default function AdminPage() {
           <TabsTrigger value="exports" className="gap-2">
             <Download className="w-4 h-4" />
             Exports
+          </TabsTrigger>
+          <TabsTrigger value="order-form" className="gap-2" data-testid="tab-order-form">
+            <ShoppingCart className="w-4 h-4" />
+            Order Form
           </TabsTrigger>
         </TabsList>
 
@@ -710,7 +714,165 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="order-form" className="mt-6">
+          <OrderFormSettings />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function OrderFormSettings() {
+  const { toast } = useToast();
+  const [notificationEmail, setNotificationEmail] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const orderFormUrl = typeof window !== "undefined" ? `${window.location.origin}/order` : "/order";
+
+  const { data: emailSetting } = useQuery<{ key: string; value: string }>({
+    queryKey: ["/api/settings", "notification_email"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings/notification_email");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const { data: orderRequests } = useQuery<any[]>({
+    queryKey: ["/api/customer-order-requests"],
+  });
+
+  useEffect(() => {
+    if (emailSetting?.value) {
+      setNotificationEmail(emailSetting.value);
+    }
+  }, [emailSetting]);
+
+  const saveEmail = async () => {
+    setIsSaving(true);
+    try {
+      await apiRequest("PUT", "/api/settings/notification_email", { value: notificationEmail });
+      toast({ title: "Saved", description: "Notification email updated." });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings", "notification_email"] });
+    } catch {
+      toast({ title: "Error", description: "Failed to save.", variant: "destructive" });
+    }
+    setIsSaving(false);
+  };
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(orderFormUrl);
+    toast({ title: "Copied", description: "Order form link copied to clipboard." });
+  };
+
+  const pendingRequests = orderRequests?.filter(r => r.status === "pending") || [];
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Customer Order Form Link</CardTitle>
+          <CardDescription>Share this link with your customers so they can place orders directly</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Input
+              value={orderFormUrl}
+              readOnly
+              className="font-mono text-sm"
+              data-testid="input-order-form-url"
+            />
+            <Button variant="outline" size="icon" onClick={copyLink} data-testid="button-copy-link">
+              <Copy className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" size="icon" onClick={() => window.open(orderFormUrl, "_blank")} data-testid="button-open-form">
+              <ExternalLink className="w-4 h-4" />
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Send this link to your customers via email or message. They can browse your product catalogue, select items and quantities, and submit their order. The order will appear in your CRM for review.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Email Notifications</CardTitle>
+          <CardDescription>Get notified when a customer submits an order through the form</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Input
+              type="email"
+              placeholder="Enter notification email address"
+              value={notificationEmail}
+              onChange={e => setNotificationEmail(e.target.value)}
+              data-testid="input-notification-email"
+            />
+            <Button onClick={saveEmail} disabled={isSaving} data-testid="button-save-email">
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            When Outlook is connected, order notifications will be sent to this email address. Make sure Outlook is connected in the Integrations tab.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle className="text-lg">Incoming Order Requests</CardTitle>
+            <CardDescription>Orders submitted by customers through the public form</CardDescription>
+          </div>
+          {pendingRequests.length > 0 && (
+            <Badge variant="secondary">{pendingRequests.length} pending</Badge>
+          )}
+        </CardHeader>
+        <CardContent>
+          {!orderRequests || orderRequests.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">No order requests yet. Share your order form link with customers to start receiving orders.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Items</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orderRequests.map((req: any) => (
+                  <TableRow key={req.id} data-testid={`order-request-${req.id}`}>
+                    <TableCell className="text-sm">{format(new Date(req.createdAt), "dd MMM yyyy HH:mm")}</TableCell>
+                    <TableCell className="font-medium">{req.companyName}</TableCell>
+                    <TableCell>
+                      <div className="text-sm">{req.contactName}</div>
+                      <div className="text-xs text-muted-foreground">{req.contactEmail}</div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{Array.isArray(req.items) ? req.items.length : 0} items</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={
+                        req.status === "pending" ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400" :
+                        req.status === "converted" ? "bg-green-500/10 text-green-700 dark:text-green-400" :
+                        req.status === "reviewed" ? "bg-blue-500/10 text-blue-700 dark:text-blue-400" :
+                        "bg-red-500/10 text-red-700 dark:text-red-400"
+                      }>
+                        {req.status}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

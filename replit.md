@@ -20,6 +20,11 @@ A professional B2B CRM and order management system designed for wholesale manufa
   - **Read-only**: View-only access to all data
 - **Audit Logging**: All create/update operations are logged for compliance and accountability
 - **Beginner-Safe UI**: Professional, opinionated interface that guides users and prevents data corruption
+- **Public Customer Order Form**: Shareable link (/order) that customers can use to browse the product catalogue, select items, and submit orders directly. Orders appear in the CRM for review. Email notifications via Outlook when configured.
+  - **Public URL**: /order (no login required)
+  - **Admin Settings**: Admin → Order Form tab shows the shareable link, notification email config, and incoming order requests
+  - **Database Tables**: customer_order_requests, crm_settings
+  - **API Routes**: GET /api/public/products (public), POST /api/public/order-request (public), GET/PATCH /api/customer-order-requests (auth required), GET/PUT /api/settings/:key (auth required)
 
 ### Demo Login Credentials
 - Admin: admin@company.com / admin123
