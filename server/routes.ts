@@ -1,6 +1,8 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
+import pgSession from "connect-pg-simple";
+import { pool } from "./db";
 import { storage } from "./storage";
 import bcrypt from "bcrypt";
 import { z } from "zod";
@@ -57,14 +59,24 @@ export async function registerRoutes(
   if (process.env.NODE_ENV === "production" && !sessionSecret) {
     throw new Error("SESSION_SECRET environment variable is required in production");
   }
+
+  const PgStore = pgSession(session);
+
+  app.set("trust proxy", 1);
   
   app.use(
     session({
+      store: new PgStore({
+        pool: pool,
+        tableName: "user_sessions",
+        createTableIfMissing: true,
+      }),
       secret: sessionSecret || "dev-only-secret-do-not-use-in-production",
       resave: false,
       saveUninitialized: false,
       cookie: {
         secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
       },
