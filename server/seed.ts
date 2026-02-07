@@ -3,7 +3,7 @@ import {
   users, companies, contacts, deals, products, quotes, quoteLines,
   orders, orderLines, invoices, activities
 } from "@shared/schema";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { sql } from "drizzle-orm";
 
 export async function seedDatabase() {

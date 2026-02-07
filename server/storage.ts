@@ -14,7 +14,7 @@ import {
   type CustomerOrderRequest, type InsertCustomerOrderRequest, type CrmSetting
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 
 export interface IStorage {
   // Users
