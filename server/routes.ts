@@ -87,13 +87,17 @@ export async function registerRoutes(
   app.post("/api/auth/login", async (req, res) => {
     try {
       const data = loginSchema.parse(req.body);
+      console.log("[LOGIN DEBUG] Attempting login for email:", data.email, "password length:", data.password?.length);
       const user = await storage.getUserByEmail(data.email);
       
       if (!user) {
+        console.log("[LOGIN DEBUG] User not found for email:", data.email);
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
+      console.log("[LOGIN DEBUG] User found:", user.email, "hash starts with:", user.passwordHash?.substring(0, 10));
       const validPassword = await bcrypt.compare(data.password, user.passwordHash);
+      console.log("[LOGIN DEBUG] Password valid:", validPassword);
       if (!validPassword) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
