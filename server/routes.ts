@@ -87,8 +87,9 @@ export async function registerRoutes(
   app.post("/api/auth/login", async (req, res) => {
     try {
       const data = loginSchema.parse(req.body);
-      console.log("[LOGIN DEBUG] Attempting login for email:", data.email, "password length:", data.password?.length);
-      const user = await storage.getUserByEmail(data.email);
+      const normalizedEmail = data.email.trim().toLowerCase();
+      console.log("[LOGIN DEBUG] Attempting login for email:", normalizedEmail, "password length:", data.password?.length);
+      const user = await storage.getUserByEmail(normalizedEmail);
       
       if (!user) {
         console.log("[LOGIN DEBUG] User not found for email:", data.email);
