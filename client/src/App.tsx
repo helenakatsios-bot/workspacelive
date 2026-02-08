@@ -62,6 +62,7 @@ import TasksPage from "@/pages/crm/tasks";
 import PlaybooksPage from "@/pages/crm/playbooks";
 import MessageTemplatesPage from "@/pages/crm/message-templates";
 import SnippetsPage from "@/pages/crm/snippets";
+import OrderRequestsPage from "@/pages/orders/requests";
 import PublicOrderFormPage from "@/pages/public/order-form";
 import NotFound from "@/pages/not-found";
 
@@ -128,6 +129,7 @@ function AuthenticatedApp() {
         <Route path="/quotes/:id" component={QuotesPage} />
         <Route path="/orders" component={OrdersPage} />
         <Route path="/orders/new" component={OrderFormPage} />
+        <Route path="/orders/requests" component={OrderRequestsPage} />
         <Route path="/orders/:id" component={OrderDetailPage} />
         <Route path="/orders/:id/edit" component={OrderDetailPage} />
         <Route path="/invoices" component={InvoicesPage} />
