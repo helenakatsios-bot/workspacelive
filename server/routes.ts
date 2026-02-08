@@ -1032,8 +1032,10 @@ export async function registerRoutes(
         clearTimeout(timeout);
       }
 
+      const responseText = await response.text();
+      console.log(`[PURAX-SYNC] Response status: ${response.status}, body: ${responseText.substring(0, 500)}`);
+
       if (!response.ok) {
-        const errorText = await response.text();
         const now = new Date();
         await storage.updateOrder(order.id, {
           puraxSyncStatus: "failed",
@@ -1043,7 +1045,7 @@ export async function registerRoutes(
           entityType: "order",
           entityId: order.id,
           activityType: "system",
-          content: `Failed to sync to Purax: ${response.status} - ${errorText}`,
+          content: `Failed to sync to Purax: ${response.status} - ${responseText}`,
           createdBy: req.session.userId,
         });
         await storage.createAuditLog({
@@ -1053,12 +1055,12 @@ export async function registerRoutes(
           entityId: order.id,
           afterJson: { puraxSyncStatus: "failed", puraxSyncedAt: now },
         });
-        return res.status(502).json({ message: `Purax sync failed: ${response.status} - ${errorText}` });
+        return res.status(502).json({ message: `Purax sync failed: ${response.status} - ${responseText}` });
       }
 
       let puraxOrderId: string | null = null;
       try {
-        const responseData = await response.json();
+        const responseData = JSON.parse(responseText);
         puraxOrderId = responseData.orderId || responseData.id || null;
       } catch {
         // response may not be JSON
