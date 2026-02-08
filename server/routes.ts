@@ -1906,6 +1906,34 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/customer-order-requests/:id", requireAdmin, async (req, res) => {
+    try {
+      const deleted = await storage.deleteCustomerOrderRequest(req.params.id);
+      if (!deleted) return res.status(404).json({ message: "Order request not found" });
+      res.json({ message: "Order request deleted" });
+    } catch (error) {
+      console.error("Delete order request error:", error);
+      res.status(500).json({ message: "Failed to delete order request" });
+    }
+  });
+
+  app.delete("/api/orders/:id", requireAdmin, async (req, res) => {
+    try {
+      const deleted = await storage.deleteOrder(req.params.id);
+      if (!deleted) return res.status(404).json({ message: "Order not found" });
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "delete",
+        entityType: "order",
+        entityId: req.params.id,
+      });
+      res.json({ message: "Order deleted" });
+    } catch (error) {
+      console.error("Delete order error:", error);
+      res.status(500).json({ message: "Failed to delete order" });
+    }
+  });
+
   // ==================== CRM SETTINGS ====================
   app.get("/api/settings/:key", requireAuth, async (req, res) => {
     try {

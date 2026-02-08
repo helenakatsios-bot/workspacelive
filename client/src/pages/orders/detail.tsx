@@ -22,6 +22,7 @@ import {
   CheckCircle,
   AlertTriangle,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -84,6 +85,20 @@ export default function OrderDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({ title: "Status updated" });
+    },
+  });
+
+  const deleteOrderMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("DELETE", `/api/orders/${params?.id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({ title: "Order deleted" });
+      navigate("/orders");
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete order.", variant: "destructive" });
     },
   });
 
@@ -238,6 +253,19 @@ export default function OrderDetailPage() {
               <Button variant="outline" onClick={() => navigate(`/orders/${params?.id}/edit`)} data-testid="button-edit">
                 <Edit className="w-4 h-4 mr-2" />
                 Edit
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (window.confirm("Are you sure you want to delete this order? This cannot be undone.")) {
+                    deleteOrderMutation.mutate();
+                  }
+                }}
+                disabled={deleteOrderMutation.isPending}
+                data-testid="button-delete-order"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                {deleteOrderMutation.isPending ? "Deleting..." : "Delete"}
               </Button>
               <Button
                 variant={order.puraxSyncStatus === "sent" ? "outline" : "default"}

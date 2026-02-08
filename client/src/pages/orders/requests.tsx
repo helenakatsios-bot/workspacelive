@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, MapPin, Phone, Mail, User, Building2, FileText, Clock } from "lucide-react";
+import { Loader2, MapPin, Phone, Mail, User, Building2, FileText, Clock, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -41,6 +41,20 @@ export default function OrderRequestsPage() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to update status.", variant: "destructive" });
+    },
+  });
+
+  const deleteRequestMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/customer-order-requests/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-order-requests"] });
+      setSelectedId(null);
+      toast({ title: "Deleted", description: "Order request deleted." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete order request.", variant: "destructive" });
     },
   });
 
@@ -299,6 +313,20 @@ export default function OrderRequestsPage() {
                       Reject
                     </Button>
                   )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (window.confirm("Are you sure you want to delete this order request? This cannot be undone.")) {
+                        deleteRequestMutation.mutate(selectedRequest.id);
+                      }
+                    }}
+                    disabled={deleteRequestMutation.isPending}
+                    data-testid="button-delete-request"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    {deleteRequestMutation.isPending ? "Deleting..." : "Delete"}
+                  </Button>
                 </div>
               </div>
             </>

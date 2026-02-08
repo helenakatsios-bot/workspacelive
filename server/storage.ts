@@ -104,6 +104,10 @@ export interface IStorage {
   getAllCustomerOrderRequests(): Promise<CustomerOrderRequest[]>;
   createCustomerOrderRequest(request: InsertCustomerOrderRequest): Promise<CustomerOrderRequest>;
   updateCustomerOrderRequest(id: string, data: Partial<InsertCustomerOrderRequest>): Promise<CustomerOrderRequest | undefined>;
+  deleteCustomerOrderRequest(id: string): Promise<boolean>;
+
+  // Orders - delete
+  deleteOrder(id: string): Promise<boolean>;
 
   // CRM Settings
   getSetting(key: string): Promise<string | undefined>;
@@ -469,6 +473,17 @@ export class DatabaseStorage implements IStorage {
       .where(eq(customerOrderRequests.id, id))
       .returning();
     return updated;
+  }
+
+  async deleteCustomerOrderRequest(id: string): Promise<boolean> {
+    const result = await db.delete(customerOrderRequests).where(eq(customerOrderRequests.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async deleteOrder(id: string): Promise<boolean> {
+    await db.delete(orderLines).where(eq(orderLines.orderId, id));
+    const result = await db.delete(orders).where(eq(orders.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   // CRM Settings
