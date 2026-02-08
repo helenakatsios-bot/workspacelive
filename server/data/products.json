@@ -1,0 +1,956 @@
+[
+  {
+    "name": "DOUBLE - CASSETTE",
+    "sku": "CASS-016",
+    "category": "CASSETTES CASES",
+    "description": "CASSETTES CASES",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING SINGLE - CASSETTE",
+    "sku": "CASS-017",
+    "category": "CASSETTES CASES",
+    "description": "CASSETTES CASES",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING -CASSETTE",
+    "sku": "CASS-018",
+    "category": "CASSETTES CASES",
+    "description": "CASSETTES CASES",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "QUEEN - CASSETTE",
+    "sku": "CASS-019",
+    "category": "CASSETTES CASES",
+    "description": "CASSETTES CASES",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SINGLE - CASSETTE",
+    "sku": "CASS-020",
+    "category": "CASSETTES CASES",
+    "description": "CASSETTES CASES",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SUPER KING - CASSETTE",
+    "sku": "CASS-021",
+    "category": "CASSETTES CASES",
+    "description": "CASSETTES CASES",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "45X70CM - (48X73CM) - CHAMBER PILLOW",
+    "sku": "CHAM-039",
+    "category": "CHAMBER PILLOW",
+    "description": "CHAMBER PILLOW",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "50X90CM - (53X93CM) - CHAMBER PILLOW",
+    "sku": "CHAM-040",
+    "category": "CHAMBER PILLOW",
+    "description": "CHAMBER PILLOW",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "COT - CHANNELS",
+    "sku": "CHAN-022",
+    "category": "CHANNELLED CASES",
+    "description": "CHANNELLED CASES",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "DOUBLE - CHANNELS",
+    "sku": "CHAN-023",
+    "category": "CHANNELLED CASES",
+    "description": "CHANNELLED CASES",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING SINGLE - CHANNELS",
+    "sku": "CHAN-024",
+    "category": "CHANNELLED CASES",
+    "description": "CHANNELLED CASES",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING - CHANNELS",
+    "sku": "CHAN-025",
+    "category": "CHANNELLED CASES",
+    "description": "CHANNELLED CASES",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "QUEEN - CHANNELS",
+    "sku": "CHAN-026",
+    "category": "CHANNELLED CASES",
+    "description": "CHANNELLED CASES",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SINGLE - CHANNELS",
+    "sku": "CHAN-027",
+    "category": "CHANNELLED CASES",
+    "description": "CHANNELLED CASES",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SUPER KING - CHANNELS",
+    "sku": "CHAN-028",
+    "category": "CHANNELLED CASES",
+    "description": "CHANNELLED CASES",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SINGLE - 80% DUCK WINTER FILLED",
+    "sku": "DUCK-045",
+    "category": "80% DUCK WINTER FILLED",
+    "description": "80% DUCK WINTER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "DOUBLE - 80% DUCK WINTER FILLED",
+    "sku": "DUCK-046",
+    "category": "80% DUCK WINTER FILLED",
+    "description": "80% DUCK WINTER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "QUEEN - 80% DUCK WINTER FILLED",
+    "sku": "DUCK-047",
+    "category": "80% DUCK WINTER FILLED",
+    "description": "80% DUCK WINTER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING - 80% DUCK WINTER FILLED",
+    "sku": "DUCK-048",
+    "category": "80% DUCK WINTER FILLED",
+    "description": "80% DUCK WINTER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SUPER KING - 80% DUCK WINTER FILLED",
+    "sku": "DUCK-049",
+    "category": "80% DUCK WINTER FILLED",
+    "description": "80% DUCK WINTER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SINGLE - 50% DUCK WINTER FILLED",
+    "sku": "DUCK-055",
+    "category": "50% DUCK WINTER FILLED",
+    "description": "50% DUCK WINTER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "DOUBLE - 50% DUCK WINTER FILLED",
+    "sku": "DUCK-056",
+    "category": "50% DUCK WINTER FILLED",
+    "description": "50% DUCK WINTER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "QUEEN - 50% DUCK WINTER FILLED",
+    "sku": "DUCK-057",
+    "category": "50% DUCK WINTER FILLED",
+    "description": "50% DUCK WINTER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING - 50% DUCK WINTER FILLED",
+    "sku": "DUCK-058",
+    "category": "50% DUCK WINTER FILLED",
+    "description": "50% DUCK WINTER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SUPER KING - 50% DUCK WINTER FILLED",
+    "sku": "DUCK-059",
+    "category": "50% DUCK WINTER FILLED",
+    "description": "50% DUCK WINTER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "DOUBLE - GOLD QUILT CASE",
+    "sku": "GOLD-082",
+    "category": "GOLD QUILT CASE",
+    "description": "GOLD QUILT CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING - GOLD QUILT CASE",
+    "sku": "GOLD-083",
+    "category": "GOLD QUILT CASE",
+    "description": "GOLD QUILT CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "QUEEN - GOLD QUILT CASE",
+    "sku": "GOLD-084",
+    "category": "GOLD QUILT CASE",
+    "description": "GOLD QUILT CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SINGLE - GOLD QUILT CASE",
+    "sku": "GOLD-085",
+    "category": "GOLD QUILT CASE",
+    "description": "GOLD QUILT CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SUPER KING - GOLD QUILT CASE",
+    "sku": "GOLD-086",
+    "category": "GOLD QUILT CASE",
+    "description": "GOLD QUILT CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "45X70CM - (48X73CM) - GOLD PILLOW CASE",
+    "sku": "GOLD-087",
+    "category": "GOLD PILLOW CASE",
+    "description": "GOLD PILLOW CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "50X90CM - (53X93CM) - GOLD PILLOW CASE",
+    "sku": "GOLD-088",
+    "category": "GOLD PILLOW CASE",
+    "description": "GOLD PILLOW CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "30X55CM - (34X58CM)",
+    "sku": "INSE-001",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "40X40CM - (43X43CM)",
+    "sku": "INSE-002",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "45X45CM - (48X48CM)",
+    "sku": "INSE-003",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "40X80CM - (43X83CM)",
+    "sku": "INSE-004",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "45X70CM - (48X73CM)",
+    "sku": "INSE-005",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "50X110CM - (53X113CM)",
+    "sku": "INSE-006",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "50X30CM - (53X33CM)",
+    "sku": "INSE-007",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "50X50CM - (53X53CM)",
+    "sku": "INSE-008",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "50X80CM - (53X83CM)",
+    "sku": "INSE-009",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "50X90CM - (53X93CM)",
+    "sku": "INSE-010",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "55X55CM - (58X58CM)",
+    "sku": "INSE-011",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "60X40CM - (63X43CM)",
+    "sku": "INSE-012",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "60X60CM - (63X63CM)",
+    "sku": "INSE-013",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "65X40CM - (68X43CM)",
+    "sku": "INSE-014",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "65X65CM - (68X68CM)",
+    "sku": "INSE-015",
+    "category": "INSERTS",
+    "description": "INSERTS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "Single/ King Single 180 x 230gms 300gms - KHAKI BLANKET",
+    "sku": "KHAK-104",
+    "category": "KHAKI BLANKET",
+    "description": "KHAKI BLANKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "Double/Queen 230 x 240cms 450gms - KHAKI BLANKET",
+    "sku": "KHAK-105",
+    "category": "KHAKI BLANKET",
+    "description": "KHAKI BLANKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "King/Super King 270 x 240cms 535 gms - KHAKI BLANKET",
+    "sku": "KHAK-106",
+    "category": "KHAKI BLANKET",
+    "description": "KHAKI BLANKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SINGLE 140X214CM - MATTRESS TOPPER CASE",
+    "sku": "MATT-065",
+    "category": "MATTRESS TOPPER CASE",
+    "description": "MATTRESS TOPPER CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "DOUBLE 184X214CM - MATTRESS TOPPER CASE",
+    "sku": "MATT-066",
+    "category": "MATTRESS TOPPER CASE",
+    "description": "MATTRESS TOPPER CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING SINGLE – 107 x 204 x 10 cm - MATTRESS TOPPER CASE",
+    "sku": "MATT-067",
+    "category": "MATTRESS TOPPER CASE",
+    "description": "MATTRESS TOPPER CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "QUEEN – 153 x 204 x 10 cm - MATTRESS TOPPER CASE",
+    "sku": "MATT-068",
+    "category": "MATTRESS TOPPER CASE",
+    "description": "MATTRESS TOPPER CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING - 183 x 204 x 10 cm - MATTRESS TOPPER CASE",
+    "sku": "MATT-069",
+    "category": "MATTRESS TOPPER CASE",
+    "description": "MATTRESS TOPPER CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SINGLE 140X214CM - MATTRESS TOPPER FILLED",
+    "sku": "MATT-070",
+    "category": "MATTRESS TOPPER FILLED",
+    "description": "MATTRESS TOPPER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "DOUBLE 184X214CM - MATTRESS TOPPER FILLED",
+    "sku": "MATT-071",
+    "category": "MATTRESS TOPPER FILLED",
+    "description": "MATTRESS TOPPER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING SINGLE – 107 x 204 x 10 cm - MATTRESS TOPPER FILLED",
+    "sku": "MATT-072",
+    "category": "MATTRESS TOPPER FILLED",
+    "description": "MATTRESS TOPPER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "QUEEN – 153 x 204 x 10 cm - MATTRESS TOPPER FILLED",
+    "sku": "MATT-073",
+    "category": "MATTRESS TOPPER FILLED",
+    "description": "MATTRESS TOPPER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING - 183 x 204 x 10 cm - MATTRESS TOPPER FILLED",
+    "sku": "MATT-074",
+    "category": "MATTRESS TOPPER FILLED",
+    "description": "MATTRESS TOPPER FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SMALL - MEN JACKET",
+    "sku": "MENJ-097",
+    "category": "MEN JACKET",
+    "description": "MEN JACKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "MEDIUM - MEN JACKET",
+    "sku": "MENJ-098",
+    "category": "MEN JACKET",
+    "description": "MEN JACKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "LARGE - MEN JACKET",
+    "sku": "MENJ-099",
+    "category": "MEN JACKET",
+    "description": "MEN JACKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "EXTRA LARGE - MEN JACKET",
+    "sku": "MENJ-100",
+    "category": "MEN JACKET",
+    "description": "MEN JACKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SINGLE 140X214CM - MICROSOFT",
+    "sku": "MICR-089",
+    "category": "MICROSOFT",
+    "description": "MICROSOFT",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "DOUBLE 184X214CM - MICROSOFT",
+    "sku": "MICR-090",
+    "category": "MICROSOFT",
+    "description": "MICROSOFT",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "QUEEN 214X214CM - MICROSOFT",
+    "sku": "MICR-091",
+    "category": "MICROSOFT",
+    "description": "MICROSOFT",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING 244X214CM - MICROSOFT",
+    "sku": "MICR-092",
+    "category": "MICROSOFT",
+    "description": "MICROSOFT",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SINGLE - 80% MID WARM FILLED",
+    "sku": "MIDW-050",
+    "category": "80% MID WARM FILLED",
+    "description": "80% MID WARM FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "DOUBLE - 80% MID WARM FILLED",
+    "sku": "MIDW-051",
+    "category": "80% MID WARM FILLED",
+    "description": "80% MID WARM FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "QUEEN - 80% MID WARM FILLED",
+    "sku": "MIDW-052",
+    "category": "80% MID WARM FILLED",
+    "description": "80% MID WARM FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING - 80% MID WARM FILLED",
+    "sku": "MIDW-053",
+    "category": "80% MID WARM FILLED",
+    "description": "80% MID WARM FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SUPER KING - 80% MID WARM FILLED",
+    "sku": "MIDW-054",
+    "category": "80% MID WARM FILLED",
+    "description": "80% MID WARM FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SINGLE - 50% MID WARM FILLED",
+    "sku": "MIDW-060",
+    "category": "50% MID WARM FILLED",
+    "description": "50% MID WARM FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "DOUBLE - 50% MID WARM FILLED",
+    "sku": "MIDW-061",
+    "category": "50% MID WARM FILLED",
+    "description": "50% MID WARM FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "QUEEN - 50% MID WARM FILLED",
+    "sku": "MIDW-062",
+    "category": "50% MID WARM FILLED",
+    "description": "50% MID WARM FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING - 50% MID WARM FILLED",
+    "sku": "MIDW-063",
+    "category": "50% MID WARM FILLED",
+    "description": "50% MID WARM FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SUPER KING - 50% MID WARM FILLED",
+    "sku": "MIDW-064",
+    "category": "50% MID WARM FILLED",
+    "description": "50% MID WARM FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "45X70CM - (48X73CM) - PIPED PILLOWS",
+    "sku": "PIPE-041",
+    "category": "PIPED PILLOWS",
+    "description": "PIPED PILLOWS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "65 X 65CM (68X68CM) - PIPED PILLOWS",
+    "sku": "PIPE-042",
+    "category": "PIPED PILLOWS",
+    "description": "PIPED PILLOWS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "50X80CM - (53X83CM) - PIPED PILLOWS",
+    "sku": "PIPE-043",
+    "category": "PIPED PILLOWS",
+    "description": "PIPED PILLOWS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "50X90CM - (53X93CM) - PIPED PILLOWS",
+    "sku": "PIPE-044",
+    "category": "PIPED PILLOWS",
+    "description": "PIPED PILLOWS",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "DOUBLE - 4 SEASONS CASE",
+    "sku": "SEAS-029",
+    "category": "4 SEASONS CASE",
+    "description": "4 SEASONS CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING - 4 SEASONS CASE",
+    "sku": "SEAS-030",
+    "category": "4 SEASONS CASE",
+    "description": "4 SEASONS CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "QUEEN - 4 SEASONS CASE",
+    "sku": "SEAS-031",
+    "category": "4 SEASONS CASE",
+    "description": "4 SEASONS CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SINGLE- 4 SEASONS CASE",
+    "sku": "SEAS-032",
+    "category": "4 SEASONS CASE",
+    "description": "4 SEASONS CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SUPER KING - 4 SEASONS CASE",
+    "sku": "SEAS-033",
+    "category": "4 SEASONS CASE",
+    "description": "4 SEASONS CASE",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SINGLE - 4 SEASONS FILLED",
+    "sku": "SEAS-034",
+    "category": "4 SEASONS FILLED",
+    "description": "4 SEASONS FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "DOUBLE - 4 SEASONS FILLED",
+    "sku": "SEAS-035",
+    "category": "4 SEASONS FILLED",
+    "description": "4 SEASONS FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "QUEEN - 4 SEASONS FILLED",
+    "sku": "SEAS-036",
+    "category": "4 SEASONS FILLED",
+    "description": "4 SEASONS FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING - 4 SEASONS FILLED",
+    "sku": "SEAS-037",
+    "category": "4 SEASONS FILLED",
+    "description": "4 SEASONS FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SUPER KING - 4 SEASONS FILLED",
+    "sku": "SEAS-038",
+    "category": "4 SEASONS FILLED",
+    "description": "4 SEASONS FILLED",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "Single/ King Single 180 x 230gms 300gms - SILVER BLANKET",
+    "sku": "SILV-101",
+    "category": "SILVER BLANKET",
+    "description": "SILVER BLANKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "Double/Queen 230 x 240cms 450gms - SILVER BLANKET",
+    "sku": "SILV-102",
+    "category": "SILVER BLANKET",
+    "description": "SILVER BLANKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "King/Super King 270 x 240cms 535 gms - SILVER BLANKET",
+    "sku": "SILV-103",
+    "category": "SILVER BLANKET",
+    "description": "SILVER BLANKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "DOUBLE - STRIPPED QUILT",
+    "sku": "STRI-075",
+    "category": "STRIPPED QUILT",
+    "description": "STRIPPED QUILT",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "KING - STRIPPED QUILT",
+    "sku": "STRI-076",
+    "category": "STRIPPED QUILT",
+    "description": "STRIPPED QUILT",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "QUEEN - STRIPPED QUILT",
+    "sku": "STRI-077",
+    "category": "STRIPPED QUILT",
+    "description": "STRIPPED QUILT",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SINGLE - STRIPPED QUILT",
+    "sku": "STRI-078",
+    "category": "STRIPPED QUILT",
+    "description": "STRIPPED QUILT",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SUPER KING - STRIPPED QUILT",
+    "sku": "STRI-079",
+    "category": "STRIPPED QUILT",
+    "description": "STRIPPED QUILT",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "45X70CM - (48X73CM) - STRIP PILLOW",
+    "sku": "STRI-080",
+    "category": "STRIP PILLOW",
+    "description": "STRIP PILLOW",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "50X90CM - (53X93CM) - STRIP PILLOW",
+    "sku": "STRI-081",
+    "category": "STRIP PILLOW",
+    "description": "STRIP PILLOW",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "SMALL - WOMAN JACKET",
+    "sku": "WOMA-093",
+    "category": "WOMAN JACKET",
+    "description": "WOMAN JACKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "MEDIUM - WOMAN JACKET",
+    "sku": "WOMA-094",
+    "category": "WOMAN JACKET",
+    "description": "WOMAN JACKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "LARGE - WOMAN JACKET",
+    "sku": "WOMA-095",
+    "category": "WOMAN JACKET",
+    "description": "WOMAN JACKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  },
+  {
+    "name": "EXTRA LARGE - WOMAN JACKET",
+    "sku": "WOMA-096",
+    "category": "WOMAN JACKET",
+    "description": "WOMAN JACKET",
+    "unit_price": "0.00",
+    "cost_price": null,
+    "active": true
+  }
+]
