@@ -2,11 +2,12 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import pgSession from "connect-pg-simple";
-import { pool } from "./db";
+import { pool, db } from "./db";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema } from "@shared/schema";
+import { eq } from "drizzle-orm";
+import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable } from "@shared/schema";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, getEmailsForCompany, getEmailsForContact, getAllEmails } from "./outlook";
 
@@ -1691,6 +1692,162 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Get emails error:", error);
       res.status(500).json({ message: "Failed to get emails" });
+    }
+  });
+
+  app.post("/api/emails/:id/convert-to-order", requireEdit, async (req, res) => {
+    try {
+      const emailId = req.params.id;
+      const [email] = await db.select().from(emailsTable).where(eq(emailsTable.id, emailId));
+      if (!email) return res.status(404).json({ message: "Email not found" });
+
+      const subject = email.subject || "";
+      const preview = email.bodyPreview || "";
+
+      const orderNumMatch = subject.match(/Order\s*#(\d+)/i);
+      const shopifyOrderNum = orderNumMatch ? orderNumMatch[1] : null;
+
+      const nameMatch = subject.match(/placed by\s+(.+)/i);
+      const customerName = nameMatch ? nameMatch[1].trim() : "";
+
+      const lines: Array<{ description: string; quantity: number; unitPrice: number; lineTotal: number }> = [];
+
+      const summaryStart = preview.indexOf("Order summary");
+      const subtotalStart = preview.indexOf("Subtotal");
+      if (summaryStart !== -1 && subtotalStart !== -1) {
+        const summaryText = preview.substring(summaryStart + "Order summary".length, subtotalStart).trim();
+        const allLines = summaryText.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+
+        let currentProduct = "";
+        let currentPrice = 0;
+        let currentQty = 1;
+
+        for (const line of allLines) {
+          if (line === "View order") continue;
+          if (/^[A-Z]+\d+\s*\(/.test(line)) continue;
+
+          const priceQtyMatch = line.match(/\$([0-9,.]+)(?:\s+\$([0-9,.]+))?\s*×\s*(\d+)/);
+          if (priceQtyMatch) {
+            const originalPrice = parseFloat(priceQtyMatch[1].replace(",", ""));
+            const discountedPrice = priceQtyMatch[2] ? parseFloat(priceQtyMatch[2].replace(",", "")) : originalPrice;
+            currentPrice = discountedPrice;
+            currentQty = parseInt(priceQtyMatch[3]);
+            continue;
+          }
+
+          const lineTotalMatch = line.match(/^\$([0-9,.]+)$/);
+          if (lineTotalMatch && currentProduct && currentPrice > 0) {
+            const lineTotal = parseFloat(lineTotalMatch[1].replace(",", ""));
+            lines.push({
+              description: currentProduct,
+              quantity: currentQty,
+              unitPrice: currentPrice,
+              lineTotal,
+            });
+            currentProduct = "";
+            currentPrice = 0;
+            currentQty = 1;
+            continue;
+          }
+
+          if (!line.startsWith("$") && line.length > 2 &&
+              !line.includes("View order") && !line.match(/^(King|Queen|Standard|Single|Double|Super)\b/i) &&
+              !line.match(/^[A-Z]+\d+/) && !line.match(/^\(\-?\$/) &&
+              !line.match(/^Shipping/) && !line.match(/^Total/)) {
+            currentProduct = line;
+          }
+        }
+
+        if (currentProduct && currentPrice > 0 && lines.length === 0) {
+          lines.push({
+            description: currentProduct,
+            quantity: currentQty,
+            unitPrice: currentPrice,
+            lineTotal: currentPrice * currentQty,
+          });
+        }
+      }
+
+      const subtotalMatch = preview.match(/Subtotal\s*\$([0-9,.]+)/);
+      const shippingMatch = preview.match(/Shipping\s*\([^)]*\)\s*\$([0-9,.]+)/);
+      const totalMatch = preview.match(/Total\s*\$([0-9,.]+)/);
+
+      const subtotal = subtotalMatch ? parseFloat(subtotalMatch[1].replace(",", "")) : lines.reduce((s, l) => s + l.lineTotal, 0);
+      const shipping = shippingMatch ? parseFloat(shippingMatch[1].replace(",", "")) : 0;
+      const total = totalMatch ? parseFloat(totalMatch[1].replace(",", "")) : subtotal + shipping;
+
+      const allCompanies = await storage.getAllCompanies();
+      let company = allCompanies.find(
+        (c) => c.legalName.toLowerCase().includes("puradown") ||
+               (c.tradingName && c.tradingName.toLowerCase().includes("puradown"))
+      );
+
+      if (!company) {
+        const firstNamePart = customerName.split(" ")[0] || "Customer";
+        company = allCompanies.find(
+          (c) => c.legalName.toLowerCase().includes(firstNamePart.toLowerCase())
+        );
+      }
+
+      if (!company) {
+        company = await storage.createCompany({
+          legalName: customerName || "Puradown Customer",
+        });
+      }
+
+      const orderNumber = shopifyOrderNum
+        ? `PD-${shopifyOrderNum}`
+        : `ORD-${Date.now().toString(36).toUpperCase()}`;
+
+      const existingOrders = await storage.getAllOrders();
+      const duplicate = existingOrders.find((o) => o.orderNumber === orderNumber);
+      if (duplicate) {
+        return res.status(400).json({ message: `Order ${orderNumber} already exists`, orderId: duplicate.id });
+      }
+
+      const order = await storage.createOrder({
+        orderNumber,
+        companyId: company.id,
+        status: "new",
+        orderDate: email.receivedAt || new Date(),
+        subtotal: subtotal.toFixed(2),
+        tax: "0",
+        total: total.toFixed(2),
+        customerNotes: `Converted from Puradown email. Customer: ${customerName}. Shipping: $${shipping.toFixed(2)}`,
+        createdBy: req.session.userId,
+      });
+
+      for (const line of lines) {
+        await storage.createOrderLine({
+          orderId: order.id,
+          productId: null,
+          descriptionOverride: line.description,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice.toFixed(2),
+          discount: "0",
+          lineTotal: line.lineTotal.toFixed(2),
+        });
+      }
+
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "create",
+        entityType: "order",
+        entityId: order.id,
+        afterJson: order,
+      });
+      await storage.createActivity({
+        entityType: "order",
+        entityId: order.id,
+        activityType: "system",
+        content: `Order created from Puradown email (${subject})`,
+        createdBy: req.session.userId,
+      });
+
+      res.status(201).json(order);
+    } catch (error) {
+      console.error("Convert email to order error:", error);
+      res.status(500).json({ message: "Failed to convert email to order" });
     }
   });
 

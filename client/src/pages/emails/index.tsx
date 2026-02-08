@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,12 +8,41 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Mail, Inbox, Send, FileEdit, Clock, User } from "lucide-react";
+import { Loader2, Mail, Inbox, Send, FileEdit, Clock, User, ShoppingCart } from "lucide-react";
 import { format } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+
+function isOrderEmail(email: any): boolean {
+  const subject = email?.subject || "";
+  return /Order\s*#\d+/i.test(subject) && /placed by/i.test(subject);
+}
 
 export default function EmailsPage() {
   const [folder, setFolder] = useState("inbox");
   const [selectedEmail, setSelectedEmail] = useState<any>(null);
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+
+  const convertToOrderMutation = useMutation({
+    mutationFn: async (emailId: string) => {
+      const res = await apiRequest("POST", `/api/emails/${emailId}/convert-to-order`);
+      return res.json();
+    },
+    onSuccess: (order: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setSelectedEmail(null);
+      toast({ title: "Order Created", description: `Order ${order.orderNumber} created successfully.` });
+      navigate(`/orders/${order.id}`);
+    },
+    onError: async (error: any) => {
+      let message = "Failed to convert email to order.";
+      try {
+        if (error?.message) message = error.message;
+      } catch {}
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
 
   const { data: emails, isLoading } = useQuery<any[]>({
     queryKey: ["/api/emails", folder],
@@ -169,6 +199,19 @@ export default function EmailsPage() {
                   </div>
                 )}
               </div>
+              {isOrderEmail(selectedEmail) && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => convertToOrderMutation.mutate(selectedEmail.id)}
+                    disabled={convertToOrderMutation.isPending}
+                    data-testid="button-convert-email-to-order"
+                  >
+                    <ShoppingCart className="w-4 h-4 mr-2" />
+                    {convertToOrderMutation.isPending ? "Creating Order..." : "Create Order from Email"}
+                  </Button>
+                </div>
+              )}
               <Separator />
               <div className="prose prose-sm dark:prose-invert max-w-none">
                 {selectedEmail.bodyHtml ? (
