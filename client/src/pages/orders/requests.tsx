@@ -63,6 +63,20 @@ export default function OrderRequestsPage() {
     },
   });
 
+  const unconvertMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("POST", `/api/customer-order-requests/${id}/unconvert`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-order-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({ title: "Unconverted", description: "Order removed and request set back to pending." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to unconvert order request.", variant: "destructive" });
+    },
+  });
+
   const deleteRequestMutation = useMutation({
     mutationFn: async (id: string) => {
       return apiRequest("DELETE", `/api/customer-order-requests/${id}`);
@@ -303,22 +317,37 @@ export default function OrderRequestsPage() {
                       </Button>
                       <Button
                         size="sm"
-                        onClick={() => updateStatusMutation.mutate({ id: selectedRequest.id, status: "converted" })}
-                        disabled={updateStatusMutation.isPending}
+                        onClick={() => convertToOrderMutation.mutate(selectedRequest.id)}
+                        disabled={convertToOrderMutation.isPending}
                         data-testid="button-convert-order"
                       >
-                        Convert to Order
+                        {convertToOrderMutation.isPending ? "Converting..." : "Convert to Order"}
                       </Button>
                     </>
                   )}
                   {selectedRequest.status === "reviewed" && (
                     <Button
                       size="sm"
-                      onClick={() => updateStatusMutation.mutate({ id: selectedRequest.id, status: "converted" })}
-                      disabled={updateStatusMutation.isPending}
+                      onClick={() => convertToOrderMutation.mutate(selectedRequest.id)}
+                      disabled={convertToOrderMutation.isPending}
                       data-testid="button-convert-order"
                     >
-                      Convert to Order
+                      {convertToOrderMutation.isPending ? "Converting..." : "Convert to Order"}
+                    </Button>
+                  )}
+                  {selectedRequest.status === "converted" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (window.confirm("This will delete the created order and set the request back to pending. Continue?")) {
+                          unconvertMutation.mutate(selectedRequest.id);
+                        }
+                      }}
+                      disabled={unconvertMutation.isPending}
+                      data-testid="button-unconvert"
+                    >
+                      {unconvertMutation.isPending ? "Unconverting..." : "Unconvert"}
                     </Button>
                   )}
                   {selectedRequest.status === "pending" && (

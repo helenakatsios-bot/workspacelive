@@ -1995,6 +1995,40 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/customer-order-requests/:id/unconvert", requireEdit, async (req, res) => {
+    try {
+      const orderRequest = await storage.getCustomerOrderRequest(req.params.id);
+      if (!orderRequest) return res.status(404).json({ message: "Order request not found" });
+      if (orderRequest.status !== "converted") {
+        return res.status(400).json({ message: "This order request is not converted" });
+      }
+
+      const orderId = orderRequest.convertedOrderId;
+
+      const updated = await storage.updateCustomerOrderRequest(req.params.id, {
+        status: "pending",
+        convertedOrderId: null,
+        reviewedBy: req.session.userId,
+        reviewedAt: new Date(),
+      });
+
+      if (orderId) {
+        await storage.deleteOrder(orderId);
+        await storage.createAuditLog({
+          userId: req.session.userId,
+          action: "delete",
+          entityType: "order",
+          entityId: orderId,
+        });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Unconvert order request error:", error);
+      res.status(500).json({ message: "Failed to unconvert order request" });
+    }
+  });
+
   app.delete("/api/customer-order-requests/:id", requireAdmin, async (req, res) => {
     try {
       const deleted = await storage.deleteCustomerOrderRequest(req.params.id);
