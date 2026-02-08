@@ -86,6 +86,22 @@ export async function registerRoutes(
   // ==================== AUTH ROUTES ====================
   app.post("/api/sync-accounts-once", async (req, res) => {
     try {
+      // Clean all demo data first
+      await pool.query(`DELETE FROM order_lines`);
+      await pool.query(`DELETE FROM quote_lines`);
+      await pool.query(`DELETE FROM activities`);
+      await pool.query(`DELETE FROM audit_logs`);
+      await pool.query(`DELETE FROM attachments`);
+      await pool.query(`DELETE FROM invoices`);
+      await pool.query(`DELETE FROM orders`);
+      await pool.query(`DELETE FROM quotes`);
+      await pool.query(`DELETE FROM deals`);
+      await pool.query(`DELETE FROM contacts`);
+      await pool.query(`DELETE FROM emails`);
+      await pool.query(`DELETE FROM customer_order_requests`);
+      await pool.query(`DELETE FROM companies`);
+      await pool.query(`DELETE FROM users WHERE email NOT ILIKE '%purax%'`);
+
       const hash = await bcrypt.hash("admin123", 10);
       
       const helenaExists = await storage.getUserByEmail("helena@purax.com.au");
@@ -120,7 +136,7 @@ export async function registerRoutes(
       res.json({ message: "Accounts synced", users: allUsers.rows });
     } catch (error) {
       console.error("Sync accounts error:", error);
-      res.status(500).json({ message: "Failed to sync accounts" });
+      res.status(500).json({ message: "Failed", error: String(error) });
     }
   });
 
