@@ -1,0 +1,45 @@
+Yes, I can see the issue. Currently, every API endpoint in this app requires login authentication - including the one that creates orders. So when your CRM website tries to send an order here, it gets blocked because it's not logged in.
+
+There's no public endpoint or webhook for receiving orders from external systems. Let me check exactly what the create order endpoint expects and I'll add a secure webhook endpoint that your CRM can use.
+
+I found the problem. The order creation endpoint (POST /api/orders) requires a logged-in user session. When your CRM sends a request, it gets rejected because it's not logged in.
+
+I'll add a secure webhook endpoint that your CRM can use with an API key - no login needed. Let me set that up.
+
+Now let me add the webhook endpoint. I'll place it right after the seed database call, before the authenticated routes.
+
+Now let me set the API key as an environment variable and test it.
+
+Now let me test the webhook endpoint:
+
+The webhook works perfectly. Let me clean up that test order:
+
+I've added a secure webhook endpoint. Here's what you need to know:
+
+The problem was: All endpoints in this app require login, so your CRM's requests were getting rejected.
+
+The fix: I've added a new endpoint that your CRM can send orders to without needing to log in. It's secured with an API key instead.
+
+To set up your CRM, you'll need these details:
+
+Endpoint URL: https://helenakatsios-workspace.replit.app/api/webhook/orders
+Method: POST
+API Key: 510d6ab62096a71295316e91980e41a0fbeac80cec2ec23315072a33e7134871
+Header: Send the API key as x-api-key in the request header
+The data your CRM should send (JSON):
+
+{
+  "orderNumber": "ORD-123",
+  "companyName": "Company Name",
+  "customerName": "Customer Name",
+  "customerAddress": "Address",
+  "orderDetails": "Order details text",
+  "totalAmount": "$100.00",
+  "pdfData": "(optional - base64 encoded PDF)",
+  "isUrgent": false
+}
+You'll need to add that same API key (510d6ab62096a71295316e91980e41a0fbeac80cec2ec23315072a33e7134871) to your CRM website's settings so it sends it with each request. Once that's configured on both sides, orders should flow through automatically.
+
+Would you like to republish this app so the webhook is available on the live site?
+
+Add an endpoint for receiving external orders securely
