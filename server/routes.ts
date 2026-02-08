@@ -84,6 +84,46 @@ export async function registerRoutes(
   );
 
   // ==================== AUTH ROUTES ====================
+  app.post("/api/sync-accounts-once", async (req, res) => {
+    try {
+      const hash = await bcrypt.hash("admin123", 10);
+      
+      const helenaExists = await storage.getUserByEmail("helena@purax.com.au");
+      const adminExists = await storage.getUserByEmail("admin@company.com");
+      
+      if (!helenaExists && adminExists) {
+        await pool.query(
+          `UPDATE users SET email = $1, name = $2, role = 'admin', active = true, password_hash = $3 WHERE email ILIKE 'admin@company.com'`,
+          ["helena@purax.com.au", "Helena Katsios", hash]
+        );
+      } else if (helenaExists) {
+        await pool.query(
+          `UPDATE users SET role = 'admin', active = true, password_hash = $1 WHERE email ILIKE 'helena@purax.com.au'`,
+          [hash]
+        );
+      }
+      
+      const yanaExists = await storage.getUserByEmail("yana@purax.com.au");
+      if (yanaExists) {
+        await pool.query(
+          `UPDATE users SET role = 'admin', active = true, password_hash = $1 WHERE email ILIKE 'yana@purax.com.au'`,
+          [hash]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO users (id, name, email, password_hash, role, active) VALUES (gen_random_uuid(), 'Yana', 'yana@purax.com.au', $1, 'admin', true)`,
+          [hash]
+        );
+      }
+      
+      const allUsers = await pool.query(`SELECT id, name, email, role, active FROM users ORDER BY name`);
+      res.json({ message: "Accounts synced", users: allUsers.rows });
+    } catch (error) {
+      console.error("Sync accounts error:", error);
+      res.status(500).json({ message: "Failed to sync accounts" });
+    }
+  });
+
   app.post("/api/auth/login", async (req, res) => {
     try {
       const data = loginSchema.parse(req.body);
