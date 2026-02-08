@@ -1051,14 +1051,26 @@ export async function registerRoutes(
       });
 
       res.json({ message: "Order synced to Purax successfully", puraxOrderId });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Purax sync error:", error);
+      const errorMessage = error?.name === "AbortError"
+        ? "Connection to Purax timed out (30s). Make sure the Purax app is running and published."
+        : error?.cause?.code === "ECONNREFUSED"
+        ? "Cannot connect to Purax app. Make sure it is running and published."
+        : error?.message || "Unknown error";
       try {
         await storage.updateOrder(req.params.id, {
           puraxSyncStatus: "failed",
         });
+        await storage.createActivity({
+          entityType: "order",
+          entityId: req.params.id,
+          activityType: "system",
+          content: `Failed to sync to Purax: ${errorMessage}`,
+          createdBy: req.session.userId,
+        });
       } catch {}
-      res.status(500).json({ message: "Failed to sync order to Purax" });
+      res.status(500).json({ message: `Purax sync failed: ${errorMessage}` });
     }
   });
 
