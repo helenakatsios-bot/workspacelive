@@ -1783,15 +1783,17 @@ export async function registerRoutes(
             .filter((e: string) => e.length > 0 && e.includes("@"));
 
           if (recipientEmails.length > 0) {
+            const host = req.headers.host || "localhost:5000";
+            const protocol = req.headers["x-forwarded-proto"] || (host.includes("localhost") ? "http" : "https");
+            const notificationRedirectUri = `${protocol}://${host}/api/outlook/callback`;
+
             const allUsers = await storage.getAllUsers();
             let emailSent = false;
             for (const user of allUsers) {
               if (emailSent) break;
               try {
-                const token = await getStoredOutlookToken(user.id);
-                if (token) {
-                  const refreshedToken = await refreshOutlookTokenIfNeeded(user.id, token);
-                  if (refreshedToken) {
+                const accessToken = await refreshOutlookTokenIfNeeded(user.id, notificationRedirectUri);
+                if (accessToken) {
                     const itemsList = validatedItems.map((item: { quantity: number; description: string; unitPrice: number; lineTotal: number }) =>
                       `<tr><td style="padding:8px;border:1px solid #ddd;">${item.quantity}</td><td style="padding:8px;border:1px solid #ddd;">${item.description}</td><td style="padding:8px;border:1px solid #ddd;">$${item.unitPrice.toFixed(2)}</td><td style="padding:8px;border:1px solid #ddd;text-align:right;">$${item.lineTotal.toFixed(2)}</td></tr>`
                     ).join("");
@@ -1820,16 +1822,15 @@ export async function registerRoutes(
                     `;
 
                     await sendEmail(
-                      refreshedToken.accessToken,
+                      accessToken,
                       recipientEmails,
                       `New Order Request from ${data.companyName}`,
                       emailBody
                     );
                     emailSent = true;
-                  }
                 }
               } catch (tokenError) {
-                // Try next user
+                console.error("Notification email error for user:", user.id, tokenError);
               }
             }
             if (!emailSent) {
