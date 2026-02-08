@@ -87,6 +87,27 @@ app.use((req, res, next) => {
     console.error("Demo cleanup error:", error);
   }
 
+  // Ensure Helena and Yana accounts exist with correct passwords
+  try {
+    const bcrypt = await import("bcryptjs");
+    const freshHash = await bcrypt.default.hash("admin123", 10);
+    const helenaExists = await pool.query(`SELECT id FROM users WHERE email = 'helena@purax.com.au'`);
+    if (helenaExists.rows.length > 0) {
+      await pool.query(`UPDATE users SET password_hash = $1, role = 'admin', active = true WHERE email = 'helena@purax.com.au'`, [freshHash]);
+    } else {
+      await pool.query(`INSERT INTO users (name, email, password_hash, role, active) VALUES ('Helena Katsios', 'helena@purax.com.au', $1, 'admin', true)`, [freshHash]);
+    }
+    const yanaExists = await pool.query(`SELECT id FROM users WHERE email = 'yana@purax.com.au'`);
+    if (yanaExists.rows.length > 0) {
+      await pool.query(`UPDATE users SET password_hash = $1, role = 'admin', active = true WHERE email = 'yana@purax.com.au'`, [freshHash]);
+    } else {
+      await pool.query(`INSERT INTO users (name, email, password_hash, role, active) VALUES ('Yana', 'yana@purax.com.au', $1, 'admin', true)`, [freshHash]);
+    }
+    console.log("Admin accounts synced successfully");
+  } catch (error) {
+    console.error("Account sync error:", error);
+  }
+
   // Seed database with sample data
   try {
     await seedDatabase();
