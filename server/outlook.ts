@@ -357,3 +357,48 @@ export async function getAllEmails(userId: string, folder?: string, limit: numbe
   
   return await query;
 }
+
+let autoSyncInterval: ReturnType<typeof setInterval> | null = null;
+
+export function startAutoEmailSync(redirectUri: string, intervalMinutes: number = 5) {
+  if (autoSyncInterval) {
+    clearInterval(autoSyncInterval);
+  }
+
+  const syncAll = async () => {
+    try {
+      const allTokens = await db.select().from(outlookTokens);
+      if (allTokens.length === 0) return;
+
+      for (const token of allTokens) {
+        try {
+          const accessToken = await refreshOutlookTokenIfNeeded(token.userId, redirectUri);
+          if (!accessToken) {
+            console.log(`[AUTO-SYNC] Skipping user ${token.userId} - token expired or unavailable`);
+            continue;
+          }
+
+          const folders = ["inbox", "sentItems"];
+          let totalSynced = 0;
+          for (const folder of folders) {
+            const synced = await syncEmailsToDatabase(token.userId, accessToken, folder);
+            totalSynced += synced;
+          }
+
+          if (totalSynced > 0) {
+            console.log(`[AUTO-SYNC] Synced ${totalSynced} new emails for user ${token.userId}`);
+          }
+        } catch (err) {
+          console.error(`[AUTO-SYNC] Error syncing emails for user ${token.userId}:`, err);
+        }
+      }
+    } catch (err) {
+      console.error("[AUTO-SYNC] Error in auto email sync:", err);
+    }
+  };
+
+  syncAll();
+
+  autoSyncInterval = setInterval(syncAll, intervalMinutes * 60 * 1000);
+  console.log(`[AUTO-SYNC] Email auto-sync started (every ${intervalMinutes} minutes)`);
+}

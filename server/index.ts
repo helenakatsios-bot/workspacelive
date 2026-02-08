@@ -5,6 +5,7 @@ import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { pool } from "./db";
 import { syncProductionData } from "./data-sync";
+import { startAutoEmailSync } from "./outlook";
 
 const app = express();
 const httpServer = createServer(app);
