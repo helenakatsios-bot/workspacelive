@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { pool } from "./db";
+import { syncProductionData } from "./data-sync";
 
 const app = express();
 const httpServer = createServer(app);
@@ -106,6 +107,13 @@ app.use((req, res, next) => {
     console.log("Admin accounts synced successfully");
   } catch (error) {
     console.error("Account sync error:", error);
+  }
+
+  // Sync production data (products + companies)
+  try {
+    await syncProductionData();
+  } catch (error) {
+    console.error("Data sync error:", error);
   }
 
   // Seed database with sample data
