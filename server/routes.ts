@@ -949,83 +949,44 @@ export async function registerRoutes(
         lines: linesWithProducts,
       });
 
-      const boundary = "----PuraxCRMBoundary" + Date.now().toString(36);
+      const orderDetailsText = linesWithProducts.map(line =>
+        `${line.quantity}x ${line.productName}${line.productSku ? ` (${line.productSku})` : ""} @ $${line.unitPrice} = $${line.lineTotal}`
+      ).join("\n");
 
-      const metadata = {
-        source: "purax-crm",
+      const customerName = contact
+        ? `${contact.firstName} ${contact.lastName}`.trim()
+        : order.customerNotes?.match(/Customer:\s*([^.]+)/)?.[1]?.trim() || "";
+
+      const customerAddress = company?.shippingAddress || company?.billingAddress || "";
+
+      const webhookPayload = {
         orderNumber: order.orderNumber,
-        crmOrderId: order.id,
-        status: order.status,
-        orderDate: order.orderDate,
-        requestedShipDate: order.requestedShipDate,
-        shippingMethod: order.shippingMethod,
-        trackingNumber: order.trackingNumber,
-        subtotal: order.subtotal,
-        tax: order.tax,
-        total: order.total,
-        internalNotes: order.internalNotes,
-        customerNotes: order.customerNotes,
-        company: company ? {
-          legalName: company.legalName,
-          tradingName: company.tradingName,
-          abn: company.abn,
-          billingAddress: company.billingAddress,
-          shippingAddress: company.shippingAddress,
-          paymentTerms: company.paymentTerms,
-        } : null,
-        contact: contact ? {
-          firstName: contact.firstName,
-          lastName: contact.lastName,
-          email: contact.email,
-          phone: contact.phone,
-          position: contact.position,
-        } : null,
-        lines: linesWithProducts.map(line => ({
-          productId: line.productId,
-          productName: line.productName,
-          productSku: line.productSku,
-          descriptionOverride: line.descriptionOverride,
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
-          discount: line.discount,
-          lineTotal: line.lineTotal,
-        })),
+        companyName: company?.tradingName || company?.legalName || "",
+        customerName,
+        customerAddress,
+        orderDetails: orderDetailsText,
+        totalAmount: `$${order.total}`,
+        pdfData: pdfBuffer.toString("base64"),
+        isUrgent: false,
       };
-
-      const pdfFilename = `Order-${order.orderNumber.replace(/[^a-zA-Z0-9-]/g, "_")}.pdf`;
-
-      let body = "";
-      body += `--${boundary}\r\n`;
-      body += `Content-Disposition: form-data; name="metadata"\r\n`;
-      body += `Content-Type: application/json\r\n\r\n`;
-      body += JSON.stringify(metadata) + "\r\n";
-
-      const metadataPart = Buffer.from(body, "utf-8");
-      const pdfPartHeader = Buffer.from(
-        `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="orderPdf"; filename="${pdfFilename}"\r\n` +
-        `Content-Type: application/pdf\r\n\r\n`,
-        "utf-8"
-      );
-      const pdfPartFooter = Buffer.from(`\r\n--${boundary}--\r\n`, "utf-8");
-
-      const multipartBody = Buffer.concat([metadataPart, pdfPartHeader, pdfBuffer, pdfPartFooter]);
 
       const headers: Record<string, string> = {
-        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        "Content-Type": "application/json",
       };
       if (puraxApiKey) {
-        headers["X-API-Key"] = puraxApiKey;
+        headers["x-api-key"] = puraxApiKey;
       }
+
+      console.log(`[PURAX-SYNC] Sending order ${order.orderNumber} to ${puraxApiUrl}/api/webhook/orders`);
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
       let response: Response;
       try {
-        response = await fetch(`${puraxApiUrl}/api/webhook/crm-order`, {
+        response = await fetch(`${puraxApiUrl}/api/webhook/orders`, {
           method: "POST",
           headers,
-          body: multipartBody,
+          body: JSON.stringify(webhookPayload),
           signal: controller.signal,
         });
       } finally {
