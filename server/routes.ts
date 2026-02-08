@@ -6,7 +6,7 @@ import { pool } from "./db";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertActivitySchema } from "@shared/schema";
+import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema } from "@shared/schema";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, getEmailsForCompany, getEmailsForContact, getAllEmails } from "./outlook";
 
@@ -757,9 +757,15 @@ export async function registerRoutes(
 
   app.post("/api/orders", requireEdit, async (req, res) => {
     try {
-      const data = insertOrderSchema.parse(req.body);
+      const { lines, ...orderData } = req.body;
+      if (orderData.orderDate && typeof orderData.orderDate === "string") {
+        orderData.orderDate = new Date(orderData.orderDate);
+      }
+      if (orderData.requestedShipDate && typeof orderData.requestedShipDate === "string") {
+        orderData.requestedShipDate = new Date(orderData.requestedShipDate);
+      }
+      const data = insertOrderSchema.parse(orderData);
       
-      // Check if company is on hold
       const company = await storage.getCompany(data.companyId);
       if (company?.creditStatus === "on_hold") {
         const user = await storage.getUser(req.session.userId!);
@@ -772,6 +778,17 @@ export async function registerRoutes(
         ...data,
         createdBy: req.session.userId,
       });
+
+      if (lines && Array.isArray(lines)) {
+        for (const line of lines) {
+          const validatedLine = insertOrderLineSchema.omit({ orderId: true }).parse(line);
+          await storage.createOrderLine({
+            ...validatedLine,
+            orderId: order.id,
+          });
+        }
+      }
+
       await storage.createAuditLog({
         userId: req.session.userId,
         action: "create",

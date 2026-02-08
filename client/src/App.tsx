@@ -19,6 +19,7 @@ import DealsPage from "@/pages/deals/index";
 import ProductsPage from "@/pages/products/index";
 import QuotesPage from "@/pages/quotes/index";
 import OrdersPage from "@/pages/orders/index";
+import OrderFormPage from "@/pages/orders/form";
 import OrderDetailPage from "@/pages/orders/detail";
 import InvoicesPage from "@/pages/invoices/index";
 import AdminPage from "@/pages/admin/index";
@@ -126,7 +127,7 @@ function AuthenticatedApp() {
         <Route path="/quotes/new" component={QuotesPage} />
         <Route path="/quotes/:id" component={QuotesPage} />
         <Route path="/orders" component={OrdersPage} />
-        <Route path="/orders/new" component={OrdersPage} />
+        <Route path="/orders/new" component={OrderFormPage} />
         <Route path="/orders/:id" component={OrderDetailPage} />
         <Route path="/orders/:id/edit" component={OrderDetailPage} />
         <Route path="/invoices" component={InvoicesPage} />
