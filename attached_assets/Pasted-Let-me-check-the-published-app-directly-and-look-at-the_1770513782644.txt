@@ -1,0 +1,36 @@
+Let me check the published app directly and look at the logs:
+
+Checked console and system logs
+Let me find the published URL and test it directly:
+
+$ curl -s -v -X POST "https://helenakatsios-workspace.replit.app/api/auth/password-login" \ -H "Content-Type: application/json" \ -d '{"email":"stephen@purax.com.au","password":"stephen123"}' \ -c /tmp/prod_cookies.txt 2>&1
+The published URL returned 404 - the URL might be different. Let me find the actual published URL:
+
+The published app returns 404 which means it may not be running or the URL is different. Let me check a few things:
+
+$ curl -s "https://helenakatsios-workspace.replit.app/" -w "\nHTTP_STATUS: %{http_code}" 2>&1 | tail -5
+The entire published app is returning 404 - it's not running properly. This isn't a login issue - the published deployment itself has a problem. Let me check the production build:
+
+$ ls -la dist/ && node dist/index.cjs & sleep 3 curl -s http://localhost:5001/ -w "\nHTTP: %{http_code}" 2>&1 | tail -3 kill %1 2>/dev/null
+Port conflict since dev server is running. The published app might have a different issue. Let me check the deployment configuration:
+
+$ cat .replit 2>/dev/null; echo "---"; ls .replit 2>/dev/null
+The published app is returning 404 for everything - it's not starting at all. This is a deployment issue, not a login issue. Let me check what external dependencies the production build needs:
+
+I found the real problem. Critical server dependencies like openid-client, memoizee, resend, pdfkit, and pdf-parse are being treated as external (not bundled) but may not be available in the production deployment. Let me fix this:
+
+Now I see the root cause. Several critical server dependencies are NOT being bundled into the production build - they're externalized but won't exist in the deployment. Let me add all the server-side packages to the allowlist:
+
+Now let me also handle the pdf-parse issue - it's both in the additionalExternals AND might be needed. Let me check if it's actually used in the server:
+
+Good - pdf-parse uses createRequire which means it needs to stay external. That's fine. Now let me rebuild:
+
+The bundle went from 1.2mb to 4.0mb, meaning those missing dependencies are now properly included. Let me verify the production build works:
+
+The production build now starts correctly and serves the homepage (HTTP 200). The login also works. Let me deploy this:
+
+I found the real problem. The published app wasn't starting at all because several critical server libraries (openid-client, memoizee, pdfkit, resend, and others) weren't being included in the production bundle. They were treated as external dependencies that don't exist in the deployment environment.
+
+I've fixed the build configuration to properly bundle all server-side dependencies. The production build now starts correctly and serves pages. Please publish again and the login should work this time.
+
+Fix the application to properly bundle all required server dependencies
