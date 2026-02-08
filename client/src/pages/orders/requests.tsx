@@ -1,13 +1,47 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { Loader2, MapPin, Phone, Mail, User, Building2, FileText, Clock } from "lucide-react";
 import { format } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+
+function statusBadgeClass(status: string) {
+  if (status === "pending") return "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400";
+  if (status === "converted") return "bg-green-500/10 text-green-700 dark:text-green-400";
+  if (status === "reviewed") return "bg-blue-500/10 text-blue-700 dark:text-blue-400";
+  return "bg-red-500/10 text-red-700 dark:text-red-400";
+}
 
 export default function OrderRequestsPage() {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { toast } = useToast();
+
   const { data: orderRequests, isLoading } = useQuery<any[]>({
     queryKey: ["/api/customer-order-requests"],
+  });
+
+  const { data: selectedRequest, isLoading: isLoadingDetail } = useQuery<any>({
+    queryKey: ["/api/customer-order-requests", selectedId],
+    enabled: !!selectedId,
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      return apiRequest("PATCH", `/api/customer-order-requests/${id}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-order-requests"] });
+      toast({ title: "Updated", description: "Order request status updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update status.", variant: "destructive" });
+    },
   });
 
   const pendingCount = orderRequests?.filter(r => r.status === "pending").length || 0;
@@ -19,6 +53,14 @@ export default function OrderRequestsPage() {
       </div>
     );
   }
+
+  const itemTotal = (items: any[]) => {
+    if (!Array.isArray(items)) return 0;
+    return items.reduce((sum: number, item: any) => {
+      const lt = item.lineTotal || (item.quantity * (item.unitPrice || 0));
+      return sum + lt;
+    }, 0);
+  };
 
   return (
     <div className="p-6 space-y-6 max-w-6xl">
@@ -46,13 +88,17 @@ export default function OrderRequestsPage() {
                   <TableHead>Company</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead>Items</TableHead>
-                  <TableHead>Notes</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {orderRequests.map((req: any) => (
-                  <TableRow key={req.id} data-testid={`order-request-row-${req.id}`}>
+                  <TableRow
+                    key={req.id}
+                    className="cursor-pointer hover-elevate"
+                    onClick={() => setSelectedId(req.id)}
+                    data-testid={`order-request-row-${req.id}`}
+                  >
                     <TableCell className="text-sm whitespace-nowrap">
                       {format(new Date(req.createdAt), "dd MMM yyyy HH:mm")}
                     </TableCell>
@@ -62,34 +108,16 @@ export default function OrderRequestsPage() {
                     <TableCell>
                       <div className="text-sm">{req.contactName}</div>
                       <div className="text-xs text-muted-foreground">{req.contactEmail}</div>
-                      {req.contactPhone && (
-                        <div className="text-xs text-muted-foreground">{req.contactPhone}</div>
-                      )}
                     </TableCell>
                     <TableCell>
                       <div className="space-y-0.5">
-                        {Array.isArray(req.items) ? req.items.map((item: any, idx: number) => (
-                          <div key={idx} className="text-xs">
-                            {item.quantity}x {item.description || item.productName || "Item"}
-                            {item.unitPrice > 0 ? ` @ $${Number(item.unitPrice).toFixed(2)}` : ""}
-                          </div>
-                        )) : <span className="text-xs text-muted-foreground">No items</span>}
+                        {Array.isArray(req.items) ? (
+                          <span className="text-xs">{req.items.length} item{req.items.length !== 1 ? "s" : ""}</span>
+                        ) : <span className="text-xs text-muted-foreground">No items</span>}
                       </div>
                     </TableCell>
                     <TableCell>
-                      {req.customerNotes ? (
-                        <span className="text-xs text-muted-foreground">{req.customerNotes}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={
-                        req.status === "pending" ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400" :
-                        req.status === "converted" ? "bg-green-500/10 text-green-700 dark:text-green-400" :
-                        req.status === "reviewed" ? "bg-blue-500/10 text-blue-700 dark:text-blue-400" :
-                        "bg-red-500/10 text-red-700 dark:text-red-400"
-                      } data-testid={`badge-status-${req.id}`}>
+                      <Badge className={statusBadgeClass(req.status)} data-testid={`badge-status-${req.id}`}>
                         {req.status}
                       </Badge>
                     </TableCell>
@@ -100,6 +128,183 @@ export default function OrderRequestsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!selectedId} onOpenChange={(open) => { if (!open) setSelectedId(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {isLoadingDetail || !selectedRequest ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              <DialogHeader>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <DialogTitle className="text-xl" data-testid="text-request-title">Order Request</DialogTitle>
+                  <Badge className={statusBadgeClass(selectedRequest.status)} data-testid="badge-detail-status">
+                    {selectedRequest.status}
+                  </Badge>
+                </div>
+                <DialogDescription>
+                  Submitted {format(new Date(selectedRequest.createdAt), "dd MMMM yyyy 'at' h:mm a")}
+                </DialogDescription>
+              </DialogHeader>
+
+              <Separator />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-muted-foreground">Company</h3>
+                  <div className="flex items-start gap-2">
+                    <Building2 className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                    <span className="text-sm font-medium" data-testid="text-detail-company">{selectedRequest.companyName}</span>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-muted-foreground">Contact</h3>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm" data-testid="text-detail-contact-name">{selectedRequest.contactName}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">{selectedRequest.contactEmail}</span>
+                    </div>
+                    {selectedRequest.contactPhone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">{selectedRequest.contactPhone}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {selectedRequest.shippingAddress && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-muted-foreground">Shipping Address</h3>
+                  <div className="flex items-start gap-2">
+                    <MapPin className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                    <span className="text-sm">{selectedRequest.shippingAddress}</span>
+                  </div>
+                </div>
+              )}
+
+              <Separator />
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground">Order Items</h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead className="text-right">Unit Price</TableHead>
+                      <TableHead className="text-right">Line Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Array.isArray(selectedRequest.items) ? selectedRequest.items.map((item: any, idx: number) => (
+                      <TableRow key={idx}>
+                        <TableCell className="text-sm">
+                          {item.description || item.productName || "Item"}
+                          {item.sku && <span className="text-xs text-muted-foreground ml-1">({item.sku})</span>}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">{item.quantity}</TableCell>
+                        <TableCell className="text-right text-sm">
+                          {item.unitPrice > 0 ? `$${Number(item.unitPrice).toFixed(2)}` : "-"}
+                        </TableCell>
+                        <TableCell className="text-right text-sm font-medium">
+                          {(item.lineTotal || (item.quantity * (item.unitPrice || 0))) > 0
+                            ? `$${Number(item.lineTotal || (item.quantity * (item.unitPrice || 0))).toFixed(2)}`
+                            : "-"}
+                        </TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-sm text-muted-foreground text-center">No items</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+                {Array.isArray(selectedRequest.items) && itemTotal(selectedRequest.items) > 0 && (
+                  <div className="flex justify-end">
+                    <div className="text-sm font-semibold">
+                      Total: ${itemTotal(selectedRequest.items).toFixed(2)}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {selectedRequest.customerNotes && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold text-muted-foreground">Customer Notes</h3>
+                    <div className="flex items-start gap-2">
+                      <FileText className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                      <p className="text-sm">{selectedRequest.customerNotes}</p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <Separator />
+
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {selectedRequest.reviewedAt && `Reviewed ${format(new Date(selectedRequest.reviewedAt), "dd MMM yyyy")}`}
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {selectedRequest.status === "pending" && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateStatusMutation.mutate({ id: selectedRequest.id, status: "reviewed" })}
+                        disabled={updateStatusMutation.isPending}
+                        data-testid="button-mark-reviewed"
+                      >
+                        Mark as Reviewed
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => updateStatusMutation.mutate({ id: selectedRequest.id, status: "converted" })}
+                        disabled={updateStatusMutation.isPending}
+                        data-testid="button-convert-order"
+                      >
+                        Convert to Order
+                      </Button>
+                    </>
+                  )}
+                  {selectedRequest.status === "reviewed" && (
+                    <Button
+                      size="sm"
+                      onClick={() => updateStatusMutation.mutate({ id: selectedRequest.id, status: "converted" })}
+                      disabled={updateStatusMutation.isPending}
+                      data-testid="button-convert-order"
+                    >
+                      Convert to Order
+                    </Button>
+                  )}
+                  {selectedRequest.status === "pending" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateStatusMutation.mutate({ id: selectedRequest.id, status: "rejected" })}
+                      disabled={updateStatusMutation.isPending}
+                      data-testid="button-reject"
+                    >
+                      Reject
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
