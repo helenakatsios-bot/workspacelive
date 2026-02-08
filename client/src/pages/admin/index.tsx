@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff } from "lucide-react";
+import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/lib/auth";
@@ -79,6 +80,8 @@ export default function AdminPage() {
   const [userRole, setUserRole] = useState("office");
   const [userActive, setUserActive] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
 
   const openAddUser = () => {
     setEditingUser(null);
@@ -122,6 +125,25 @@ export default function AdminPage() {
       toast({ title: editingUser ? "User updated" : "User created", description: `${userName} has been ${editingUser ? "updated" : "added"} successfully.` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setUserDialogOpen(false);
+    },
+    onError: async (error: any) => {
+      let message = "Something went wrong.";
+      try {
+        if (error?.message) message = error.message;
+      } catch {}
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return apiRequest("DELETE", `/api/admin/users/${userId}`);
+    },
+    onSuccess: () => {
+      toast({ title: "User deleted", description: `${deletingUser?.name} has been deleted.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setDeleteDialogOpen(false);
+      setDeletingUser(null);
     },
     onError: async (error: any) => {
       let message = "Something went wrong.";
@@ -371,7 +393,7 @@ export default function AdminPage() {
                       <TableHead>Role</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="hidden md:table-cell">Last Login</TableHead>
-                      <TableHead className="w-12"></TableHead>
+                      <TableHead className="w-24"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -402,9 +424,19 @@ export default function AdminPage() {
                           {user.lastLogin ? format(new Date(user.lastLogin), "MMM d, yyyy h:mm a") : "Never"}
                         </TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="icon" onClick={() => openEditUser(user)} data-testid={`button-edit-user-${user.id}`}>
-                            <ChevronRight className="w-4 h-4" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => openEditUser(user)} data-testid={`button-edit-user-${user.id}`}>
+                              <ChevronRight className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => { setDeletingUser(user); setDeleteDialogOpen(true); }}
+                              data-testid={`button-delete-user-${user.id}`}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -877,6 +909,29 @@ export default function AdminPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{deletingUser?.name}</strong> ({deletingUser?.email})? This action cannot be undone and will also remove their audit history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingUser && deleteUserMutation.mutate(deletingUser.id)}
+              className="bg-destructive text-destructive-foreground border-destructive-border"
+              disabled={deleteUserMutation.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteUserMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
