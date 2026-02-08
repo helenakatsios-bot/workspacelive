@@ -38,8 +38,19 @@ export default function EmailsPage() {
     onError: async (error: any) => {
       let message = "Failed to convert email to order.";
       try {
+        if (error?.message) {
+          const parsed = JSON.parse(error.message.replace(/^\d+:\s*/, ""));
+          if (parsed.orderId) {
+            setSelectedEmail(null);
+            toast({ title: "Order Already Exists", description: `Order ${parsed.message?.replace("Order ", "").replace(" already exists", "") || ""} was already created from this email. Opening it now.` });
+            navigate(`/orders/${parsed.orderId}`);
+            return;
+          }
+          message = parsed.message || error.message;
+        }
+      } catch {
         if (error?.message) message = error.message;
-      } catch {}
+      }
       toast({ title: "Error", description: message, variant: "destructive" });
     },
   });
