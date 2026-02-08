@@ -1906,6 +1906,95 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/customer-order-requests/:id/convert", requireEdit, async (req, res) => {
+    try {
+      const orderRequest = await storage.getCustomerOrderRequest(req.params.id);
+      if (!orderRequest) return res.status(404).json({ message: "Order request not found" });
+      if (orderRequest.status === "converted") {
+        return res.status(400).json({ message: "This order request has already been converted" });
+      }
+
+      const allCompanies = await storage.getAllCompanies();
+      let company = allCompanies.find(
+        (c) =>
+          c.legalName.toLowerCase() === orderRequest.companyName.toLowerCase() ||
+          (c.tradingName && c.tradingName.toLowerCase() === orderRequest.companyName.toLowerCase())
+      );
+
+      if (!company) {
+        company = await storage.createCompany({
+          legalName: orderRequest.companyName,
+          shippingAddress: orderRequest.shippingAddress || undefined,
+        });
+        await storage.createAuditLog({
+          userId: req.session.userId,
+          action: "create",
+          entityType: "company",
+          entityId: company.id,
+          afterJson: company,
+        });
+      }
+
+      const items = (orderRequest.items as any[]) || [];
+      const subtotal = items.reduce((sum: number, item: any) => sum + (Number(item.lineTotal) || 0), 0);
+      const tax = Math.round(subtotal * 0.1 * 100) / 100;
+      const total = Math.round((subtotal + tax) * 100) / 100;
+
+      const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}`;
+
+      const order = await storage.createOrder({
+        orderNumber,
+        companyId: company.id,
+        status: "new",
+        orderDate: new Date(),
+        subtotal: subtotal.toFixed(2),
+        tax: tax.toFixed(2),
+        total: total.toFixed(2),
+        customerNotes: orderRequest.customerNotes || undefined,
+        createdBy: req.session.userId,
+      });
+
+      for (const item of items) {
+        await storage.createOrderLine({
+          orderId: order.id,
+          productId: item.productId || null,
+          descriptionOverride: item.description || item.productName || "Item",
+          quantity: item.quantity || 1,
+          unitPrice: String(item.unitPrice || "0"),
+          discount: "0",
+          lineTotal: String(item.lineTotal || "0"),
+        });
+      }
+
+      await storage.updateCustomerOrderRequest(req.params.id, {
+        status: "converted",
+        convertedOrderId: order.id,
+        reviewedBy: req.session.userId,
+        reviewedAt: new Date(),
+      });
+
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "create",
+        entityType: "order",
+        entityId: order.id,
+        afterJson: order,
+      });
+      await storage.createActivity({
+        entityType: "order",
+        entityId: order.id,
+        activityType: "system",
+        content: `Order created from customer order request (${orderRequest.companyName})`,
+        createdBy: req.session.userId,
+      });
+
+      res.status(201).json(order);
+    } catch (error) {
+      console.error("Convert order request error:", error);
+      res.status(500).json({ message: "Failed to convert order request" });
+    }
+  });
+
   app.delete("/api/customer-order-requests/:id", requireAdmin, async (req, res) => {
     try {
       const deleted = await storage.deleteCustomerOrderRequest(req.params.id);

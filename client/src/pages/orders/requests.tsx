@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +22,7 @@ function statusBadgeClass(status: string) {
 export default function OrderRequestsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const { data: orderRequests, isLoading } = useQuery<any[]>({
     queryKey: ["/api/customer-order-requests"],
@@ -41,6 +43,23 @@ export default function OrderRequestsPage() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to update status.", variant: "destructive" });
+    },
+  });
+
+  const convertToOrderMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/customer-order-requests/${id}/convert`);
+      return res.json();
+    },
+    onSuccess: (order: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-order-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setSelectedId(null);
+      toast({ title: "Converted", description: "Order request converted to order successfully." });
+      navigate(`/orders/${order.id}`);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to convert order request.", variant: "destructive" });
     },
   });
 
