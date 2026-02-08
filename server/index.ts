@@ -162,6 +162,9 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+
+      const redirectUri = "https://puraxfeatherholdingscrm.replit.app/api/outlook/callback";
+      startAutoEmailSync(redirectUri, 5);
     },
   );
 })();
