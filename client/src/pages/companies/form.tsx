@@ -43,6 +43,7 @@ export default function CompanyFormPage() {
       shippingAddress: "",
       paymentTerms: "Net 30",
       creditStatus: "active",
+      clientGrade: null,
       tagsString: "",
       internalNotes: "",
     },
@@ -58,6 +59,7 @@ export default function CompanyFormPage() {
         shippingAddress: company.shippingAddress || "",
         paymentTerms: company.paymentTerms || "Net 30",
         creditStatus: company.creditStatus,
+        clientGrade: company.clientGrade || null,
         tagsString: company.tags?.join(", ") || "",
         internalNotes: company.internalNotes || "",
       });
@@ -262,6 +264,30 @@ export default function CompanyFormPage() {
                         <SelectItem value="on_hold">On Hold</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="clientGrade"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Client Grade</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-client-grade">
+                          <SelectValue placeholder="Auto-calculated from revenue" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="A">Grade A (Over $500K)</SelectItem>
+                        <SelectItem value="B">Grade B ($100K - $500K)</SelectItem>
+                        <SelectItem value="C">Grade C (Under $100K)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>Auto-calculated from order revenue, but can be manually overridden</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

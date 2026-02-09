@@ -12,6 +12,8 @@ A professional B2B CRM and order management system designed for wholesale manufa
 - **Marketing Section**: Collapsible sidebar section with Campaigns, Email, Forms, and Marketing Analytics pages
 - **"Clients Since July 2021" Report**: One-click access to all companies that have placed orders from July 1, 2021 to today. Located in the Reporting section of the sidebar with CSV export capability.
 - **HubSpot-style Company Profile**: 3-column layout - left panel (company info, status, quick actions), center panel (About/Activity/Orders/Files tabs), right panel (collapsible Contacts/Deals/Orders panels)
+- **Client Grading System**: Automatic A/B/C grading based on order revenue (A: >$500K, B: $100K-$500K, C: <$100K). Companies page has grade filter, revenue sorting, and last order sorting. Revenue recalculates automatically on order create/update. Admin "Recalculate" button for bulk recalculation. Grade can be manually overridden on company edit form.
+- **Contact Import**: 399 contacts imported from HubSpot CSV export, matched to existing companies by email domain and name. Import script at server/import-contacts.ts.
 - **Date-Based Order Filtering**: Orders page includes powerful date range filtering with preset options including "Since July 2021"
 - **Role-Based Access Control**: Four user roles with different permissions:
   - **Admin**: Full access to all features including user management and settings

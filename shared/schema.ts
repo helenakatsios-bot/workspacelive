@@ -31,6 +31,9 @@ export const companies = pgTable("companies", {
   creditStatus: text("credit_status").notNull().default("active"), // active, on_hold
   tags: text("tags").array(),
   internalNotes: text("internal_notes"),
+  totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).default("0"),
+  clientGrade: text("client_grade"), // A (>500k), B (100k-500k), C (<100k)
+  lastOrderDate: timestamp("last_order_date"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [

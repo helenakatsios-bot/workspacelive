@@ -450,6 +450,28 @@ export default function CompanyDetailPage() {
                   <p className="text-xs text-muted-foreground">Total Revenue</p>
                   <p className="text-sm font-medium" data-testid="text-total-revenue">{formatCurrency(totalRevenue)}</p>
                 </div>
+                {company.clientGrade && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Client Grade</p>
+                    <div className="mt-0.5">
+                      <Badge
+                        variant={company.clientGrade === "A" ? "default" : company.clientGrade === "B" ? "secondary" : "outline"}
+                        data-testid="badge-client-grade"
+                      >
+                        Grade {company.clientGrade}
+                        {company.clientGrade === "A" ? " (>$500K)" : company.clientGrade === "B" ? " ($100K-$500K)" : " (<$100K)"}
+                      </Badge>
+                    </div>
+                  </div>
+                )}
+                {company.lastOrderDate && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Last Order</p>
+                    <p className="text-sm" data-testid="text-last-order-date">
+                      {format(new Date(company.lastOrderDate), "MMM d, yyyy")}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-muted-foreground">Created</p>
                   <p className="text-sm" data-testid="text-created-date">

@@ -51,6 +51,23 @@ async function requireEdit(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+async function recalcCompanyRevenue(companyId: string) {
+  try {
+    const result = await pool.query(`
+      SELECT COALESCE(SUM(o.total), 0) as total_revenue, MAX(o.order_date) as last_order
+      FROM orders o WHERE o.status != 'cancelled' AND o.company_id = $1
+    `, [companyId]);
+    const row = result.rows[0];
+    const revenue = parseFloat(row.total_revenue) || 0;
+    const grade = revenue >= 500000 ? 'A' : revenue >= 100000 ? 'B' : 'C';
+    await pool.query(`
+      UPDATE companies SET total_revenue = $1, last_order_date = $2, client_grade = $3 WHERE id = $4
+    `, [revenue, row.last_order, grade, companyId]);
+  } catch (err) {
+    console.error("Error recalculating company revenue:", err);
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -247,6 +264,33 @@ export async function registerRoutes(
       res.json(company);
     } catch (error) {
       console.error("Get company error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/companies/recalculate-revenue", requireAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        UPDATE companies SET 
+          total_revenue = COALESCE(sub.total_revenue, 0),
+          last_order_date = sub.last_order,
+          client_grade = CASE 
+            WHEN COALESCE(sub.total_revenue, 0) >= 500000 THEN 'A'
+            WHEN COALESCE(sub.total_revenue, 0) >= 100000 THEN 'B'
+            ELSE 'C'
+          END
+        FROM (
+          SELECT c.id as company_id, 
+                 COALESCE(SUM(o.total), 0) as total_revenue, 
+                 MAX(o.order_date) as last_order
+          FROM companies c
+          LEFT JOIN orders o ON o.company_id = c.id AND o.status != 'cancelled'
+          GROUP BY c.id
+        ) sub WHERE companies.id = sub.company_id
+      `);
+      res.json({ message: "Revenue recalculated", updated: result.rowCount });
+    } catch (error) {
+      console.error("Recalculate revenue error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -804,6 +848,7 @@ export async function registerRoutes(
         content: "Order created",
         createdBy: req.session.userId,
       });
+      recalcCompanyRevenue(data.companyId);
       res.status(201).json(order);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -838,6 +883,7 @@ export async function registerRoutes(
           createdBy: req.session.userId,
         });
       }
+      recalcCompanyRevenue(before.companyId);
       res.json(order);
     } catch (error) {
       console.error("Update order error:", error);

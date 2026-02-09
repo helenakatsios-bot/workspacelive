@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { format } from "date-fns";
-import { Building2, MoreHorizontal, Eye, Edit, AlertCircle, Trash2 } from "lucide-react";
+import { Building2, MoreHorizontal, Eye, Edit, AlertCircle, Trash2, ArrowUpDown, DollarSign, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,10 +20,35 @@ import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Company } from "@shared/schema";
 
+type SortField = "name" | "revenue" | "lastOrder" | "created";
+type SortDir = "asc" | "desc";
+
+function getGradeBadge(grade: string | null) {
+  if (!grade) return null;
+  const variants: Record<string, { variant: "default" | "secondary" | "outline"; label: string }> = {
+    A: { variant: "default", label: "Grade A" },
+    B: { variant: "secondary", label: "Grade B" },
+    C: { variant: "outline", label: "Grade C" },
+  };
+  const config = variants[grade] || variants.C;
+  return <Badge variant={config.variant} className="text-xs" data-testid={`badge-grade-${grade}`}>{config.label}</Badge>;
+}
+
+function formatRevenue(amount: string | null): string {
+  if (!amount || amount === "0") return "$0";
+  const num = parseFloat(amount);
+  if (num >= 1000000) return `$${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `$${(num / 1000).toFixed(0)}K`;
+  return `$${num.toFixed(0)}`;
+}
+
 export default function CompaniesPage() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [creditFilter, setCreditFilter] = useState<string>("all");
+  const [gradeFilter, setGradeFilter] = useState<string>("all");
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
   const [relatedCounts, setRelatedCounts] = useState<{ contacts: number; deals: number; orders: number; quotes: number; invoices: number } | null>(null);
   const [loadingCounts, setLoadingCounts] = useState(false);
@@ -32,6 +57,19 @@ export default function CompaniesPage() {
 
   const { data: companies, isLoading } = useQuery<Company[]>({
     queryKey: ["/api/companies"],
+  });
+
+  const recalcMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/companies/recalculate-revenue");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      toast({ title: "Revenue recalculated", description: "Client grades have been updated based on order totals." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -64,19 +102,65 @@ export default function CompaniesPage() {
     }
   };
 
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir(field === "revenue" ? "desc" : "asc");
+    }
+  };
+
   const filteredCompanies = useMemo(() => {
     if (!companies) return [];
-    return companies.filter((company) => {
+    let result = companies.filter((company) => {
       const matchesSearch =
         company.legalName.toLowerCase().includes(search.toLowerCase()) ||
         company.tradingName?.toLowerCase().includes(search.toLowerCase()) ||
         company.abn?.toLowerCase().includes(search.toLowerCase());
       const matchesCredit = creditFilter === "all" || company.creditStatus === creditFilter;
-      return matchesSearch && matchesCredit;
+      const matchesGrade = gradeFilter === "all" || company.clientGrade === gradeFilter;
+      return matchesSearch && matchesCredit && matchesGrade;
     });
-  }, [companies, search, creditFilter]);
+
+    result.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "name":
+          cmp = (a.tradingName || a.legalName).localeCompare(b.tradingName || b.legalName);
+          break;
+        case "revenue":
+          cmp = parseFloat(a.totalRevenue || "0") - parseFloat(b.totalRevenue || "0");
+          break;
+        case "lastOrder":
+          const aDate = a.lastOrderDate ? new Date(a.lastOrderDate).getTime() : 0;
+          const bDate = b.lastOrderDate ? new Date(b.lastOrderDate).getTime() : 0;
+          cmp = aDate - bDate;
+          break;
+        case "created":
+          cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+    return result;
+  }, [companies, search, creditFilter, gradeFilter, sortField, sortDir]);
 
   const hasRelatedRecords = relatedCounts && (relatedCounts.contacts + relatedCounts.deals + relatedCounts.orders + relatedCounts.quotes + relatedCounts.invoices) > 0;
+
+  const SortableHead = ({ field, children, className }: { field: SortField; children: React.ReactNode; className?: string }) => (
+    <TableHead className={className}>
+      <button
+        className="flex items-center gap-1 hover:text-foreground transition-colors"
+        onClick={() => handleSort(field)}
+        data-testid={`sort-${field}`}
+      >
+        {children}
+        <ArrowUpDown className={`w-3 h-3 ${sortField === field ? "opacity-100" : "opacity-30"}`} />
+      </button>
+    </TableHead>
+  );
 
   return (
     <div className="space-y-6">
@@ -92,6 +176,17 @@ export default function CompaniesPage() {
           testId: "button-add-company",
         }}
       >
+        <Select value={gradeFilter} onValueChange={setGradeFilter}>
+          <SelectTrigger className="w-36" data-testid="select-grade-filter">
+            <SelectValue placeholder="Client Grade" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Grades</SelectItem>
+            <SelectItem value="A">Grade A (&gt;$500K)</SelectItem>
+            <SelectItem value="B">Grade B ($100K-$500K)</SelectItem>
+            <SelectItem value="C">Grade C (&lt;$100K)</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={creditFilter} onValueChange={setCreditFilter}>
           <SelectTrigger className="w-36" data-testid="select-credit-filter">
             <SelectValue placeholder="Credit status" />
@@ -102,6 +197,18 @@ export default function CompaniesPage() {
             <SelectItem value="on_hold">On Hold</SelectItem>
           </SelectContent>
         </Select>
+        {isAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => recalcMutation.mutate()}
+            disabled={recalcMutation.isPending}
+            data-testid="button-recalculate-revenue"
+          >
+            <RefreshCw className={`w-4 h-4 mr-1 ${recalcMutation.isPending ? "animate-spin" : ""}`} />
+            {recalcMutation.isPending ? "Calculating..." : "Recalculate"}
+          </Button>
+        )}
       </PageHeader>
 
       <Card>
@@ -124,11 +231,11 @@ export default function CompaniesPage() {
               <Building2 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
               <h3 className="font-medium mb-1">No companies found</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                {search || creditFilter !== "all" 
+                {search || creditFilter !== "all" || gradeFilter !== "all"
                   ? "Try adjusting your filters" 
                   : "Get started by adding your first customer"}
               </p>
-              {!search && creditFilter === "all" && (
+              {!search && creditFilter === "all" && gradeFilter === "all" && (
                 <Button onClick={() => navigate("/companies/new")} data-testid="button-add-first-company">
                   Add Company
                 </Button>
@@ -138,11 +245,12 @@ export default function CompaniesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Company</TableHead>
-                  <TableHead className="hidden md:table-cell">ABN</TableHead>
-                  <TableHead className="hidden lg:table-cell">Payment Terms</TableHead>
+                  <SortableHead field="name">Company</SortableHead>
+                  <TableHead className="hidden md:table-cell">Grade</TableHead>
+                  <SortableHead field="revenue" className="hidden md:table-cell">Revenue</SortableHead>
+                  <SortableHead field="lastOrder" className="hidden lg:table-cell">Last Order</SortableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="hidden md:table-cell">Created</TableHead>
+                  <TableHead className="hidden xl:table-cell">Payment Terms</TableHead>
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -166,11 +274,18 @@ export default function CompaniesPage() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">
-                      {company.abn || "-"}
+                    <TableCell className="hidden md:table-cell">
+                      {getGradeBadge(company.clientGrade)}
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell text-muted-foreground">
-                      {company.paymentTerms || "Net 30"}
+                    <TableCell className="hidden md:table-cell">
+                      <span className="text-sm font-medium" data-testid={`text-revenue-${company.id}`}>
+                        {formatRevenue(company.totalRevenue)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell text-muted-foreground text-sm">
+                      {company.lastOrderDate
+                        ? format(new Date(company.lastOrderDate), "MMM d, yyyy")
+                        : "-"}
                     </TableCell>
                     <TableCell>
                       {company.creditStatus === "on_hold" ? (
@@ -182,8 +297,8 @@ export default function CompaniesPage() {
                         <Badge variant="outline">Active</Badge>
                       )}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
-                      {format(new Date(company.createdAt), "MMM d, yyyy")}
+                    <TableCell className="hidden xl:table-cell text-muted-foreground text-sm">
+                      {company.paymentTerms || "Net 30"}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
