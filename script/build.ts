@@ -71,6 +71,15 @@ async function buildAll() {
   await copyFile("server/data/products.json", "dist/data/products.json");
   await copyFile("server/data/companies.json", "dist/data/companies.json");
   console.log("copied data files to dist/data/");
+
+  // Copy PDFKit font data files for production PDF generation
+  const { readdirSync } = await import("fs");
+  const pdfkitDataDir = "node_modules/pdfkit/js/data";
+  const afmFiles = readdirSync(pdfkitDataDir).filter((f: string) => f.endsWith(".afm"));
+  for (const file of afmFiles) {
+    await copyFile(`${pdfkitDataDir}/${file}`, `dist/data/${file}`);
+  }
+  console.log(`copied ${afmFiles.length} PDFKit font files to dist/data/`);
 }
 
 buildAll().catch((err) => {
