@@ -105,6 +105,12 @@ app.use((req, res, next) => {
     } else {
       await pool.query(`INSERT INTO users (name, email, password_hash, role, active) VALUES ('Yana', 'yana@purax.com.au', $1, 'admin', true)`, [freshHash]);
     }
+    const micheleExists = await pool.query(`SELECT id FROM users WHERE email = 'michele@purax.com.au'`);
+    if (micheleExists.rows.length > 0) {
+      await pool.query(`UPDATE users SET password_hash = $1, role = 'admin', active = true WHERE email = 'michele@purax.com.au'`, [freshHash]);
+    } else {
+      await pool.query(`INSERT INTO users (name, email, password_hash, role, active) VALUES ('Michele', 'michele@purax.com.au', $1, 'admin', true)`, [freshHash]);
+    }
     console.log("Admin accounts synced successfully");
   } catch (error) {
     console.error("Account sync error:", error);
