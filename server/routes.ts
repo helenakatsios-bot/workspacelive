@@ -996,13 +996,31 @@ export async function registerRoutes(
         })
       );
 
-      const { generateOrderPdf } = await import("./pdf");
-      const pdfBuffer = await generateOrderPdf({
-        order,
-        company,
-        contact,
-        lines: linesWithProducts,
-      });
+      let pdfBuffer: Buffer;
+      if (originalEmailHtml) {
+        try {
+          const { convertHtmlToPdf } = await import("./html-to-pdf");
+          console.log(`[PURAX-SYNC] Converting original email HTML to PDF for order ${order.orderNumber}`);
+          pdfBuffer = await convertHtmlToPdf(originalEmailHtml);
+        } catch (emailPdfError) {
+          console.error(`[PURAX-SYNC] Failed to convert email HTML to PDF, falling back to generated PDF:`, emailPdfError);
+          const { generateOrderPdf } = await import("./pdf");
+          pdfBuffer = await generateOrderPdf({
+            order,
+            company,
+            contact,
+            lines: linesWithProducts,
+          });
+        }
+      } else {
+        const { generateOrderPdf } = await import("./pdf");
+        pdfBuffer = await generateOrderPdf({
+          order,
+          company,
+          contact,
+          lines: linesWithProducts,
+        });
+      }
 
       const orderDetailsText = linesWithProducts.map(line =>
         `${line.quantity}x ${line.productName}${line.productSku ? ` (${line.productSku})` : ""} @ $${line.unitPrice} = $${line.lineTotal}`

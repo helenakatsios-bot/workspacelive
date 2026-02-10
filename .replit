@@ -4,6 +4,7 @@ hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
 channel = "stable-24_05"
+packages = ["chromium"]
 
 [[ports]]
 localPort = 5000
@@ -48,6 +49,7 @@ waitForPort = 5000
 XERO_CLIENT_ID = "61053FD2AC5D4D6EA1A04B743F30AABD"
 XERO_CLIENT_SECRET = "l3MPeGBFbA4AJW_XvlnYownJVtYbsbTuwc8SwjK5fZOaK1Z5"
 PURAX_API_URL = "https://purax-feather-holdings-app.replit.app"
+APP_URL = "https://puraxfeatherholdingscrm.replit.app"
 
 [agent]
 integrations = ["javascript_openai_ai_integrations:2.0.0"]
