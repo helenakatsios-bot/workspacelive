@@ -166,6 +166,11 @@ export const orders = pgTable("orders", {
   internalNotes: text("internal_notes"),
   customerNotes: text("customer_notes"),
   customerName: text("customer_name"),
+  customerEmail: text("customer_email"),
+  customerPhone: text("customer_phone"),
+  customerAddress: text("customer_address"),
+  deliveryMethod: text("delivery_method"),
+  paymentMethod: text("payment_method"),
   puraxSyncStatus: text("purax_sync_status").default("not_sent"), // not_sent, sent, failed
   puraxSyncedAt: timestamp("purax_synced_at"),
   puraxOrderId: text("purax_order_id"),
