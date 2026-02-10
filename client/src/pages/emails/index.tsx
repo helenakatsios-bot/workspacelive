@@ -15,9 +15,14 @@ import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
-function isOrderEmail(email: any): boolean {
-  const subject = email?.subject || "";
-  return /Order\s*#\d+/i.test(subject) && /placed by/i.test(subject);
+function isOrderEmail(_email: any): boolean {
+  const subject = _email?.subject?.toLowerCase() || "";
+  const preview = _email?.bodyPreview?.toLowerCase() || "";
+  if (/order\s*#\d+/i.test(subject) && /placed by/i.test(subject)) return true;
+  if (/order/i.test(subject)) return true;
+  if (/\d+\s*x\s+\d+x\d+/i.test(preview)) return true;
+  if (/\bqty\b/i.test(preview)) return true;
+  return false;
 }
 
 export default function EmailsPage() {

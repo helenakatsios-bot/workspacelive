@@ -6,8 +6,8 @@ import { pool, db } from "./db";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
-import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable } from "@shared/schema";
+import { eq, ilike } from "drizzle-orm";
+import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts } from "@shared/schema";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails } from "./outlook";
 
@@ -1745,134 +1745,316 @@ export async function registerRoutes(
 
       const subject = email.subject || "";
       const preview = email.bodyPreview || "";
-
-      const orderNumMatch = subject.match(/Order\s*#(\d+)/i);
-      const shopifyOrderNum = orderNumMatch ? orderNumMatch[1] : null;
-
-      const nameMatch = subject.match(/placed by\s+(.+)/i);
-      const customerName = nameMatch ? nameMatch[1].trim() : "";
-
-      // Extract customer details from email HTML body
       const bodyHtml = email.bodyHtml || "";
-      const plainText = bodyHtml.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
+      const plainText = bodyHtml
+        .replace(/<[^>]+>/g, "\n")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n\s*\n/g, "\n")
+        .trim();
 
+      const isShopifyEmail = /Order\s*#\d+/i.test(subject) && /placed by/i.test(subject);
+
+      // Detect forwarded emails and extract real sender
+      const isForwarded = /^(fw|fwd):/i.test(subject) || plainText.match(/From:\s*[^<\n]+<[^>]+>/m);
+      let realSenderEmail = email.fromAddress || "";
+      let realSenderName = "";
+      if (isForwarded) {
+        const fwdFromMatch = plainText.match(/From:\s*([^<\n]+?)\s*<([^>]+)>/m);
+        if (fwdFromMatch) {
+          realSenderName = fwdFromMatch[1].trim();
+          realSenderEmail = fwdFromMatch[2].trim();
+        }
+      }
+
+      let customerName = "";
       let customerPhone = "";
       let customerAddress = "";
-      let deliveryMethodVal = "";
-      let paymentMethodVal = "";
-
-      // Extract payment processing method
-      const paymentMatch = plainText.match(/Payment processing method\s+(.+?)(?=Delivery method|Shipping address|Billing address|$)/i);
-      if (paymentMatch) paymentMethodVal = paymentMatch[1].trim();
-
-      // Extract delivery method
-      const deliveryMatch = plainText.match(/Delivery method\s+(.+?)(?=Shipping address|Billing address|Payment processing|$)/i);
-      if (deliveryMatch) deliveryMethodVal = deliveryMatch[1].trim();
-
-      // Extract shipping address block
-      const shippingAddrMatch = plainText.match(/Shipping address\s+(.+?)(?=Billing address|$)/i);
-      if (shippingAddrMatch) {
-        let addrBlock = shippingAddrMatch[1].trim();
-        // Remove the Shopify footer address (Ottawa, ON)
-        addrBlock = addrBlock.replace(/\d+\s+O'Connor\s+Street.*$/i, "").trim();
-        // Extract phone number (Australian or international format)
-        const phoneMatch = addrBlock.match(/(\+?\d[\d\s\-]{8,})/);
-        if (phoneMatch) {
-          customerPhone = phoneMatch[1].trim();
-          addrBlock = addrBlock.replace(phoneMatch[0], "").trim();
-        }
-        // Remove customer name from address if it's the first part
-        if (customerName && addrBlock.toLowerCase().startsWith(customerName.toLowerCase())) {
-          addrBlock = addrBlock.substring(customerName.length).trim();
-        }
-        customerAddress = addrBlock;
-      }
-
+      let customerEmail = "";
+      let shopifyOrderNum: string | null = null;
+      let companyName = "";
       const lines: Array<{ description: string; quantity: number; unitPrice: number; lineTotal: number }> = [];
+      let subtotal = 0;
+      let shipping = 0;
+      let total = 0;
 
-      const summaryStart = preview.indexOf("Order summary");
-      const subtotalStart = preview.indexOf("Subtotal");
-      if (summaryStart !== -1 && subtotalStart !== -1) {
-        const summaryText = preview.substring(summaryStart + "Order summary".length, subtotalStart).trim();
-        const allLines = summaryText.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+      if (isShopifyEmail) {
+        const orderNumMatch = subject.match(/Order\s*#(\d+)/i);
+        shopifyOrderNum = orderNumMatch ? orderNumMatch[1] : null;
 
-        let currentProduct = "";
-        let currentPrice = 0;
-        let currentQty = 1;
+        const nameMatch = subject.match(/placed by\s+(.+)/i);
+        customerName = nameMatch ? nameMatch[1].trim() : "";
 
-        for (const line of allLines) {
-          if (line === "View order") continue;
-          if (/^[A-Z]+\d+\s*\(/.test(line)) continue;
-
-          const priceQtyMatch = line.match(/\$([0-9,.]+)(?:\s+\$([0-9,.]+))?\s*×\s*(\d+)/);
-          if (priceQtyMatch) {
-            const originalPrice = parseFloat(priceQtyMatch[1].replace(",", ""));
-            const discountedPrice = priceQtyMatch[2] ? parseFloat(priceQtyMatch[2].replace(",", "")) : originalPrice;
-            currentPrice = discountedPrice;
-            currentQty = parseInt(priceQtyMatch[3]);
-            continue;
+        const shippingAddrMatch = plainText.match(/Shipping address\s+(.+?)(?=Billing address|$)/is);
+        if (shippingAddrMatch) {
+          let addrBlock = shippingAddrMatch[1].trim();
+          addrBlock = addrBlock.replace(/\d+\s+O'Connor\s+Street.*$/i, "").trim();
+          const phoneMatch = addrBlock.match(/(\+?\d[\d\s\-]{8,})/);
+          if (phoneMatch) {
+            customerPhone = phoneMatch[1].trim();
+            addrBlock = addrBlock.replace(phoneMatch[0], "").trim();
           }
-
-          const lineTotalMatch = line.match(/^\$([0-9,.]+)$/);
-          if (lineTotalMatch && currentProduct && currentPrice > 0) {
-            const lineTotal = parseFloat(lineTotalMatch[1].replace(",", ""));
-            lines.push({
-              description: currentProduct,
-              quantity: currentQty,
-              unitPrice: currentPrice,
-              lineTotal,
-            });
-            currentProduct = "";
-            currentPrice = 0;
-            currentQty = 1;
-            continue;
+          if (customerName && addrBlock.toLowerCase().startsWith(customerName.toLowerCase())) {
+            addrBlock = addrBlock.substring(customerName.length).trim();
           }
+          customerAddress = addrBlock;
+        }
 
-          if (!line.startsWith("$") && line.length > 2 &&
-              !line.includes("View order") && !line.match(/^(King|Queen|Standard|Single|Double|Super)\b/i) &&
-              !line.match(/^[A-Z]+\d+/) && !line.match(/^\(\-?\$/) &&
-              !line.match(/^Shipping/) && !line.match(/^Total/)) {
-            currentProduct = line;
+        const summaryStart = preview.indexOf("Order summary");
+        const subtotalStart = preview.indexOf("Subtotal");
+        if (summaryStart !== -1 && subtotalStart !== -1) {
+          const summaryText = preview.substring(summaryStart + "Order summary".length, subtotalStart).trim();
+          const allLines = summaryText.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+          let currentProduct = "";
+          let currentPrice = 0;
+          let currentQty = 1;
+          for (const line of allLines) {
+            if (line === "View order") continue;
+            if (/^[A-Z]+\d+\s*\(/.test(line)) continue;
+            const priceQtyMatch = line.match(/\$([0-9,.]+)(?:\s+\$([0-9,.]+))?\s*×\s*(\d+)/);
+            if (priceQtyMatch) {
+              const originalPrice = parseFloat(priceQtyMatch[1].replace(",", ""));
+              const discountedPrice = priceQtyMatch[2] ? parseFloat(priceQtyMatch[2].replace(",", "")) : originalPrice;
+              currentPrice = discountedPrice;
+              currentQty = parseInt(priceQtyMatch[3]);
+              continue;
+            }
+            const lineTotalMatch = line.match(/^\$([0-9,.]+)$/);
+            if (lineTotalMatch && currentProduct && currentPrice > 0) {
+              const lineTotal = parseFloat(lineTotalMatch[1].replace(",", ""));
+              lines.push({ description: currentProduct, quantity: currentQty, unitPrice: currentPrice, lineTotal });
+              currentProduct = "";
+              currentPrice = 0;
+              currentQty = 1;
+              continue;
+            }
+            if (!line.startsWith("$") && line.length > 2 &&
+                !line.includes("View order") && !line.match(/^(King|Queen|Standard|Single|Double|Super)\b/i) &&
+                !line.match(/^[A-Z]+\d+/) && !line.match(/^\(\-?\$/) &&
+                !line.match(/^Shipping/) && !line.match(/^Total/)) {
+              currentProduct = line;
+            }
+          }
+          if (currentProduct && currentPrice > 0 && lines.length === 0) {
+            lines.push({ description: currentProduct, quantity: currentQty, unitPrice: currentPrice, lineTotal: currentPrice * currentQty });
           }
         }
 
-        if (currentProduct && currentPrice > 0 && lines.length === 0) {
-          lines.push({
-            description: currentProduct,
-            quantity: currentQty,
-            unitPrice: currentPrice,
-            lineTotal: currentPrice * currentQty,
-          });
+        const subtotalMatch = preview.match(/Subtotal\s*\$([0-9,.]+)/);
+        const shippingMatch = preview.match(/Shipping\s*\([^)]*\)\s*\$([0-9,.]+)/);
+        const totalMatch = preview.match(/Total\s*\$([0-9,.]+)/);
+        subtotal = subtotalMatch ? parseFloat(subtotalMatch[1].replace(",", "")) : lines.reduce((s, l) => s + l.lineTotal, 0);
+        shipping = shippingMatch ? parseFloat(shippingMatch[1].replace(",", "")) : 0;
+        total = totalMatch ? parseFloat(totalMatch[1].replace(",", "")) : subtotal + shipping;
+      } else {
+        // Generic B2B order email parsing
+        customerEmail = realSenderEmail || email.fromAddress || "";
+        customerName = realSenderName || "";
+
+        // Parse order lines from email body - handles formats like:
+        // "14x 40x80cm", "40x80cm x14", "40x80 cm qty 14", "14 x 40x80cm", "40x80cm - 14"
+        const bodyLines = plainText.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+
+        for (const line of bodyLines) {
+          // Pattern: qty first - "14x 40x80cm" or "14 x 40x80cm"
+          const qtyFirstMatch = line.match(/^(\d+)\s*x\s+(.+)/i);
+          if (qtyFirstMatch) {
+            const qty = parseInt(qtyFirstMatch[1]);
+            const desc = qtyFirstMatch[2].trim();
+            if (qty > 0 && desc.length > 1) {
+              lines.push({ description: desc, quantity: qty, unitPrice: 0, lineTotal: 0 });
+              continue;
+            }
+          }
+
+          // Pattern: qty at end - "40x80cm x14" or "40x80cm x 14"
+          const qtyEndMatch = line.match(/^(.+?)\s+x\s*(\d+)\s*$/i);
+          if (qtyEndMatch) {
+            const desc = qtyEndMatch[1].trim();
+            const qty = parseInt(qtyEndMatch[2]);
+            if (qty > 0 && desc.length > 1 && !/^\d+$/.test(desc)) {
+              lines.push({ description: desc, quantity: qty, unitPrice: 0, lineTotal: 0 });
+              continue;
+            }
+          }
+
+          // Pattern: qty with dash - "40x80cm - 14" or "40x80cm — 14"
+          const dashMatch = line.match(/^(.+?)\s*[-–—]\s*(\d+)\s*$/);
+          if (dashMatch) {
+            const desc = dashMatch[1].trim();
+            const qty = parseInt(dashMatch[2]);
+            if (qty > 0 && desc.length > 1 && !/^\d+$/.test(desc)) {
+              lines.push({ description: desc, quantity: qty, unitPrice: 0, lineTotal: 0 });
+              continue;
+            }
+          }
+
+          // Pattern: qty with "qty" keyword - "40x80cm qty 14" or "40x80cm QTY: 14"
+          const qtyKeywordMatch = line.match(/^(.+?)\s+qty[:\s]*(\d+)\s*$/i);
+          if (qtyKeywordMatch) {
+            const desc = qtyKeywordMatch[1].trim();
+            const qty = parseInt(qtyKeywordMatch[2]);
+            if (qty > 0 && desc.length > 1) {
+              lines.push({ description: desc, quantity: qty, unitPrice: 0, lineTotal: 0 });
+              continue;
+            }
+          }
+
+          // Pattern: "qty" keyword first - "qty 14 40x80cm" or "QTY: 14 40x80cm"
+          const qtyKeywordFirstMatch = line.match(/^qty[:\s]*(\d+)\s+(.+)/i);
+          if (qtyKeywordFirstMatch) {
+            const qty = parseInt(qtyKeywordFirstMatch[1]);
+            const desc = qtyKeywordFirstMatch[2].trim();
+            if (qty > 0 && desc.length > 1) {
+              lines.push({ description: desc, quantity: qty, unitPrice: 0, lineTotal: 0 });
+              continue;
+            }
+          }
         }
       }
 
-      const subtotalMatch = preview.match(/Subtotal\s*\$([0-9,.]+)/);
-      const shippingMatch = preview.match(/Shipping\s*\([^)]*\)\s*\$([0-9,.]+)/);
-      const totalMatch = preview.match(/Total\s*\$([0-9,.]+)/);
+      // Validate: non-Shopify emails must have at least one parsed order line
+      if (!isShopifyEmail && lines.length === 0) {
+        return res.status(400).json({ error: "No order lines could be parsed from this email. This doesn't appear to be an order email." });
+      }
 
-      const subtotal = subtotalMatch ? parseFloat(subtotalMatch[1].replace(",", "")) : lines.reduce((s, l) => s + l.lineTotal, 0);
-      const shipping = shippingMatch ? parseFloat(shippingMatch[1].replace(",", "")) : 0;
-      const total = totalMatch ? parseFloat(totalMatch[1].replace(",", "")) : subtotal + shipping;
-
+      // Match company: try subject/body name first (most reliable), then sender email, then domain
       const allCompanies = await storage.getAllCompanies();
-      let company = allCompanies.find(
-        (c) => c.legalName.toLowerCase().includes("puradown") ||
-               (c.tradingName && c.tradingName.toLowerCase().includes("puradown"))
-      );
+      let company: any = null;
 
-      if (!company) {
-        const firstNamePart = customerName.split(" ")[0] || "Customer";
+      if (isShopifyEmail) {
         company = allCompanies.find(
-          (c) => c.legalName.toLowerCase().includes(firstNamePart.toLowerCase())
+          (c) => c.legalName.toLowerCase().includes("puradown") ||
+                 (c.tradingName && c.tradingName.toLowerCase().includes("puradown"))
         );
       }
 
       if (!company) {
+        const senderEmail = realSenderEmail || email.fromAddress || "";
+        const senderDomain = senderEmail.split("@")[1]?.toLowerCase() || "";
+
+        // 1. Try matching company name from subject (most reliable for B2B orders)
+        const subjectClean = subject.toLowerCase().replace(/^(fw|fwd|re):\s*/gi, "").replace(/[.]/g, "").replace(/\border\b/gi, "").trim();
+        const textClean = plainText.toLowerCase().replace(/[.]/g, "");
+        const companyMatches: Array<{ company: any; score: number }> = [];
+
+        for (const c of allCompanies) {
+          const rawNames = [c.legalName, c.tradingName].filter(Boolean);
+          for (const rawName of rawNames) {
+            const nameLower = rawName!.toLowerCase();
+            // Strip /COD suffix for matching purposes
+            const nameWithoutCod = nameLower.replace(/\/cod\s*$/i, "").trim();
+            const nameParts = nameLower.split(/[\/\\|]+/).map(p => p.trim()).filter(p => p.length >= 2 && p !== "cod");
+            const cleanName = nameWithoutCod.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+
+            // Build match targets: full clean name + individual parts that are multi-word or 6+ chars
+            const matchTargets = new Set<string>();
+            matchTargets.add(cleanName);
+            for (const part of nameParts) {
+              const partClean = part.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+              if (partClean.split(/\s+/).length >= 2 || partClean.length >= 6) {
+                matchTargets.add(partClean);
+              }
+            }
+
+            for (const target of matchTargets) {
+              if (target.length < 3) continue;
+              const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+              const regex = new RegExp(`\\b${escaped}\\b`);
+              if (regex.test(subjectClean)) {
+                companyMatches.push({ company: c, score: target.length + 20 });
+                break;
+              } else if (regex.test(textClean)) {
+                companyMatches.push({ company: c, score: target.length });
+                break;
+              }
+            }
+          }
+        }
+
+        if (companyMatches.length > 0) {
+          companyMatches.sort((a, b) => b.score - a.score);
+          company = companyMatches[0].company;
+        }
+
+        // 2. Try matching by contact email
+        if (!company && senderEmail) {
+          const matchedContacts = await db.select().from(contacts).where(ilike(contacts.email, senderEmail)).limit(1);
+          if (matchedContacts.length > 0) {
+            company = allCompanies.find(c => c.id === matchedContacts[0].companyId);
+          }
+        }
+
+        // 3. Try matching by email domain to company name
+        if (!company && senderDomain && senderDomain !== "gmail.com" && senderDomain !== "yahoo.com" && senderDomain !== "hotmail.com" && senderDomain !== "outlook.com") {
+          const domainName = senderDomain.replace(/\.(com|com\.au|net|org|co).*$/, "").replace(/^(shop|info|orders|sales|hello)/, "");
+          if (domainName.length >= 3) {
+            company = allCompanies.find(c =>
+              c.legalName.toLowerCase().replace(/[^a-z0-9]/g, "").includes(domainName) ||
+              (c.tradingName && c.tradingName.toLowerCase().replace(/[^a-z0-9]/g, "").includes(domainName))
+            );
+          }
+        }
+      }
+
+      if (!company) {
+        const companyNameFromSubject = subject.replace(/order/i, "").replace(/re:/i, "").replace(/fw:/i, "").replace(/fwd:/i, "").trim();
         company = await storage.createCompany({
-          legalName: customerName || "Puradown Customer",
+          legalName: companyNameFromSubject || customerName || "Unknown Customer",
         });
       }
 
+      // Auto-create/update contact with sender email if not Shopify
+      if (!isShopifyEmail && customerEmail) {
+        const existingContacts = await db.select().from(contacts).where(ilike(contacts.email, customerEmail)).limit(1);
+        if (existingContacts.length === 0) {
+          let contactFirstName = "";
+          let contactLastName = "";
+          const bodyLines = plainText.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+          for (let i = 0; i < bodyLines.length; i++) {
+            const line = bodyLines[i];
+            if (/^(thanks|thank you|cheers|regards|kind regards|best|warm regards)/i.test(line)) {
+              const nextLine = bodyLines[i + 1];
+              if (nextLine && nextLine.length < 40 && /^[A-Z]/.test(nextLine) && !/[.@#$%]/.test(nextLine)) {
+                const nameParts = nextLine.split(/\s+/);
+                contactFirstName = nameParts[0] || "";
+                contactLastName = nameParts.slice(1).join(" ") || "";
+                customerName = nextLine;
+                break;
+              }
+            }
+          }
+          if (!contactFirstName) {
+            const fromLineMatch = plainText.match(/From:\s*([^<\n]+?)(?:\s*<|$)/m);
+            if (fromLineMatch) {
+              const nameParts = fromLineMatch[1].trim().split(/\s+/);
+              contactFirstName = nameParts[0] || "";
+              contactLastName = nameParts.slice(1).join(" ") || "";
+              if (!customerName) customerName = fromLineMatch[1].trim();
+            }
+          }
+          if (!contactFirstName) {
+            const emailLocalPart = customerEmail.split("@")[0] || "";
+            contactFirstName = emailLocalPart;
+          }
+
+          await storage.createContact({
+            companyId: company.id,
+            firstName: contactFirstName,
+            lastName: contactLastName,
+            email: customerEmail,
+          });
+        } else if (existingContacts[0].companyId !== company.id) {
+          await db.update(contacts).set({ companyId: company.id }).where(eq(contacts.id, existingContacts[0].id));
+        }
+      }
+
+      // Generate order number
       const orderNumber = shopifyOrderNum
         ? `PD-${shopifyOrderNum}`
         : `ORD-${Date.now().toString(36).toUpperCase()}`;
@@ -1894,10 +2076,11 @@ export async function registerRoutes(
         customerName: customerName || null,
         customerPhone: customerPhone || null,
         customerAddress: customerAddress || null,
-        deliveryMethod: deliveryMethodVal || null,
-        paymentMethod: paymentMethodVal || null,
+        customerEmail: customerEmail || null,
         sourceEmailId: emailId,
-        customerNotes: `Converted from Puradown email. Customer: ${customerName}. Shipping: $${shipping.toFixed(2)}`,
+        customerNotes: isShopifyEmail
+          ? `Converted from Puradown email. Customer: ${customerName}. Shipping: $${shipping.toFixed(2)}`
+          : `Converted from email: ${subject}`,
         createdBy: req.session.userId,
       });
 
@@ -1924,7 +2107,7 @@ export async function registerRoutes(
         entityType: "order",
         entityId: order.id,
         activityType: "system",
-        content: `Order created from Puradown email (${subject})`,
+        content: `Order created from email (${subject})`,
         createdBy: req.session.userId,
       });
 
