@@ -230,13 +230,30 @@ export async function fetchEmails(
   if (folder === "sent") folderPath = "sentItems";
   else if (folder === "drafts") folderPath = "drafts";
   
+  const allMessages: OutlookMessage[] = [];
+  const pageSize = Math.min(top, 250);
+  let remaining = top;
+  let nextLink: string | null = null;
+  
   const response = await client.api(`/me/mailFolders/${folderPath}/messages`)
-    .top(top)
+    .top(pageSize)
     .select("id,subject,bodyPreview,body,from,toRecipients,ccRecipients,isRead,isDraft,sentDateTime,receivedDateTime")
     .orderby("receivedDateTime desc")
     .get();
   
-  return response.value || [];
+  allMessages.push(...(response.value || []));
+  remaining -= allMessages.length;
+  nextLink = response["@odata.nextLink"] || null;
+  
+  while (nextLink && remaining > 0) {
+    const nextResponse = await client.api(nextLink).get();
+    const msgs = nextResponse.value || [];
+    allMessages.push(...msgs);
+    remaining -= msgs.length;
+    nextLink = nextResponse["@odata.nextLink"] || null;
+  }
+  
+  return allMessages.slice(0, top);
 }
 
 export async function sendEmail(
@@ -298,7 +315,7 @@ export async function syncEmailsToDatabase(
   accessToken: string,
   folder: string = "inbox"
 ): Promise<number> {
-  const messages = await fetchEmails(accessToken, folder, 100);
+  const messages = await fetchEmails(accessToken, folder, 500);
   let synced = 0;
   
   for (const msg of messages) {
