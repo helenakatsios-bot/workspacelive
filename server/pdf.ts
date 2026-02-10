@@ -28,7 +28,7 @@ export function generateOrderPdf(data: OrderPdfData): Promise<Buffer> {
     doc.moveDown(0.5);
 
     doc.fillColor("#000000");
-    doc.fontSize(16).font("Helvetica-Bold").text(`Order: ${data.order.orderNumber}`);
+    doc.fontSize(16).font("Helvetica-Bold").text(`Order: ${data.order.orderNumber.replace(/^PD-/, '')}`);
     doc.moveDown(0.5);
 
     const detailStartY = doc.y;

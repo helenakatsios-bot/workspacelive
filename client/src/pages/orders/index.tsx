@@ -279,7 +279,7 @@ export default function OrdersPage() {
                         </div>
                         <div>
                           <p className="font-medium" data-testid={`text-order-number-${order.id}`}>
-                            {order.orderNumber}
+                            {order.orderNumber.replace(/^PD-/, '')}
                           </p>
                           <p className="text-xs text-muted-foreground md:hidden">
                             {format(new Date(order.orderDate), "MMM d, yyyy")}

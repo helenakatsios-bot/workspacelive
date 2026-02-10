@@ -221,7 +221,7 @@ export default function OrderDetailPage() {
               {order.customerName && (
                 <span className="text-destructive" data-testid="text-header-customer-name">{order.customerName}</span>
               )}
-              {order.orderNumber}
+              {order.orderNumber.replace(/^PD-/, '')}
             </h1>
             <p className="text-sm text-muted-foreground">
               {format(new Date(order.orderDate), "MMMM d, yyyy")}
