@@ -4,7 +4,7 @@ import { useRoute, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft, Loader2, Building2 } from "lucide-react";
+import { ArrowLeft, Loader2, Building2, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +18,7 @@ import { insertCompanySchema, type Company } from "@shared/schema";
 const formSchema = insertCompanySchema.extend({
   legalName: z.string().min(1, "Legal name is required"),
   tagsString: z.string().optional(),
+  emailAddressesInput: z.array(z.string()).optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -39,28 +40,38 @@ export default function CompanyFormPage() {
       legalName: "",
       tradingName: "",
       abn: "",
+      phone: "",
       billingAddress: "",
       shippingAddress: "",
       paymentTerms: "Net 30",
       creditStatus: "active",
       clientGrade: null,
       tagsString: "",
+      emailAddressesInput: [""],
       internalNotes: "",
     },
   });
 
+  const [emailFields, setEmailFields] = useState<string[]>([""]);
+
   useEffect(() => {
     if (company) {
+      const emails = company.emailAddresses && company.emailAddresses.length > 0 
+        ? company.emailAddresses as string[]
+        : [""];
+      setEmailFields(emails);
       form.reset({
         legalName: company.legalName,
         tradingName: company.tradingName || "",
         abn: company.abn || "",
+        phone: (company as any).phone || "",
         billingAddress: company.billingAddress || "",
         shippingAddress: company.shippingAddress || "",
         paymentTerms: company.paymentTerms || "Net 30",
         creditStatus: company.creditStatus,
         clientGrade: company.clientGrade || null,
         tagsString: company.tags?.join(", ") || "",
+        emailAddressesInput: emails,
         internalNotes: company.internalNotes || "",
       });
     }
@@ -68,9 +79,11 @@ export default function CompanyFormPage() {
 
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
+      const filteredEmails = emailFields.filter(e => e.trim() !== "");
       const payload = {
         ...data,
         tags: data.tagsString ? data.tagsString.split(",").map((t) => t.trim()).filter(Boolean) : [],
+        emailAddresses: filteredEmails.length > 0 ? filteredEmails : null,
       };
       if (isEditing) {
         return apiRequest("PATCH", `/api/companies/${params?.id}`, payload);
@@ -176,6 +189,65 @@ export default function CompanyFormPage() {
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone</FormLabel>
+                    <FormControl>
+                      <Input placeholder="+61 2 1234 5678" data-testid="input-phone" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="space-y-2">
+                <FormLabel>Email Addresses</FormLabel>
+                <FormDescription>Company email addresses used for matching incoming emails</FormDescription>
+                <div className="space-y-2">
+                  {emailFields.map((email, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Input
+                        placeholder="orders@company.com"
+                        value={email}
+                        onChange={(e) => {
+                          const updated = [...emailFields];
+                          updated[index] = e.target.value;
+                          setEmailFields(updated);
+                        }}
+                        data-testid={`input-company-email-${index}`}
+                      />
+                      {emailFields.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            const updated = emailFields.filter((_, i) => i !== index);
+                            setEmailFields(updated);
+                          }}
+                          data-testid={`button-remove-email-${index}`}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEmailFields([...emailFields, ""])}
+                    data-testid="button-add-email"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add Email
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 

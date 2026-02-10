@@ -451,6 +451,22 @@ export default function CompanyDetailPage() {
                     <p className="text-sm" data-testid="text-abn">{company.abn}</p>
                   </div>
                 )}
+                {(company as any).phone && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Phone</p>
+                    <p className="text-sm" data-testid="text-phone">{(company as any).phone}</p>
+                  </div>
+                )}
+                {company.emailAddresses && (company.emailAddresses as string[]).length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Email Addresses</p>
+                    <div className="space-y-0.5">
+                      {(company.emailAddresses as string[]).map((email, i) => (
+                        <p key={i} className="text-sm" data-testid={`text-company-email-${i}`}>{email}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-muted-foreground">Payment Terms</p>
                   <p className="text-sm" data-testid="text-payment-terms">{company.paymentTerms || "Net 30"}</p>

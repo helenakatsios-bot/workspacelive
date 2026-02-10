@@ -372,6 +372,19 @@ async function matchEmailToCompany(fromAddress: string, toAddresses: string[]): 
     }
   }
   
+  const allCompanies = await db.select().from(companies);
+  
+  for (const addr of allAddresses) {
+    const company = allCompanies.find(c => 
+      c.emailAddresses && (c.emailAddresses as string[]).some(
+        (ce: string) => ce.toLowerCase() === addr.toLowerCase()
+      )
+    );
+    if (company) {
+      return { companyId: company.id, contactId: null };
+    }
+  }
+
   const puraxDomains = ["purax.com.au", "puradown.com", "puradown.com.au"];
   const externalAddresses = allAddresses.filter(a => {
     const domain = a.split("@")[1]?.toLowerCase() || "";
@@ -379,7 +392,6 @@ async function matchEmailToCompany(fromAddress: string, toAddresses: string[]): 
   });
   
   if (externalAddresses.length > 0) {
-    const allCompanies = await db.select().from(companies);
     for (const addr of externalAddresses) {
       const domain = addr.split("@")[1]?.toLowerCase() || "";
       if (!domain || domain === "gmail.com" || domain === "yahoo.com" || domain === "outlook.com" || domain === "hotmail.com") continue;
@@ -452,6 +464,20 @@ export async function backfillEmailCompanyLinks(): Promise<number> {
       }
     }
     
+    if (!matchedCompanyId) {
+      for (const addr of allAddresses) {
+        const company = allCompanies.find(c => 
+          c.emailAddresses && (c.emailAddresses as string[]).some(
+            (ce: string) => ce.toLowerCase() === addr.toLowerCase()
+          )
+        );
+        if (company) {
+          matchedCompanyId = company.id;
+          break;
+        }
+      }
+    }
+
     if (!matchedCompanyId) {
       const puraxDomains = ["purax.com.au", "puradown.com", "puradown.com.au"];
       const externalAddresses = allAddresses.filter(a => {
