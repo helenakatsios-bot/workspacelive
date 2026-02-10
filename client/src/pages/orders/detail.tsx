@@ -26,6 +26,10 @@ import {
   Phone,
   MapPin,
   CreditCard,
+  Mail,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -79,6 +83,13 @@ export default function OrderDetailPage() {
     queryKey: ["/api/orders", params?.id, "attachments"],
     enabled: !!params?.id,
   });
+
+  const { data: sourceEmail } = useQuery<any>({
+    queryKey: ["/api/emails", order?.sourceEmailId],
+    enabled: !!order?.sourceEmailId,
+  });
+
+  const [showEmailContent, setShowEmailContent] = useState(false);
 
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
@@ -618,9 +629,55 @@ export default function OrderDetailPage() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="files" className="mt-4">
+            <TabsContent value="files" className="mt-4 space-y-4">
+              {sourceEmail && (
+                <Card data-testid="card-original-email">
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <CardTitle className="text-base">Original Order Email</CardTitle>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <Link href="/emails">
+                        <Button variant="ghost" size="icon" data-testid="button-open-email">
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setShowEmailContent(!showEmailContent)}
+                        data-testid="button-toggle-email"
+                      >
+                        {showEmailContent ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className="flex flex-col gap-1">
+                        <p className="text-sm font-medium" data-testid="text-email-subject">{sourceEmail.subject}</p>
+                        <p className="text-xs text-muted-foreground">
+                          From: {sourceEmail.senderName || sourceEmail.senderEmail}
+                          {sourceEmail.receivedAt && (
+                            <span> &middot; {format(new Date(sourceEmail.receivedAt), "MMM d, yyyy 'at' h:mm a")}</span>
+                          )}
+                        </p>
+                      </div>
+                      {showEmailContent && (
+                        <div
+                          className="mt-3 p-4 rounded-md border bg-muted/30 text-sm overflow-auto max-h-[500px]"
+                          data-testid="text-email-body"
+                          dangerouslySetInnerHTML={{ __html: sourceEmail.bodyHtml || sourceEmail.bodyPreview || "" }}
+                        />
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                   <CardTitle className="text-base">Files & Attachments</CardTitle>
                   {canEdit && (
                     <Button size="sm" data-testid="button-upload-file">
@@ -634,7 +691,6 @@ export default function OrderDetailPage() {
                     <div className="grid gap-3 sm:grid-cols-2">
                       {attachments.map((file) => {
                         const FileIcon = getFileIcon(file.fileType);
-                        const isImage = file.fileType.startsWith("image/");
                         return (
                           <div
                             key={file.id}
