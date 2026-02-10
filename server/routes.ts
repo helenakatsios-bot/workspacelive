@@ -9,7 +9,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable } from "@shared/schema";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero } from "./xero";
-import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, getEmailsForCompany, getEmailsForContact, getAllEmails } from "./outlook";
+import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails } from "./outlook";
 
 declare module "express-session" {
   interface SessionData {
@@ -1903,6 +1903,59 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Send email error:", error);
       res.status(500).json({ message: "Failed to send email" });
+    }
+  });
+
+  app.post("/api/emails/:id/reply", requireAuth, async (req, res) => {
+    try {
+      const emailId = req.params.id;
+      const { body, replyAll } = req.body;
+      
+      if (!body) {
+        return res.status(400).json({ message: "Reply body is required" });
+      }
+      
+      const [email] = await db.select().from(emailsTable).where(eq(emailsTable.id, emailId));
+      if (!email) return res.status(404).json({ message: "Email not found" });
+      
+      if (!email.outlookMessageId) {
+        return res.status(400).json({ message: "This email does not have an Outlook message ID and cannot be replied to" });
+      }
+      
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const redirectUri = `${protocol}://${host}/api/outlook/callback`;
+      
+      const accessToken = await refreshOutlookTokenIfNeeded(req.session.userId!, redirectUri);
+      if (!accessToken) {
+        return res.status(401).json({ message: "Outlook not connected or token expired. Please connect Outlook in Admin settings." });
+      }
+      
+      await replyToEmail(accessToken, email.outlookMessageId, body, replyAll === true);
+      
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "create",
+        entityType: "email_reply",
+        entityId: emailId,
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Reply email error:", error);
+      res.status(500).json({ message: "Failed to send reply" });
+    }
+  });
+
+  app.get("/api/emails/:id", requireAuth, async (req, res) => {
+    try {
+      const emailId = req.params.id;
+      const [email] = await db.select().from(emailsTable).where(eq(emailsTable.id, emailId));
+      if (!email) return res.status(404).json({ message: "Email not found" });
+      res.json(email);
+    } catch (error) {
+      console.error("Get email error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 

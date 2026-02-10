@@ -8,7 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Mail, Inbox, Send, FileEdit, Clock, User, ShoppingCart } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, Mail, Inbox, Send, FileEdit, Clock, User, ShoppingCart, Reply, ReplyAll, X } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -21,6 +22,9 @@ function isOrderEmail(email: any): boolean {
 export default function EmailsPage() {
   const [folder, setFolder] = useState("inbox");
   const [selectedEmail, setSelectedEmail] = useState<any>(null);
+  const [showReply, setShowReply] = useState(false);
+  const [replyAll, setReplyAll] = useState(false);
+  const [replyBody, setReplyBody] = useState("");
   const { toast } = useToast();
   const [, navigate] = useLocation();
 
@@ -55,6 +59,22 @@ export default function EmailsPage() {
     },
   });
 
+  const replyMutation = useMutation({
+    mutationFn: async ({ emailId, body, replyAll: ra }: { emailId: string; body: string; replyAll: boolean }) => {
+      const res = await apiRequest("POST", `/api/emails/${emailId}/reply`, { body, replyAll: ra });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Reply sent", description: "Your reply has been sent successfully." });
+      setShowReply(false);
+      setReplyBody("");
+      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to send reply", description: error?.message || "Could not send reply. Make sure Outlook is connected.", variant: "destructive" });
+    },
+  });
+
   const { data: emails, isLoading } = useQuery<any[]>({
     queryKey: ["/api/emails", folder],
     queryFn: async () => {
@@ -63,6 +83,28 @@ export default function EmailsPage() {
       return res.json();
     },
   });
+
+  const handleReply = (all: boolean) => {
+    setReplyAll(all);
+    setShowReply(true);
+    setReplyBody("");
+  };
+
+  const handleSendReply = () => {
+    if (!replyBody.trim() || !selectedEmail) return;
+    const htmlBody = replyBody.replace(/\n/g, "<br>");
+    replyMutation.mutate({ emailId: selectedEmail.id, body: htmlBody, replyAll });
+  };
+
+  const handleCreateOrderFromEmail = (email: any) => {
+    if (isOrderEmail(email)) {
+      convertToOrderMutation.mutate(email.id);
+    } else {
+      setSelectedEmail(null);
+      const fromAddr = email.fromAddress || "";
+      navigate(`/orders/new?emailId=${email.id}&fromEmail=${encodeURIComponent(fromAddr)}&subject=${encodeURIComponent(email.subject || "")}`);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -121,7 +163,11 @@ export default function EmailsPage() {
                       <TableRow
                         key={email.id}
                         className="cursor-pointer hover-elevate"
-                        onClick={() => setSelectedEmail(email)}
+                        onClick={() => {
+                          setSelectedEmail(email);
+                          setShowReply(false);
+                          setReplyBody("");
+                        }}
                         data-testid={`row-email-${email.id}`}
                       >
                         <TableCell>
@@ -175,7 +221,7 @@ export default function EmailsPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={!!selectedEmail} onOpenChange={(open) => !open && setSelectedEmail(null)}>
+      <Dialog open={!!selectedEmail} onOpenChange={(open) => { if (!open) { setSelectedEmail(null); setShowReply(false); setReplyBody(""); } }}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle data-testid="text-email-subject">{selectedEmail?.subject || "(No subject)"}</DialogTitle>
@@ -210,19 +256,74 @@ export default function EmailsPage() {
                   </div>
                 )}
               </div>
-              {isOrderEmail(selectedEmail) && (
-                <div className="flex items-center gap-2">
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleReply(false)}
+                  data-testid="button-reply"
+                >
+                  <Reply className="w-4 h-4 mr-1" />
+                  Reply
+                </Button>
+                {(selectedEmail.ccAddresses?.length > 0 || selectedEmail.toAddresses?.length > 1) && (
                   <Button
                     size="sm"
-                    onClick={() => convertToOrderMutation.mutate(selectedEmail.id)}
-                    disabled={convertToOrderMutation.isPending}
-                    data-testid="button-convert-email-to-order"
+                    variant="outline"
+                    onClick={() => handleReply(true)}
+                    data-testid="button-reply-all"
                   >
-                    <ShoppingCart className="w-4 h-4 mr-2" />
-                    {convertToOrderMutation.isPending ? "Creating Order..." : "Create Order from Email"}
+                    <ReplyAll className="w-4 h-4 mr-1" />
+                    Reply All
                   </Button>
+                )}
+                <Button
+                  size="sm"
+                  onClick={() => handleCreateOrderFromEmail(selectedEmail)}
+                  disabled={convertToOrderMutation.isPending}
+                  data-testid="button-create-order-from-email"
+                >
+                  <ShoppingCart className="w-4 h-4 mr-1" />
+                  {convertToOrderMutation.isPending ? "Creating..." : "Create Order from Email"}
+                </Button>
+              </div>
+
+              {showReply && (
+                <div className="space-y-3 border rounded-md p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">
+                      {replyAll ? "Reply All" : "Reply"} to {selectedEmail.fromName || selectedEmail.fromAddress}
+                    </p>
+                    <Button size="icon" variant="ghost" onClick={() => { setShowReply(false); setReplyBody(""); }}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <Textarea
+                    placeholder="Type your reply..."
+                    value={replyBody}
+                    onChange={(e) => setReplyBody(e.target.value)}
+                    className="min-h-32"
+                    data-testid="textarea-reply"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleSendReply}
+                      disabled={!replyBody.trim() || replyMutation.isPending}
+                      data-testid="button-send-reply"
+                    >
+                      {replyMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4 mr-1" />
+                      )}
+                      {replyMutation.isPending ? "Sending..." : "Send Reply"}
+                    </Button>
+                  </div>
                 </div>
               )}
+
               <Separator />
               <div className="prose prose-sm dark:prose-invert max-w-none">
                 {selectedEmail.bodyHtml ? (

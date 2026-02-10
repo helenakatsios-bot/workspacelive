@@ -268,6 +268,26 @@ export async function sendEmail(
   await client.api("/me/sendMail").post(message);
 }
 
+export async function replyToEmail(
+  accessToken: string,
+  messageId: string,
+  body: string,
+  replyAll: boolean = false
+): Promise<void> {
+  const client = createGraphClient(accessToken);
+  const endpoint = replyAll
+    ? `/me/messages/${messageId}/replyAll`
+    : `/me/messages/${messageId}/reply`;
+  await client.api(endpoint).post({
+    message: {
+      body: {
+        contentType: "HTML",
+        content: body,
+      },
+    },
+  });
+}
+
 export async function markEmailAsRead(accessToken: string, messageId: string): Promise<void> {
   const client = createGraphClient(accessToken);
   await client.api(`/me/messages/${messageId}`).patch({ isRead: true });

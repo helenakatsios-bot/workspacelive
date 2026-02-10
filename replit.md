@@ -123,7 +123,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Outlook Email
 - **Status**: Ready to connect
-- **Features**: OAuth 2.0 authentication, email sync, send emails from CRM
+- **Features**: OAuth 2.0 authentication, email sync, send emails from CRM, reply to emails with threading, create orders from emails
 - **Location**: Admin → Integrations tab
 - **API Routes**:
   - `GET /api/outlook/status` - Check connection status
@@ -133,6 +133,8 @@ Preferred communication style: Simple, everyday language.
   - `POST /api/outlook/sync` - Sync emails from Outlook
   - `GET /api/emails` - Get synced emails
   - `POST /api/outlook/send` - Send email via Outlook
+  - `POST /api/emails/:id/reply` - Reply to email with threading (body, replyAll)
+  - `GET /api/emails/:id` - Get single email by ID
 - **Database Tables**:
   - `outlook_tokens` - Stores OAuth tokens per user
   - `emails` - Cached emails synced from Outlook

@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { format } from "date-fns";
 import {
   ArrowLeft,
@@ -10,6 +10,7 @@ import {
   Search,
   Loader2,
   Building2,
+  Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,7 +47,8 @@ import {
 } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Company, Product } from "@shared/schema";
+import { Badge } from "@/components/ui/badge";
+import type { Company, Contact, Product } from "@shared/schema";
 
 interface OrderLineForm {
   productId: string;
@@ -61,7 +63,13 @@ interface OrderLineForm {
 
 export default function OrderFormPage() {
   const [, navigate] = useLocation();
+  const searchString = useSearch();
   const { toast } = useToast();
+
+  const queryParams = new URLSearchParams(searchString);
+  const emailId = queryParams.get("emailId");
+  const fromEmail = queryParams.get("fromEmail");
+  const emailSubject = queryParams.get("subject");
 
   const [companyId, setCompanyId] = useState("");
   const [companySearch, setCompanySearch] = useState("");
@@ -69,9 +77,12 @@ export default function OrderFormPage() {
   const [orderDate, setOrderDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [requestedShipDate, setRequestedShipDate] = useState("");
   const [shippingMethod, setShippingMethod] = useState("");
-  const [internalNotes, setInternalNotes] = useState("");
+  const [internalNotes, setInternalNotes] = useState(
+    emailId ? `Created from email: ${emailSubject || ""}` : ""
+  );
   const [customerNotes, setCustomerNotes] = useState("");
   const [lines, setLines] = useState<OrderLineForm[]>([]);
+  const [emailPrefilled, setEmailPrefilled] = useState(false);
 
   const [productSearch, setProductSearch] = useState("");
   const [productOpen, setProductOpen] = useState(false);
@@ -79,6 +90,41 @@ export default function OrderFormPage() {
   const { data: companies } = useQuery<Company[]>({
     queryKey: ["/api/companies"],
   });
+
+  const { data: contacts } = useQuery<Contact[]>({
+    queryKey: ["/api/contacts"],
+    enabled: !!fromEmail,
+  });
+
+  useEffect(() => {
+    if (emailPrefilled || !fromEmail || !companies || companies.length === 0) return;
+
+    const emailLower = fromEmail.toLowerCase();
+    if (contacts && contacts.length > 0) {
+      const matchedContact = contacts.find(
+        (ct) => ct.email?.toLowerCase() === emailLower
+      );
+      if (matchedContact?.companyId) {
+        setCompanyId(matchedContact.companyId);
+        setEmailPrefilled(true);
+        return;
+      }
+    }
+
+    const domain = fromEmail.split("@")[1]?.toLowerCase();
+    if (!domain) { setEmailPrefilled(true); return; }
+    const domainBase = domain.split(".")[0];
+    const matchedCompany = companies.find((c) => {
+      return (
+        c.legalName.toLowerCase().includes(domainBase) ||
+        (c.tradingName || "").toLowerCase().includes(domainBase)
+      );
+    });
+    if (matchedCompany) {
+      setCompanyId(matchedCompany.id);
+    }
+    setEmailPrefilled(true);
+  }, [fromEmail, companies, contacts, emailPrefilled]);
 
   const { data: products } = useQuery<Product[]>({
     queryKey: ["/api/products"],
@@ -229,7 +275,16 @@ export default function OrderFormPage() {
         </Button>
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">New Order</h1>
-          <p className="text-sm text-muted-foreground">Create a new customer order</p>
+          <p className="text-sm text-muted-foreground">
+            {emailId ? (
+              <span className="flex items-center gap-1">
+                <Mail className="w-3 h-3" />
+                Creating order from email: {emailSubject || "Unknown"}
+              </span>
+            ) : (
+              "Create a new customer order"
+            )}
+          </p>
         </div>
       </div>
 
