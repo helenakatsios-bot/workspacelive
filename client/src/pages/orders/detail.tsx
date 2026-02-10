@@ -23,6 +23,9 @@ import {
   AlertTriangle,
   RefreshCw,
   Trash2,
+  Phone,
+  MapPin,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -214,7 +217,10 @@ export default function OrderDetailPage() {
             <ShoppingCart className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold" data-testid="text-order-number">
+            <h1 className="text-2xl font-bold flex items-center gap-2 flex-wrap" data-testid="text-order-number">
+              {order.customerName && (
+                <span className="text-destructive" data-testid="text-header-customer-name">{order.customerName}</span>
+              )}
               {order.orderNumber}
             </h1>
             <p className="text-sm text-muted-foreground">
@@ -320,6 +326,50 @@ export default function OrderDetailPage() {
                     <p className="text-xs text-muted-foreground">Customer</p>
                     <p className="text-sm font-medium" data-testid="text-customer-name">
                       {order.customerName}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {order.customerAddress && (
+                <div className="flex items-start gap-3">
+                  <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Shipping Address</p>
+                    <p className="text-sm font-medium whitespace-pre-line" data-testid="text-customer-address">
+                      {order.customerAddress}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {order.customerPhone && (
+                <div className="flex items-start gap-3">
+                  <Phone className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Phone</p>
+                    <p className="text-sm font-medium" data-testid="text-customer-phone">
+                      {order.customerPhone}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {order.deliveryMethod && (
+                <div className="flex items-start gap-3">
+                  <Truck className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Delivery Method</p>
+                    <p className="text-sm font-medium" data-testid="text-delivery-method">
+                      {order.deliveryMethod}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {order.paymentMethod && (
+                <div className="flex items-start gap-3">
+                  <CreditCard className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Payment Method</p>
+                    <p className="text-sm font-medium" data-testid="text-payment-method">
+                      {order.paymentMethod}
                     </p>
                   </div>
                 </div>

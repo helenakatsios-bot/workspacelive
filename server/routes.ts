@@ -1003,7 +1003,7 @@ export async function registerRoutes(
         || (contact ? `${contact.firstName} ${contact.lastName}`.trim() : "")
         || order.customerNotes?.match(/Customer:\s*([^.]+)/)?.[1]?.trim() || "";
 
-      const customerAddress = company?.shippingAddress || company?.billingAddress || "";
+      const customerAddress = order.customerAddress || company?.shippingAddress || company?.billingAddress || "";
 
       const orderNumOnly = order.orderNumber.replace(/^PD-/, "");
       const customerDetails = customerName
@@ -1736,6 +1736,42 @@ export async function registerRoutes(
       const nameMatch = subject.match(/placed by\s+(.+)/i);
       const customerName = nameMatch ? nameMatch[1].trim() : "";
 
+      // Extract customer details from email HTML body
+      const bodyHtml = email.bodyHtml || "";
+      const plainText = bodyHtml.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
+
+      let customerPhone = "";
+      let customerAddress = "";
+      let deliveryMethodVal = "";
+      let paymentMethodVal = "";
+
+      // Extract payment processing method
+      const paymentMatch = plainText.match(/Payment processing method\s+(.+?)(?=Delivery method|Shipping address|Billing address|$)/i);
+      if (paymentMatch) paymentMethodVal = paymentMatch[1].trim();
+
+      // Extract delivery method
+      const deliveryMatch = plainText.match(/Delivery method\s+(.+?)(?=Shipping address|Billing address|Payment processing|$)/i);
+      if (deliveryMatch) deliveryMethodVal = deliveryMatch[1].trim();
+
+      // Extract shipping address block
+      const shippingAddrMatch = plainText.match(/Shipping address\s+(.+?)(?=Billing address|$)/i);
+      if (shippingAddrMatch) {
+        let addrBlock = shippingAddrMatch[1].trim();
+        // Remove the Shopify footer address (Ottawa, ON)
+        addrBlock = addrBlock.replace(/\d+\s+O'Connor\s+Street.*$/i, "").trim();
+        // Extract phone number (Australian or international format)
+        const phoneMatch = addrBlock.match(/(\+?\d[\d\s\-]{8,})/);
+        if (phoneMatch) {
+          customerPhone = phoneMatch[1].trim();
+          addrBlock = addrBlock.replace(phoneMatch[0], "").trim();
+        }
+        // Remove customer name from address if it's the first part
+        if (customerName && addrBlock.toLowerCase().startsWith(customerName.toLowerCase())) {
+          addrBlock = addrBlock.substring(customerName.length).trim();
+        }
+        customerAddress = addrBlock;
+      }
+
       const lines: Array<{ description: string; quantity: number; unitPrice: number; lineTotal: number }> = [];
 
       const summaryStart = preview.indexOf("Order summary");
@@ -1840,6 +1876,10 @@ export async function registerRoutes(
         tax: "0",
         total: total.toFixed(2),
         customerName: customerName || null,
+        customerPhone: customerPhone || null,
+        customerAddress: customerAddress || null,
+        deliveryMethod: deliveryMethodVal || null,
+        paymentMethod: paymentMethodVal || null,
         customerNotes: `Converted from Puradown email. Customer: ${customerName}. Shipping: $${shipping.toFixed(2)}`,
         createdBy: req.session.userId,
       });

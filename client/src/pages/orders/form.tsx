@@ -87,6 +87,11 @@ export default function OrderFormPage() {
     }
     return "";
   });
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [deliveryMethod, setDeliveryMethod] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
   const [customerNotes, setCustomerNotes] = useState("");
   const [lines, setLines] = useState<OrderLineForm[]>([]);
   const [emailPrefilled, setEmailPrefilled] = useState(false);
@@ -246,6 +251,11 @@ export default function OrderFormPage() {
         total: total.toFixed(2),
         internalNotes: internalNotes || null,
         customerName: customerName || null,
+        customerPhone: customerPhone || null,
+        customerAddress: customerAddress || null,
+        customerEmail: customerEmail || null,
+        deliveryMethod: deliveryMethod || null,
+        paymentMethod: paymentMethod || null,
         customerNotes: customerNotes || null,
         lines: lines.map((l) => ({
           productId: l.productId,
@@ -357,17 +367,78 @@ export default function OrderFormPage() {
                   </Command>
                 </PopoverContent>
               </Popover>
-              <div className="mt-4">
-                <label className="text-sm font-medium" htmlFor="customerName">Customer Name</label>
-                <Input
-                  id="customerName"
-                  placeholder="e.g. Zoe Kiousis"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="mt-1"
-                  data-testid="input-customer-name"
-                />
-                <p className="text-xs text-muted-foreground mt-1">End customer who placed the order</p>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="text-sm font-medium" htmlFor="customerName">Customer Name</label>
+                  <Input
+                    id="customerName"
+                    placeholder="e.g. Zoe Kiousis"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    className="mt-1"
+                    data-testid="input-customer-name"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium" htmlFor="customerAddress">Shipping Address</label>
+                  <Textarea
+                    id="customerAddress"
+                    placeholder="e.g. unit 3/19-23 Sturdee Parade, Dee Why NSW 2099"
+                    value={customerAddress}
+                    onChange={(e) => setCustomerAddress(e.target.value)}
+                    className="mt-1"
+                    data-testid="input-customer-address"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="customerPhone">Phone</label>
+                    <Input
+                      id="customerPhone"
+                      placeholder="e.g. +61403862311"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      className="mt-1"
+                      data-testid="input-customer-phone"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="customerEmail">Email</label>
+                    <Input
+                      id="customerEmail"
+                      placeholder="e.g. customer@email.com"
+                      value={customerEmail}
+                      onChange={(e) => setCustomerEmail(e.target.value)}
+                      className="mt-1"
+                      data-testid="input-customer-email"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="deliveryMethod">Delivery Method</label>
+                    <Input
+                      id="deliveryMethod"
+                      placeholder="e.g. Standard"
+                      value={deliveryMethod}
+                      onChange={(e) => setDeliveryMethod(e.target.value)}
+                      className="mt-1"
+                      data-testid="input-delivery-method"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="paymentMethod">Payment Method</label>
+                    <Input
+                      id="paymentMethod"
+                      placeholder="e.g. Shopify payments"
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      className="mt-1"
+                      data-testid="input-payment-method"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">Customer details are auto-filled when converting from Shopify emails</p>
               </div>
             </CardContent>
           </Card>

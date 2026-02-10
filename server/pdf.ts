@@ -80,8 +80,32 @@ export function generateOrderPdf(data: OrderPdfData): Promise<Buffer> {
 
       if (data.order.customerName) {
         doc.moveDown(0.2);
-        doc.fontSize(9).font("Helvetica-Bold").fillColor("#666666").text("CUSTOMER NAME");
+        doc.fontSize(9).font("Helvetica-Bold").fillColor("#666666").text("CUSTOMER");
         doc.fontSize(10).font("Helvetica").fillColor("#000000").text(data.order.customerName);
+        if (data.order.customerPhone) {
+          doc.fontSize(9).font("Helvetica").fillColor("#000000").text(`Phone: ${data.order.customerPhone}`);
+        }
+        if (data.order.customerEmail) {
+          doc.fontSize(9).font("Helvetica").fillColor("#000000").text(`Email: ${data.order.customerEmail}`);
+        }
+      }
+
+      if (data.order.customerAddress) {
+        doc.moveDown(0.2);
+        doc.fontSize(9).font("Helvetica-Bold").fillColor("#666666").text("SHIPPING ADDRESS");
+        doc.fontSize(9).font("Helvetica").fillColor("#000000").text(data.order.customerAddress);
+      }
+
+      if (data.order.deliveryMethod || data.order.paymentMethod) {
+        doc.moveDown(0.2);
+        if (data.order.deliveryMethod) {
+          doc.fontSize(9).font("Helvetica").fillColor("#666666").text("Delivery: ", { continued: true });
+          doc.fillColor("#000000").text(data.order.deliveryMethod);
+        }
+        if (data.order.paymentMethod) {
+          doc.fontSize(9).font("Helvetica").fillColor("#666666").text("Payment: ", { continued: true });
+          doc.fillColor("#000000").text(data.order.paymentMethod);
+        }
       }
 
       if (data.company.billingAddress || data.company.shippingAddress) {
