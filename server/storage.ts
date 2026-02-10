@@ -482,6 +482,8 @@ export class DatabaseStorage implements IStorage {
 
   async deleteOrder(id: string): Promise<boolean> {
     await db.delete(orderLines).where(eq(orderLines.orderId, id));
+    await db.update(invoices).set({ orderId: null }).where(eq(invoices.orderId, id));
+    await db.update(customerOrderRequests).set({ convertedOrderId: null }).where(eq(customerOrderRequests.convertedOrderId, id));
     const result = await db.delete(orders).where(eq(orders.id, id));
     return (result.rowCount ?? 0) > 0;
   }
