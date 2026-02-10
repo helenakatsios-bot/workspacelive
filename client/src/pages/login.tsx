@@ -50,7 +50,7 @@ export default function LoginPage() {
             <Building2 className="w-8 h-8 text-primary-foreground" />
           </div>
           <div>
-            <CardTitle className="text-2xl font-bold">Business CRM</CardTitle>
+            <CardTitle className="text-2xl font-bold">Purax CRM</CardTitle>
             <CardDescription className="mt-1">
               Sign in to your account to continue
             </CardDescription>

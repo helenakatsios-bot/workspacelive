@@ -160,7 +160,7 @@ export function AppSidebar() {
             <Building2 className="w-5 h-5 text-primary-foreground" />
           </div>
           <div className="flex flex-col">
-            <span className="font-semibold text-sm">Business CRM</span>
+            <span className="font-semibold text-sm">Purax CRM</span>
             <span className="text-xs text-muted-foreground">Order Management</span>
           </div>
         </div>
