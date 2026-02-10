@@ -972,6 +972,14 @@ export async function registerRoutes(
       const contact = order.contactId ? await storage.getContact(order.contactId) : null;
       const lines = await storage.getOrderLines(order.id);
 
+      let originalEmailHtml: string | null = null;
+      if (order.sourceEmailId) {
+        const [sourceEmail] = await db.select().from(emailsTable).where(eq(emailsTable.id, order.sourceEmailId));
+        if (sourceEmail) {
+          originalEmailHtml = sourceEmail.bodyHtml || null;
+        }
+      }
+
       const linesWithProducts = await Promise.all(
         lines.map(async (line) => {
           let productName = line.descriptionOverride || "Unknown Item";
@@ -1025,6 +1033,7 @@ export async function registerRoutes(
         tax: `$${order.tax}`,
         totalAmount: `$${order.total}`,
         pdfData: pdfBuffer.toString("base64"),
+        originalEmailHtml: originalEmailHtml || null,
         isUrgent: false,
       };
 
@@ -1887,6 +1896,7 @@ export async function registerRoutes(
         customerAddress: customerAddress || null,
         deliveryMethod: deliveryMethodVal || null,
         paymentMethod: paymentMethodVal || null,
+        sourceEmailId: emailId,
         customerNotes: `Converted from Puradown email. Customer: ${customerName}. Shipping: $${shipping.toFixed(2)}`,
         createdBy: req.session.userId,
       });
