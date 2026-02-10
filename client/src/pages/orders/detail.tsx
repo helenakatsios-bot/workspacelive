@@ -313,6 +313,17 @@ export default function OrderDetailPage() {
                   </Link>
                 </div>
               </div>
+              {order.customerName && (
+                <div className="flex items-start gap-3">
+                  <User className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Customer</p>
+                    <p className="text-sm font-medium" data-testid="text-customer-name">
+                      {order.customerName}
+                    </p>
+                  </div>
+                </div>
+              )}
               {order.contact && (
                 <div className="flex items-start gap-3">
                   <User className="w-4 h-4 text-muted-foreground mt-0.5" />

@@ -999,16 +999,21 @@ export async function registerRoutes(
         `${line.quantity}x ${line.productName}${line.productSku ? ` (${line.productSku})` : ""} @ $${line.unitPrice} = $${line.lineTotal}`
       ).join("\n");
 
-      const customerName = contact
-        ? `${contact.firstName} ${contact.lastName}`.trim()
-        : order.customerNotes?.match(/Customer:\s*([^.]+)/)?.[1]?.trim() || "";
+      const customerName = order.customerName
+        || (contact ? `${contact.firstName} ${contact.lastName}`.trim() : "")
+        || order.customerNotes?.match(/Customer:\s*([^.]+)/)?.[1]?.trim() || "";
 
       const customerAddress = company?.shippingAddress || company?.billingAddress || "";
+
+      const orderNumOnly = order.orderNumber.replace(/^PD-/, "");
+      const customerDetails = customerName
+        ? `${orderNumOnly} ${customerName}`
+        : orderNumOnly;
 
       const webhookPayload = {
         orderNumber: order.orderNumber,
         companyName: company?.tradingName || company?.legalName || "",
-        customerName,
+        customerName: customerDetails,
         customerAddress,
         orderDetails: orderDetailsText,
         totalAmount: `$${order.total}`,
@@ -1834,6 +1839,7 @@ export async function registerRoutes(
         subtotal: subtotal.toFixed(2),
         tax: "0",
         total: total.toFixed(2),
+        customerName: customerName || null,
         customerNotes: `Converted from Puradown email. Customer: ${customerName}. Shipping: $${shipping.toFixed(2)}`,
         createdBy: req.session.userId,
       });

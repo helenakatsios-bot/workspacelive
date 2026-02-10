@@ -78,6 +78,12 @@ export function generateOrderPdf(data: OrderPdfData): Promise<Buffer> {
 
       doc.fillColor("#000000");
 
+      if (data.order.customerName) {
+        doc.moveDown(0.2);
+        doc.fontSize(9).font("Helvetica-Bold").fillColor("#666666").text("CUSTOMER NAME");
+        doc.fontSize(10).font("Helvetica").fillColor("#000000").text(data.order.customerName);
+      }
+
       if (data.company.billingAddress || data.company.shippingAddress) {
         doc.moveDown(0.3);
         const addrY = doc.y;

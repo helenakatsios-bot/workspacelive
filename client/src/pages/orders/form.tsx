@@ -80,6 +80,13 @@ export default function OrderFormPage() {
   const [internalNotes, setInternalNotes] = useState(
     emailId ? `Created from email: ${emailSubject || ""}` : ""
   );
+  const [customerName, setCustomerName] = useState(() => {
+    if (emailSubject) {
+      const nameMatch = emailSubject.match(/placed by\s+(.+)/i);
+      return nameMatch ? nameMatch[1].trim() : "";
+    }
+    return "";
+  });
   const [customerNotes, setCustomerNotes] = useState("");
   const [lines, setLines] = useState<OrderLineForm[]>([]);
   const [emailPrefilled, setEmailPrefilled] = useState(false);
@@ -238,6 +245,7 @@ export default function OrderFormPage() {
         tax: tax.toFixed(2),
         total: total.toFixed(2),
         internalNotes: internalNotes || null,
+        customerName: customerName || null,
         customerNotes: customerNotes || null,
         lines: lines.map((l) => ({
           productId: l.productId,
@@ -349,6 +357,18 @@ export default function OrderFormPage() {
                   </Command>
                 </PopoverContent>
               </Popover>
+              <div className="mt-4">
+                <label className="text-sm font-medium" htmlFor="customerName">Customer Name</label>
+                <Input
+                  id="customerName"
+                  placeholder="e.g. Zoe Kiousis"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="mt-1"
+                  data-testid="input-customer-name"
+                />
+                <p className="text-xs text-muted-foreground mt-1">End customer who placed the order</p>
+              </div>
             </CardContent>
           </Card>
 
