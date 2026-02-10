@@ -165,6 +165,7 @@ export const orders = pgTable("orders", {
   total: decimal("total", { precision: 12, scale: 2 }).notNull().default("0"),
   internalNotes: text("internal_notes"),
   customerNotes: text("customer_notes"),
+  customerName: text("customer_name"),
   puraxSyncStatus: text("purax_sync_status").default("not_sent"), // not_sent, sent, failed
   puraxSyncedAt: timestamp("purax_synced_at"),
   puraxOrderId: text("purax_order_id"),
