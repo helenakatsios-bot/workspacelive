@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Mail, Inbox, Send, FileEdit, Clock, User, ShoppingCart, Reply, ReplyAll, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, Mail, Inbox, Send, FileEdit, Clock, User, ShoppingCart, Reply, ReplyAll, X, Search } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -22,6 +23,7 @@ function isOrderEmail(email: any): boolean {
 export default function EmailsPage() {
   const [folder, setFolder] = useState("inbox");
   const [selectedEmail, setSelectedEmail] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [showReply, setShowReply] = useState(false);
   const [replyAll, setReplyAll] = useState(false);
   const [replyBody, setReplyBody] = useState("");
@@ -123,30 +125,62 @@ export default function EmailsPage() {
         </div>
       </div>
 
-      <Tabs value={folder} onValueChange={setFolder}>
-        <TabsList>
-          <TabsTrigger value="inbox" data-testid="tab-inbox">
-            <Inbox className="w-4 h-4 mr-2" />
-            Inbox
-          </TabsTrigger>
-          <TabsTrigger value="sent" data-testid="tab-sent">
-            <Send className="w-4 h-4 mr-2" />
-            Sent
-          </TabsTrigger>
-          <TabsTrigger value="drafts" data-testid="tab-drafts">
-            <FileEdit className="w-4 h-4 mr-2" />
-            Drafts
-          </TabsTrigger>
-        </TabsList>
+      <Tabs value={folder} onValueChange={(v) => { setFolder(v); setSearchQuery(""); }}>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <TabsList>
+            <TabsTrigger value="inbox" data-testid="tab-inbox">
+              <Inbox className="w-4 h-4 mr-2" />
+              Inbox
+            </TabsTrigger>
+            <TabsTrigger value="sent" data-testid="tab-sent">
+              <Send className="w-4 h-4 mr-2" />
+              Sent
+            </TabsTrigger>
+            <TabsTrigger value="drafts" data-testid="tab-drafts">
+              <FileEdit className="w-4 h-4 mr-2" />
+              Drafts
+            </TabsTrigger>
+          </TabsList>
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search emails..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+              data-testid="input-email-search"
+            />
+          </div>
+        </div>
 
         <TabsContent value={folder} className="mt-4">
           <Card>
             <CardContent className="p-0">
-              {!emails || emails.length === 0 ? (
+              {(() => {
+                const q = searchQuery.toLowerCase().trim();
+                const filtered = !emails ? [] : q
+                  ? emails.filter((e: any) =>
+                      (e.subject || "").toLowerCase().includes(q) ||
+                      (e.fromName || "").toLowerCase().includes(q) ||
+                      (e.fromAddress || "").toLowerCase().includes(q) ||
+                      (e.bodyPreview || "").toLowerCase().includes(q) ||
+                      (e.toAddresses || []).some((a: string) => a.toLowerCase().includes(q))
+                    )
+                  : emails;
+                return filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                   <Mail className="w-10 h-10 mb-3 opacity-40" />
-                  <p className="text-sm">No emails in this folder</p>
-                  <p className="text-xs mt-1">Connect Outlook in Admin settings to sync emails</p>
+                  {q ? (
+                    <>
+                      <p className="text-sm">No emails matching "{searchQuery}"</p>
+                      <p className="text-xs mt-1">Try a different search term</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm">No emails in this folder</p>
+                      <p className="text-xs mt-1">Connect Outlook in Admin settings to sync emails</p>
+                    </>
+                  )}
                 </div>
               ) : (
                 <Table>
@@ -159,7 +193,7 @@ export default function EmailsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {emails.map((email: any) => (
+                    {filtered.map((email: any) => (
                       <TableRow
                         key={email.id}
                         className="cursor-pointer hover-elevate"
@@ -215,7 +249,8 @@ export default function EmailsPage() {
                     ))}
                   </TableBody>
                 </Table>
-              )}
+              );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
