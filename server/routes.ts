@@ -9,7 +9,7 @@ import { z } from "zod";
 import { eq, ilike } from "drizzle-orm";
 import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts } from "@shared/schema";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero } from "./xero";
-import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails } from "./outlook";
+import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks } from "./outlook";
 
 declare module "express-session" {
   interface SessionData {
@@ -2202,6 +2202,16 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Get email error:", error);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/emails/backfill-companies", requireAdmin, async (_req, res) => {
+    try {
+      const updated = await backfillEmailCompanyLinks();
+      res.json({ success: true, updated });
+    } catch (error) {
+      console.error("Backfill error:", error);
+      res.status(500).json({ message: "Failed to backfill email company links" });
     }
   });
 

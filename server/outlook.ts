@@ -2,7 +2,7 @@ import { ConfidentialClientApplication, Configuration, AuthorizationCodeRequest,
 import { Client } from "@microsoft/microsoft-graph-client";
 import { db } from "./db";
 import { outlookTokens, emails, contacts, companies } from "@shared/schema";
-import { eq, desc, and, or, ilike } from "drizzle-orm";
+import { eq, desc, and, or, ilike, isNull } from "drizzle-orm";
 
 const OUTLOOK_CLIENT_ID = process.env.OUTLOOK_CLIENT_ID;
 const OUTLOOK_CLIENT_SECRET = process.env.OUTLOOK_CLIENT_SECRET;
@@ -326,14 +326,15 @@ export async function syncEmailsToDatabase(
     
     if (existing.length === 0) {
       const fromAddress = msg.from?.emailAddress?.address || "unknown";
-      const matchedContact = await findContactByEmail(fromAddress);
+      const toAddresses = msg.toRecipients?.map(r => r.emailAddress?.address || "").filter(Boolean) || [];
+      const match = await matchEmailToCompany(fromAddress, toAddresses);
       
       await db.insert(emails).values({
         outlookMessageId: msg.id,
         userId,
         fromAddress,
         fromName: msg.from?.emailAddress?.name || null,
-        toAddresses: msg.toRecipients?.map(r => r.emailAddress?.address || "").filter(Boolean) || [],
+        toAddresses,
         ccAddresses: msg.ccRecipients?.map(r => r.emailAddress?.address || "").filter(Boolean) || [],
         subject: msg.subject || null,
         bodyPreview: msg.bodyPreview || null,
@@ -343,8 +344,8 @@ export async function syncEmailsToDatabase(
         sentAt: msg.sentDateTime ? new Date(msg.sentDateTime) : null,
         receivedAt: msg.receivedDateTime ? new Date(msg.receivedDateTime) : null,
         folder,
-        companyId: matchedContact?.companyId || null,
-        contactId: matchedContact?.id || null,
+        companyId: match.companyId,
+        contactId: match.contactId,
       });
       synced++;
     }
@@ -359,6 +360,41 @@ async function findContactByEmail(emailAddress: string) {
     .where(ilike(contacts.email, emailAddress))
     .limit(1);
   return contact;
+}
+
+async function matchEmailToCompany(fromAddress: string, toAddresses: string[]): Promise<{ companyId: string | null; contactId: string | null }> {
+  const allAddresses = [fromAddress, ...toAddresses].filter(Boolean);
+  
+  for (const addr of allAddresses) {
+    const contact = await findContactByEmail(addr);
+    if (contact) {
+      return { companyId: contact.companyId, contactId: contact.id };
+    }
+  }
+  
+  const puraxDomains = ["purax.com.au", "puradown.com", "puradown.com.au"];
+  const externalAddresses = allAddresses.filter(a => {
+    const domain = a.split("@")[1]?.toLowerCase() || "";
+    return !puraxDomains.includes(domain);
+  });
+  
+  if (externalAddresses.length > 0) {
+    const allCompanies = await db.select().from(companies);
+    for (const addr of externalAddresses) {
+      const domain = addr.split("@")[1]?.toLowerCase() || "";
+      if (!domain || domain === "gmail.com" || domain === "yahoo.com" || domain === "outlook.com" || domain === "hotmail.com") continue;
+      
+      for (const company of allCompanies) {
+        const companyName = (company.tradingName || company.legalName || "").toLowerCase().replace(/[\/\s]+/g, "");
+        const domainBase = domain.split(".")[0].toLowerCase();
+        if (domainBase.length > 2 && companyName.includes(domainBase)) {
+          return { companyId: company.id, contactId: null };
+        }
+      }
+    }
+  }
+  
+  return { companyId: null, contactId: null };
 }
 
 export async function getEmailsForCompany(companyId: string, limit: number = 50) {
@@ -393,6 +429,78 @@ export async function getAllEmails(userId: string, folder?: string, limit: numbe
   }
   
   return await query;
+}
+
+export async function backfillEmailCompanyLinks(): Promise<number> {
+  const unlinkedEmails = await db.select().from(emails).where(isNull(emails.companyId));
+  let updated = 0;
+  const allCompanies = await db.select().from(companies);
+  const allContacts = await db.select().from(contacts);
+  
+  for (const email of unlinkedEmails) {
+    const toAddresses = (email.toAddresses || []) as string[];
+    const allAddresses = [email.fromAddress, ...toAddresses].filter(Boolean);
+    let matchedCompanyId: string | null = null;
+    let matchedContactId: string | null = null;
+    
+    for (const addr of allAddresses) {
+      const contact = allContacts.find(c => c.email && c.email.toLowerCase() === addr.toLowerCase());
+      if (contact) {
+        matchedCompanyId = contact.companyId;
+        matchedContactId = contact.id;
+        break;
+      }
+    }
+    
+    if (!matchedCompanyId) {
+      const puraxDomains = ["purax.com.au", "puradown.com", "puradown.com.au"];
+      const externalAddresses = allAddresses.filter(a => {
+        const domain = a.split("@")[1]?.toLowerCase() || "";
+        return !puraxDomains.includes(domain);
+      });
+      
+      for (const addr of externalAddresses) {
+        const domain = addr.split("@")[1]?.toLowerCase() || "";
+        if (!domain || ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com"].includes(domain)) continue;
+        const domainBase = domain.split(".")[0].toLowerCase();
+        if (domainBase.length > 2) {
+          const company = allCompanies.find(c => {
+            const name = (c.tradingName || c.legalName || "").toLowerCase().replace(/[\/\s]+/g, "");
+            return name.includes(domainBase);
+          });
+          if (company) {
+            matchedCompanyId = company.id;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (!matchedCompanyId && email.subject) {
+      const nameMatch = email.subject.match(/placed by\s+(.+?)$/i);
+      if (nameMatch) {
+        const customerName = nameMatch[1].trim().toLowerCase();
+        const contact = allContacts.find(c => {
+          const fullName = `${c.firstName} ${c.lastName}`.trim().toLowerCase();
+          return fullName === customerName;
+        });
+        if (contact) {
+          matchedCompanyId = contact.companyId;
+          matchedContactId = contact.id;
+        }
+      }
+    }
+    
+    if (matchedCompanyId) {
+      await db.update(emails).set({
+        companyId: matchedCompanyId,
+        contactId: matchedContactId || email.contactId,
+      }).where(eq(emails.id, email.id));
+      updated++;
+    }
+  }
+  
+  return updated;
 }
 
 let autoSyncInterval: ReturnType<typeof setInterval> | null = null;

@@ -107,6 +107,19 @@ export default function CompanyDetailPage() {
     enabled: !!params?.id,
   });
 
+  const { data: companyEmails } = useQuery<any[]>({
+    queryKey: ["/api/emails", { companyId: params?.id }],
+    queryFn: async () => {
+      const res = await fetch(`/api/emails?companyId=${params?.id}&limit=50`);
+      if (!res.ok) throw new Error("Failed to fetch emails");
+      return res.json();
+    },
+    enabled: !!params?.id,
+  });
+
+  const [emailsOpen, setEmailsOpen] = useState(true);
+  const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
+
   const toggleCreditMutation = useMutation({
     mutationFn: async () => {
       const newStatus = company?.creditStatus === "active" ? "on_hold" : "active";
@@ -856,6 +869,68 @@ export default function CompanyDetailPage() {
                     <div className="text-center py-4 text-muted-foreground">
                       <ShoppingCart className="w-6 h-6 mx-auto mb-1 opacity-50" />
                       <p className="text-xs">No orders yet</p>
+                    </div>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Emails */}
+          <Collapsible open={emailsOpen} onOpenChange={setEmailsOpen}>
+            <Card>
+              <CollapsibleTrigger className="w-full">
+                <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between gap-2 cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${emailsOpen ? "" : "-rotate-90"}`} />
+                    <CardTitle className="text-sm font-medium">
+                      Emails ({companyEmails?.length || 0})
+                    </CardTitle>
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="p-3 pt-0">
+                  {companyEmails && companyEmails.length > 0 ? (
+                    <div className="space-y-2">
+                      {companyEmails.slice(0, 10).map((email) => (
+                        <div key={email.id} className="rounded-md border overflow-hidden">
+                          <div
+                            className="flex items-start gap-2 p-2 hover-elevate cursor-pointer"
+                            onClick={() => setExpandedEmailId(expandedEmailId === email.id ? null : email.id)}
+                            data-testid={`row-email-${email.id}`}
+                          >
+                            <Mail className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-sm truncate">{email.subject || "(No subject)"}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {email.fromName || email.fromAddress}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {email.receivedAt ? format(new Date(email.receivedAt), "MMM d, yyyy") : ""}
+                              </p>
+                            </div>
+                          </div>
+                          {expandedEmailId === email.id && (
+                            <div
+                              className="p-3 border-t bg-muted/30 text-sm overflow-auto max-h-[300px]"
+                              dangerouslySetInnerHTML={{ __html: email.bodyHtml || email.bodyPreview || "" }}
+                            />
+                          )}
+                        </div>
+                      ))}
+                      {companyEmails.length > 10 && (
+                        <Link href="/emails">
+                          <p className="text-xs text-primary cursor-pointer hover:underline text-center">
+                            View all {companyEmails.length} emails
+                          </p>
+                        </Link>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <Mail className="w-6 h-6 mx-auto mb-1 opacity-50" />
+                      <p className="text-xs">No emails linked</p>
                     </div>
                   )}
                 </CardContent>
