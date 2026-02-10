@@ -19,11 +19,9 @@ import {
   FolderOpen,
   Activity,
   TrendingUp,
-  Megaphone,
   Mail,
   ClipboardList,
   BarChart2,
-  Send,
   Store,
   Headphones,
   Sparkles,
@@ -91,6 +89,8 @@ const crmItems = [
   { title: "Inbox", url: "/crm/inbox", icon: Inbox },
   { title: "Calls", url: "/crm/calls", icon: Phone },
   { title: "Tasks", url: "/crm/tasks", icon: CheckSquare },
+  { title: "Email", url: "/marketing/email", icon: Mail },
+  { title: "Forms", url: "/marketing/forms", icon: ClipboardList },
   { title: "Playbooks", url: "/crm/playbooks", icon: BookOpen },
   { title: "Message Templates", url: "/crm/message-templates", icon: MessageSquareText },
   { title: "Snippets", url: "/crm/snippets", icon: TextSelect },
@@ -109,12 +109,6 @@ const salesItems = [
   { title: "Sales Analytics", url: "/sales/analytics", icon: BarChart2 },
 ];
 
-const marketingItems = [
-  { title: "Campaigns", url: "/marketing/campaigns", icon: Megaphone },
-  { title: "Email", url: "/marketing/email", icon: Mail },
-  { title: "Forms", url: "/marketing/forms", icon: ClipboardList },
-  { title: "Marketing Analytics", url: "/marketing/analytics", icon: BarChart3 },
-];
 
 const serviceItems = [
   { title: "Help Desk", url: "/service/help-desk", icon: HelpCircle },
@@ -143,10 +137,10 @@ export function AppSidebar() {
     return location.startsWith(url);
   };
 
-  const isCrmActive = location.startsWith("/crm") || ["/contacts", "/companies", "/deals", "/orders"].some(p => location.startsWith(p));
+  const isCrmActive = location.startsWith("/crm") || location.startsWith("/marketing") || ["/contacts", "/companies", "/deals", "/orders"].some(p => location.startsWith(p));
   const isTransactionsActive = ["/quotes", "/invoices"].some(p => location.startsWith(p));
   const isSalesActive = location.startsWith("/sales");
-  const isMarketingActive = location.startsWith("/marketing");
+
   const isCommerceActive = location.startsWith("/commerce");
   const isServiceActive = location.startsWith("/service");
   const isDataMgmtActive = location.startsWith("/data-management");
@@ -296,39 +290,6 @@ export function AppSidebar() {
           </Collapsible>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <Collapsible defaultOpen={isMarketingActive} className="group/marketing">
-            <CollapsibleTrigger className="w-full">
-              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
-                <div className="flex items-center gap-2">
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Marketing</span>
-                </div>
-                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/marketing:rotate-180" />
-              </SidebarGroupLabel>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {marketingItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        data-active={isActive(item.url)}
-                        className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                      >
-                        <Link href={item.url} data-testid={`nav-marketing-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                          <item.icon className="w-4 h-4" />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </Collapsible>
-        </SidebarGroup>
 
         <SidebarGroup>
           <Collapsible defaultOpen={isCommerceActive} className="group/commerce">
