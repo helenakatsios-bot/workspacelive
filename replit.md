@@ -23,6 +23,9 @@ A professional B2B CRM and order management system designed for wholesale manufa
 - **Audit Logging**: All create/update operations are logged for compliance and accountability
 - **Beginner-Safe UI**: Professional, opinionated interface that guides users and prevents data corruption
 - **Ask Millie (AI Assistant)**: Internal AI chat assistant named "Millie" that helps staff navigate and use the CRM. Located in Service > Ask Millie. Uses OpenAI via Replit AI Integrations. Conversations are scoped per-user for privacy. Streams responses via SSE. Database tables: conversations (with user_id), messages.
+- **Customer Success**: Tracks ordering patterns and identifies inactive customers. Located in Service > Customer Success. Shows Healthy/At Risk/Inactive status based on days since last order (30/60 day thresholds). Displays avg order gap, total orders, revenue. "Send 60-Day Alert" button emails helena@purax.com.au and michele@purax.com.au. Automated daily inactivity checker runs every 24 hours and sends alerts automatically when Outlook is connected.
+  - **API Routes**: GET /api/customer-success/metrics, GET /api/customer-success/inactive?days=60, POST /api/customer-success/send-inactivity-alert (admin only)
+  - **Automated Checker**: server/inactivity-checker.ts - runs daily, sends email via Outlook if customers are 60+ days inactive
 - **Public Customer Order Form**: Shareable link (/order) that customers can use to browse the product catalogue, select items, and submit orders directly. Orders appear in the CRM for review. Email notifications via Outlook when configured.
   - **Public URL**: /order (no login required)
   - **Admin Settings**: Admin → Order Form tab shows the shareable link, notification email config, and incoming order requests

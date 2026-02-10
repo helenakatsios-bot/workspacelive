@@ -6,6 +6,7 @@ import { seedDatabase } from "./seed";
 import { pool } from "./db";
 import { syncProductionData } from "./data-sync";
 import { startAutoEmailSync } from "./outlook";
+import { startInactivityChecker } from "./inactivity-checker";
 
 const app = express();
 const httpServer = createServer(app);
@@ -177,6 +178,7 @@ app.use((req, res, next) => {
 
       const redirectUri = "https://puraxfeatherholdingscrm.replit.app/api/outlook/callback";
       startAutoEmailSync(redirectUri, 5);
+      startInactivityChecker(redirectUri);
     },
   );
 })();

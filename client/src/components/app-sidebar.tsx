@@ -111,13 +111,11 @@ const salesItems = [
 
 
 const serviceItems = [
-  { title: "Help Desk", url: "/service/help-desk", icon: HelpCircle },
   { title: "Customer Success", url: "/service/customer-success", icon: Award },
   { title: "Ask Millie", url: "/service/customer-agent", icon: Bot },
   { title: "Chatflows", url: "/service/chatflows", icon: MessageCircle },
   { title: "Knowledge Base", url: "/service/knowledge-base", icon: BookOpenCheck },
   { title: "Customer Portal", url: "/service/customer-portal", icon: Globe },
-  { title: "Feedback Surveys", url: "/service/feedback-surveys", icon: ClipboardCheck },
   { title: "Service Analytics", url: "/service/analytics", icon: BarChart3 },
 ];
 
