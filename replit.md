@@ -22,6 +22,7 @@ A professional B2B CRM and order management system designed for wholesale manufa
   - **Read-only**: View-only access to all data
 - **Audit Logging**: All create/update operations are logged for compliance and accountability
 - **Beginner-Safe UI**: Professional, opinionated interface that guides users and prevents data corruption
+- **Ask Millie (AI Assistant)**: Internal AI chat assistant named "Millie" that helps staff navigate and use the CRM. Located in Service > Ask Millie. Uses OpenAI via Replit AI Integrations. Conversations are scoped per-user for privacy. Streams responses via SSE. Database tables: conversations (with user_id), messages.
 - **Public Customer Order Form**: Shareable link (/order) that customers can use to browse the product catalogue, select items, and submit orders directly. Orders appear in the CRM for review. Email notifications via Outlook when configured.
   - **Public URL**: /order (no login required)
   - **Admin Settings**: Admin → Order Form tab shows the shareable link, notification email config, and incoming order requests

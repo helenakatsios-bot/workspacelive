@@ -417,6 +417,7 @@ export type CrmSetting = typeof crmSettings.$inferSelect;
 // ============ AI AGENT CONVERSATIONS ============
 export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
+  userId: text("user_id"),
   title: text("title").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
