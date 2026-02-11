@@ -433,6 +433,38 @@ export const messages = pgTable("messages", {
 export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 
+// ============ FORMS ============
+export const forms = pgTable("forms", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("draft"),
+  fields: jsonb("fields").notNull().default([]),
+  submitButtonText: text("submit_button_text").default("Submit"),
+  successMessage: text("success_message").default("Thank you for your submission!"),
+  notifyEmails: text("notify_emails").array(),
+  createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertFormSchema = createInsertSchema(forms).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertForm = z.infer<typeof insertFormSchema>;
+export type Form = typeof forms.$inferSelect;
+
+export const formSubmissions = pgTable("form_submissions", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  formId: varchar("form_id", { length: 36 }).notNull().references(() => forms.id, { onDelete: "cascade" }),
+  data: jsonb("data").notNull().default({}),
+  contactId: varchar("contact_id", { length: 36 }).references(() => contacts.id),
+  companyId: varchar("company_id", { length: 36 }).references(() => companies.id),
+  submittedAt: timestamp("submitted_at").notNull().defaultNow(),
+});
+
+export const insertFormSubmissionSchema = createInsertSchema(formSubmissions).omit({ id: true, submittedAt: true });
+export type InsertFormSubmission = z.infer<typeof insertFormSubmissionSchema>;
+export type FormSubmission = typeof formSubmissions.$inferSelect;
+
 // ============ HELPER TYPES ============
 export type UserRole = "admin" | "office" | "warehouse" | "readonly";
 export type CreditStatus = "active" | "on_hold";
