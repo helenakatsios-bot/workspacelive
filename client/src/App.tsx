@@ -63,6 +63,7 @@ import SnippetsPage from "@/pages/crm/snippets";
 import OrderRequestsPage from "@/pages/orders/requests";
 import EmailsPage from "@/pages/emails/index";
 import PublicOrderFormPage from "@/pages/public/order-form";
+import PublicFormPage from "@/pages/public/form";
 import NotFound from "@/pages/not-found";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -184,6 +185,11 @@ function AppRouter() {
 
   if (location === "/order" || location.startsWith("/order?")) {
     return <PublicOrderFormPage />;
+  }
+
+  if (location.startsWith("/form/")) {
+    const formId = location.replace("/form/", "").split("?")[0];
+    return <PublicFormPage formId={formId} />;
   }
 
   return <AuthenticatedApp />;
