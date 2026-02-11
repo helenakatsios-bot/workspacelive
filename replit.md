@@ -31,6 +31,13 @@ A professional B2B CRM and order management system designed for wholesale manufa
   - **Admin Settings**: Admin → Order Form tab shows the shareable link, notification email config, and incoming order requests
   - **Database Tables**: customer_order_requests, crm_settings
   - **API Routes**: GET /api/public/products (public), POST /api/public/order-request (public), GET/PATCH /api/customer-order-requests (auth required), GET/PUT /api/settings/:key (auth required)
+- **Email-to-Order Webhook**: Public webhook endpoint that accepts forwarded email content and creates order requests. Designed for use with Power Automate to forward Outlook order emails directly into the CRM.
+  - **Webhook URL**: POST /api/public/email-order-webhook (public, secret-auth)
+  - **Auth**: X-Webhook-Secret header with stored secret
+  - **Rate Limited**: 30 requests per minute per IP
+  - **Admin Settings**: Admin → Order Form tab shows webhook URL, secret (with show/hide/copy), Power Automate setup instructions, and regenerate button
+  - **API Routes**: POST /api/public/email-order-webhook (public), POST /api/settings/generate-webhook-secret (admin)
+  - **CRM Settings Key**: email_order_webhook_secret
 
 ### Demo Login Credentials
 - Admin: admin@company.com / admin123

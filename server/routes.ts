@@ -2400,6 +2400,114 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== EMAIL-TO-ORDER WEBHOOK (PUBLIC, KEY-AUTH) ====================
+  const webhookRateLimit = new Map<string, { count: number; resetAt: number }>();
+  const WEBHOOK_RATE_LIMIT = 30;
+  const WEBHOOK_RATE_WINDOW = 60 * 1000;
+
+  app.post("/api/public/email-order-webhook", async (req, res) => {
+    try {
+      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+      const now = Date.now();
+      const rateEntry = webhookRateLimit.get(clientIp);
+      if (rateEntry && now < rateEntry.resetAt) {
+        if (rateEntry.count >= WEBHOOK_RATE_LIMIT) {
+          return res.status(429).json({ message: "Too many requests. Try again later." });
+        }
+        rateEntry.count++;
+      } else {
+        webhookRateLimit.set(clientIp, { count: 1, resetAt: now + WEBHOOK_RATE_WINDOW });
+      }
+
+      const authHeader = req.headers["x-webhook-secret"] || req.headers["authorization"];
+      const webhookSecret = await storage.getSetting("email_order_webhook_secret");
+
+      if (!webhookSecret) {
+        return res.status(503).json({ message: "Webhook not configured" });
+      }
+
+      const providedSecret = typeof authHeader === "string" ? authHeader.replace("Bearer ", "") : "";
+      if (providedSecret !== webhookSecret) {
+        console.warn(`[EMAIL-WEBHOOK] Invalid secret attempt from ${clientIp}`);
+        return res.status(401).json({ message: "Invalid webhook secret" });
+      }
+
+      const schema = z.object({
+        subject: z.string().optional().default(""),
+        body: z.string().optional().default(""),
+        htmlBody: z.string().optional().default(""),
+        senderEmail: z.string().optional().default(""),
+        senderName: z.string().optional().default(""),
+        receivedAt: z.string().optional(),
+      });
+
+      const data = schema.parse(req.body);
+
+      const companyName = data.senderName || data.senderEmail.split("@")[0] || "Unknown";
+      const contactEmail = data.senderEmail || "unknown@email.com";
+      const contactName = data.senderName || data.senderEmail.split("@")[0] || "Unknown";
+
+      let plainTextContent = data.body || "";
+      if (!plainTextContent && data.htmlBody) {
+        plainTextContent = data.htmlBody.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      }
+
+      const customerNotes = [
+        "[Forwarded Email]",
+        `Subject: ${data.subject}`,
+        "",
+        plainTextContent || "(No text content)",
+      ].join("\n");
+
+      const orderRequest = await storage.createCustomerOrderRequest({
+        companyName,
+        contactName,
+        contactEmail,
+        contactPhone: null,
+        shippingAddress: null,
+        customerNotes,
+        items: [{
+          quantity: 1,
+          description: data.subject || "Order from email",
+          unitPrice: 0,
+          lineTotal: 0,
+        }],
+        status: "pending",
+        convertedOrderId: null,
+        reviewedBy: null,
+      });
+
+      console.log(`[EMAIL-WEBHOOK] Order request created from email: ${data.subject} (${contactEmail})`);
+      res.json({ success: true, id: orderRequest.id, message: "Order request created from email" });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("[EMAIL-WEBHOOK] Error:", error?.message || error);
+      res.status(500).json({ message: "Failed to process email" });
+    }
+  });
+
+  app.post("/api/settings/generate-webhook-secret", requireAdmin, async (req, res) => {
+    try {
+      const { randomBytes } = await import("crypto");
+      const secret = randomBytes(32).toString("hex");
+      await storage.setSetting("email_order_webhook_secret", secret);
+
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "update",
+        entityType: "webhook_secret",
+        afterJson: { action: "generated" },
+      });
+
+      res.json({ secret });
+    } catch (error) {
+      console.error("Generate webhook secret error:", error);
+      res.status(500).json({ message: "Failed to generate webhook secret" });
+    }
+  });
+
   // ==================== CUSTOMER ORDER REQUESTS (ADMIN) ====================
   app.get("/api/customer-order-requests", requireAuth, async (_req, res) => {
     try {

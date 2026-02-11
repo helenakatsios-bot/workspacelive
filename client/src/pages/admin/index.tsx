@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2 } from "lucide-react";
+import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2, Webhook, Key } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -940,13 +940,24 @@ function OrderFormSettings() {
   const { toast } = useToast();
   const [notificationEmail, setNotificationEmail] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
 
   const orderFormUrl = typeof window !== "undefined" ? `${window.location.origin}/order` : "/order";
+  const webhookUrl = typeof window !== "undefined" ? `${window.location.origin}/api/public/email-order-webhook` : "/api/public/email-order-webhook";
 
   const { data: emailSetting } = useQuery<{ key: string; value: string }>({
     queryKey: ["/api/settings", "notification_email"],
     queryFn: async () => {
       const res = await fetch("/api/settings/notification_email");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const { data: webhookSecretSetting } = useQuery<{ key: string; value: string }>({
+    queryKey: ["/api/settings", "email_order_webhook_secret"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings/email_order_webhook_secret");
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -1034,10 +1045,140 @@ function OrderFormSettings() {
       </Card>
 
       <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Webhook className="w-5 h-5" />
+            Email-to-Order Webhook
+          </CardTitle>
+          <CardDescription>Forward order emails from Outlook directly into your CRM using Power Automate</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {webhookSecretSetting?.value ? (
+            <>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-sm font-medium">Webhook URL</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={webhookUrl}
+                      readOnly
+                      className="font-mono text-sm"
+                      data-testid="input-webhook-url"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => {
+                        navigator.clipboard.writeText(webhookUrl);
+                        toast({ title: "Copied", description: "Webhook URL copied to clipboard." });
+                      }}
+                      data-testid="button-copy-webhook-url"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-sm font-medium">Webhook Secret</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={showWebhookSecret ? webhookSecretSetting.value : "****" + webhookSecretSetting.value.slice(-8)}
+                      readOnly
+                      className="font-mono text-sm"
+                      data-testid="input-webhook-secret"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowWebhookSecret(!showWebhookSecret)}
+                      data-testid="button-toggle-webhook-secret"
+                    >
+                      {showWebhookSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => {
+                        navigator.clipboard.writeText(webhookSecretSetting.value);
+                        toast({ title: "Copied", description: "Webhook secret copied to clipboard." });
+                      }}
+                      data-testid="button-copy-webhook-secret"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-md bg-muted p-4 space-y-3 text-sm">
+                <p className="font-medium">How to set up in Power Automate:</p>
+                <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
+                  <li>Go to <strong>Power Automate</strong> (flow.microsoft.com)</li>
+                  <li>Create a new <strong>Automated Flow</strong></li>
+                  <li>Trigger: <strong>"When a new email arrives"</strong> in Outlook</li>
+                  <li>Add a filter for the sender or subject (e.g. orders from specific customers)</li>
+                  <li>Add an <strong>HTTP action</strong> with:
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
+                      <li>Method: <strong>POST</strong></li>
+                      <li>URL: the Webhook URL above</li>
+                      <li>Header: <code className="bg-background px-1 rounded">X-Webhook-Secret</code> with the secret above</li>
+                      <li>Header: <code className="bg-background px-1 rounded">Content-Type: application/json</code></li>
+                      <li>Body: <code className="bg-background px-1 rounded text-xs">{"{"}"subject": "@triggerOutputs()?['body/subject']", "body": "@triggerOutputs()?['body/bodyPreview']", "senderEmail": "@triggerOutputs()?['body/from']?['emailAddress']?['address']", "senderName": "@triggerOutputs()?['body/from']?['emailAddress']?['name']"{"}"}</code></li>
+                    </ul>
+                  </li>
+                </ol>
+                <p className="text-muted-foreground mt-2">Orders will appear below as "pending" for your team to review.</p>
+              </div>
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={async () => {
+                  try {
+                    await apiRequest("POST", "/api/settings/generate-webhook-secret");
+                    queryClient.invalidateQueries({ queryKey: ["/api/settings", "email_order_webhook_secret"] });
+                    toast({ title: "Regenerated", description: "New webhook secret generated. Update your Power Automate flow with the new secret." });
+                  } catch {
+                    toast({ title: "Error", description: "Failed to regenerate secret.", variant: "destructive" });
+                  }
+                }}
+                data-testid="button-regenerate-webhook-secret"
+              >
+                <Key className="w-4 h-4 mr-2" />
+                Regenerate Secret
+              </Button>
+            </>
+          ) : (
+            <div className="text-center py-4 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Set up a webhook so you can forward order emails from Outlook directly into your CRM. Orders will appear for your team to review and convert.
+              </p>
+              <Button
+                onClick={async () => {
+                  try {
+                    await apiRequest("POST", "/api/settings/generate-webhook-secret");
+                    queryClient.invalidateQueries({ queryKey: ["/api/settings", "email_order_webhook_secret"] });
+                    toast({ title: "Webhook Enabled", description: "Your webhook is ready. Follow the setup instructions to connect Power Automate." });
+                  } catch {
+                    toast({ title: "Error", description: "Failed to generate webhook secret.", variant: "destructive" });
+                  }
+                }}
+                data-testid="button-enable-webhook"
+              >
+                <Webhook className="w-4 h-4 mr-2" />
+                Enable Email-to-Order Webhook
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <div>
             <CardTitle className="text-lg">Incoming Order Requests</CardTitle>
-            <CardDescription>Orders submitted by customers through the public form</CardDescription>
+            <CardDescription>Orders submitted by customers through the public form or email webhook</CardDescription>
           </div>
           {pendingRequests.length > 0 && (
             <Badge variant="secondary">{pendingRequests.length} pending</Badge>
