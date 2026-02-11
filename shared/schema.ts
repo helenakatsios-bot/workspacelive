@@ -465,6 +465,26 @@ export const insertFormSubmissionSchema = createInsertSchema(formSubmissions).om
 export type InsertFormSubmission = z.infer<typeof insertFormSubmissionSchema>;
 export type FormSubmission = typeof formSubmissions.$inferSelect;
 
+// ============ PORTAL USERS (Customer-facing login) ============
+export const portalUsers = pgTable("portal_users", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id),
+  contactId: varchar("contact_id", { length: 36 }).references(() => contacts.id),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastLogin: timestamp("last_login"),
+}, (table) => [
+  index("portal_users_company_idx").on(table.companyId),
+  index("portal_users_email_idx").on(table.email),
+]);
+
+export const insertPortalUserSchema = createInsertSchema(portalUsers).omit({ id: true, createdAt: true, lastLogin: true });
+export type InsertPortalUser = z.infer<typeof insertPortalUserSchema>;
+export type PortalUser = typeof portalUsers.$inferSelect;
+
 // ============ HELPER TYPES ============
 export type UserRole = "admin" | "office" | "warehouse" | "readonly";
 export type CreditStatus = "active" | "on_hold";

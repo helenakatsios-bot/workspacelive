@@ -7,7 +7,7 @@ import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { eq, ilike, and } from "drizzle-orm";
-import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts, outlookTokens as outlookTokensTable, crmSettings } from "@shared/schema";
+import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts, outlookTokens as outlookTokensTable, crmSettings, portalUsers } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks, fetchEmailAttachments, downloadAttachment } from "./outlook";
@@ -15,6 +15,8 @@ import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOu
 declare module "express-session" {
   interface SessionData {
     userId: string;
+    portalUserId?: string;
+    portalCompanyId?: string;
     xeroState?: string;
     outlookState?: string;
   }
@@ -3408,6 +3410,372 @@ Rules:
     } catch (error) {
       console.error("Error sending inactivity alert:", error);
       res.status(500).json({ message: "Failed to send inactivity alert" });
+    }
+  });
+
+  // ============ PORTAL AUTH & ROUTES ============
+
+  function requirePortalAuth(req: Request, res: Response, next: NextFunction) {
+    if (!req.session.portalUserId || !req.session.portalCompanyId) {
+      return res.status(401).json({ message: "Portal authentication required" });
+    }
+    next();
+  }
+
+  app.post("/api/portal/auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) return res.status(400).json({ message: "Email and password required" });
+      const [user] = await db.select().from(portalUsers).where(eq(portalUsers.email, email.toLowerCase().trim()));
+      if (!user) return res.status(401).json({ message: "Invalid email or password" });
+      if (!user.active) return res.status(401).json({ message: "Account is disabled. Contact your supplier." });
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) return res.status(401).json({ message: "Invalid email or password" });
+      await db.update(portalUsers).set({ lastLogin: new Date() }).where(eq(portalUsers.id, user.id));
+      req.session.portalUserId = user.id;
+      req.session.portalCompanyId = user.companyId;
+      const { passwordHash, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Portal login error:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  app.post("/api/portal/auth/logout", (req, res) => {
+    req.session.portalUserId = undefined;
+    req.session.portalCompanyId = undefined;
+    res.json({ message: "Logged out" });
+  });
+
+  app.get("/api/portal/auth/me", async (req, res) => {
+    if (!req.session.portalUserId) return res.status(401).json({ message: "Not authenticated" });
+    const [user] = await db.select().from(portalUsers).where(eq(portalUsers.id, req.session.portalUserId));
+    if (!user) return res.status(401).json({ message: "User not found" });
+    const { passwordHash, ...safeUser } = user;
+    res.json(safeUser);
+  });
+
+  app.get("/api/portal/company", requirePortalAuth, async (req, res) => {
+    try {
+      const company = await storage.getCompany(req.session.portalCompanyId!);
+      if (!company) return res.status(404).json({ message: "Company not found" });
+      const { internalNotes, ...safeCompany } = company;
+      res.json(safeCompany);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch company" });
+    }
+  });
+
+  app.get("/api/portal/orders", requirePortalAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT o.*, c.legal_name as company_name
+        FROM orders o
+        LEFT JOIN companies c ON c.id = o.company_id
+        WHERE o.company_id = $1
+        ORDER BY o.order_date DESC
+      `, [req.session.portalCompanyId]);
+      res.json(result.rows.map((r: any) => ({
+        id: r.id,
+        orderNumber: r.order_number,
+        status: r.status,
+        orderDate: r.order_date,
+        subtotal: r.subtotal,
+        tax: r.tax,
+        total: r.total,
+        customerNotes: r.customer_notes,
+        shippingMethod: r.shipping_method,
+        trackingNumber: r.tracking_number,
+        companyName: r.company_name,
+      })));
+    } catch (error) {
+      console.error("Portal orders error:", error);
+      res.status(500).json({ message: "Failed to fetch orders" });
+    }
+  });
+
+  app.get("/api/portal/orders/:id", requirePortalAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT o.*, c.legal_name as company_name
+        FROM orders o
+        LEFT JOIN companies c ON c.id = o.company_id
+        WHERE o.id = $1 AND o.company_id = $2
+      `, [req.params.id, req.session.portalCompanyId]);
+      if (result.rows.length === 0) return res.status(404).json({ message: "Order not found" });
+      const r = result.rows[0];
+      const linesResult = await pool.query(`
+        SELECT ol.*, p.name as product_name, p.sku
+        FROM order_lines ol
+        LEFT JOIN products p ON p.id = ol.product_id
+        WHERE ol.order_id = $1
+      `, [req.params.id]);
+      res.json({
+        id: r.id,
+        orderNumber: r.order_number,
+        status: r.status,
+        orderDate: r.order_date,
+        requestedShipDate: r.requested_ship_date,
+        subtotal: r.subtotal,
+        tax: r.tax,
+        total: r.total,
+        customerNotes: r.customer_notes,
+        shippingMethod: r.shipping_method,
+        trackingNumber: r.tracking_number,
+        companyName: r.company_name,
+        lines: linesResult.rows.map((l: any) => ({
+          id: l.id,
+          productName: l.product_name || l.description_override || "Unknown",
+          sku: l.sku || "",
+          description: l.description_override || "",
+          quantity: l.quantity,
+          unitPrice: l.unit_price,
+          lineTotal: l.line_total,
+        })),
+      });
+    } catch (error) {
+      console.error("Portal order detail error:", error);
+      res.status(500).json({ message: "Failed to fetch order" });
+    }
+  });
+
+  app.get("/api/portal/invoices", requirePortalAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT i.*, c.legal_name as company_name
+        FROM invoices i
+        LEFT JOIN companies c ON c.id = i.company_id
+        WHERE i.company_id = $1
+        ORDER BY i.issue_date DESC
+      `, [req.session.portalCompanyId]);
+      res.json(result.rows.map((r: any) => ({
+        id: r.id,
+        invoiceNumber: r.invoice_number,
+        status: r.status,
+        issueDate: r.issue_date,
+        dueDate: r.due_date,
+        subtotal: r.subtotal,
+        tax: r.tax,
+        total: r.total,
+        balanceDue: r.balance_due,
+        companyName: r.company_name,
+      })));
+    } catch (error) {
+      console.error("Portal invoices error:", error);
+      res.status(500).json({ message: "Failed to fetch invoices" });
+    }
+  });
+
+  app.get("/api/portal/products", requirePortalAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT id, sku, name, description, category, unit_price
+        FROM products WHERE active = true ORDER BY category, name
+      `);
+      res.json(result.rows.map((r: any) => ({
+        id: r.id,
+        sku: r.sku,
+        name: r.name,
+        description: r.description,
+        category: r.category,
+        unitPrice: r.unit_price,
+      })));
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch products" });
+    }
+  });
+
+  app.post("/api/portal/orders", requirePortalAuth, async (req, res) => {
+    try {
+      const { items, customerNotes, shippingAddress } = req.body;
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: "At least one item is required" });
+      }
+      const companyId = req.session.portalCompanyId!;
+      const [portalUser] = await db.select().from(portalUsers).where(eq(portalUsers.id, req.session.portalUserId!));
+
+      let subtotal = 0;
+      const orderLines: Array<{ productId: string; quantity: number; unitPrice: number; lineTotal: number; descriptionOverride: string }> = [];
+      for (const item of items) {
+        const prodResult = await pool.query("SELECT id, name, unit_price FROM products WHERE id = $1 AND active = true", [item.productId]);
+        if (prodResult.rows.length === 0) continue;
+        const prod = prodResult.rows[0];
+        const qty = Math.max(1, parseInt(item.quantity) || 1);
+        const price = parseFloat(prod.unit_price);
+        const lineTotal = price * qty;
+        subtotal += lineTotal;
+        orderLines.push({
+          productId: prod.id,
+          quantity: qty,
+          unitPrice: price,
+          lineTotal,
+          descriptionOverride: prod.name,
+        });
+      }
+
+      const tax = Math.round(subtotal * 10) / 100;
+      const total = subtotal + tax;
+      const orderNumber = `PO-${Date.now().toString(36).toUpperCase()}`;
+
+      const orderResult = await pool.query(`
+        INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, customer_notes, customer_name, customer_email)
+        VALUES (gen_random_uuid(), $1, $2, 'new', NOW(), $3, $4, $5, $6, $7, $8)
+        RETURNING id, order_number
+      `, [orderNumber, companyId, subtotal.toFixed(2), tax.toFixed(2), total.toFixed(2),
+          customerNotes || `Order placed via Customer Portal by ${portalUser?.name || "portal user"}`,
+          portalUser?.name || "", portalUser?.email || ""]);
+
+      const orderId = orderResult.rows[0].id;
+
+      for (const line of orderLines) {
+        await pool.query(`
+          INSERT INTO order_lines (id, order_id, product_id, description_override, quantity, unit_price, discount, line_total)
+          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, '0', $6)
+        `, [orderId, line.productId, line.descriptionOverride, line.quantity, line.unitPrice.toFixed(2), line.lineTotal.toFixed(2)]);
+      }
+
+      await recalcCompanyRevenue(companyId);
+
+      res.json({ id: orderId, orderNumber: orderResult.rows[0].order_number });
+    } catch (error) {
+      console.error("Portal create order error:", error);
+      res.status(500).json({ message: "Failed to create order" });
+    }
+  });
+
+  app.put("/api/portal/account/password", requirePortalAuth, async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) return res.status(400).json({ message: "Current and new passwords required" });
+      if (newPassword.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
+      const [user] = await db.select().from(portalUsers).where(eq(portalUsers.id, req.session.portalUserId!));
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!valid) return res.status(400).json({ message: "Current password is incorrect" });
+      const hash = await bcrypt.hash(newPassword, 10);
+      await db.update(portalUsers).set({ passwordHash: hash }).where(eq(portalUsers.id, user.id));
+      res.json({ message: "Password updated" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update password" });
+    }
+  });
+
+  app.get("/api/portal/dashboard", requirePortalAuth, async (req, res) => {
+    try {
+      const companyId = req.session.portalCompanyId!;
+      const ordersResult = await pool.query(`
+        SELECT COUNT(*) as total_orders,
+          COUNT(*) FILTER (WHERE status NOT IN ('completed', 'cancelled')) as open_orders,
+          COALESCE(SUM(total), 0) as total_spent,
+          MAX(order_date) as last_order_date
+        FROM orders WHERE company_id = $1
+      `, [companyId]);
+      const invoicesResult = await pool.query(`
+        SELECT COUNT(*) as total_invoices,
+          COUNT(*) FILTER (WHERE status NOT IN ('paid', 'void')) as unpaid_invoices,
+          COALESCE(SUM(balance_due) FILTER (WHERE status NOT IN ('paid', 'void')), 0) as outstanding_balance
+        FROM invoices WHERE company_id = $1
+      `, [companyId]);
+      const recentOrders = await pool.query(`
+        SELECT id, order_number, status, order_date, total
+        FROM orders WHERE company_id = $1
+        ORDER BY order_date DESC LIMIT 5
+      `, [companyId]);
+      res.json({
+        totalOrders: parseInt(ordersResult.rows[0].total_orders),
+        openOrders: parseInt(ordersResult.rows[0].open_orders),
+        totalSpent: parseFloat(ordersResult.rows[0].total_spent),
+        lastOrderDate: ordersResult.rows[0].last_order_date,
+        totalInvoices: parseInt(invoicesResult.rows[0].total_invoices),
+        unpaidInvoices: parseInt(invoicesResult.rows[0].unpaid_invoices),
+        outstandingBalance: parseFloat(invoicesResult.rows[0].outstanding_balance),
+        recentOrders: recentOrders.rows.map((r: any) => ({
+          id: r.id,
+          orderNumber: r.order_number,
+          status: r.status,
+          orderDate: r.order_date,
+          total: r.total,
+        })),
+      });
+    } catch (error) {
+      console.error("Portal dashboard error:", error);
+      res.status(500).json({ message: "Failed to fetch dashboard" });
+    }
+  });
+
+  // ============ ADMIN: PORTAL USER MANAGEMENT ============
+
+  app.get("/api/admin/portal-users", requireAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT pu.id, pu.company_id, pu.contact_id, pu.name, pu.email, pu.active, pu.created_at, pu.last_login,
+          c.legal_name as company_name
+        FROM portal_users pu
+        LEFT JOIN companies c ON c.id = pu.company_id
+        ORDER BY pu.created_at DESC
+      `);
+      res.json(result.rows.map((r: any) => ({
+        id: r.id,
+        companyId: r.company_id,
+        contactId: r.contact_id,
+        name: r.name,
+        email: r.email,
+        active: r.active,
+        createdAt: r.created_at,
+        lastLogin: r.last_login,
+        companyName: r.company_name,
+      })));
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch portal users" });
+    }
+  });
+
+  app.post("/api/admin/portal-users", requireAdmin, async (req, res) => {
+    try {
+      const { name, email, password, companyId, contactId } = req.body;
+      if (!name || !email || !password || !companyId) {
+        return res.status(400).json({ message: "Name, email, password, and company are required" });
+      }
+      const existing = await db.select().from(portalUsers).where(eq(portalUsers.email, email.toLowerCase().trim()));
+      if (existing.length > 0) return res.status(400).json({ message: "A portal user with this email already exists" });
+      const hash = await bcrypt.hash(password, 10);
+      const [user] = await db.insert(portalUsers).values({
+        name,
+        email: email.toLowerCase().trim(),
+        passwordHash: hash,
+        companyId,
+        contactId: contactId || null,
+        active: true,
+      }).returning();
+      const { passwordHash, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Create portal user error:", error);
+      res.status(500).json({ message: "Failed to create portal user" });
+    }
+  });
+
+  app.patch("/api/admin/portal-users/:id", requireAdmin, async (req, res) => {
+    try {
+      const { active, password } = req.body;
+      const updates: any = {};
+      if (typeof active === "boolean") updates.active = active;
+      if (password) updates.passwordHash = await bcrypt.hash(password, 10);
+      if (Object.keys(updates).length === 0) return res.status(400).json({ message: "No updates provided" });
+      await db.update(portalUsers).set(updates).where(eq(portalUsers.id, req.params.id));
+      res.json({ message: "Portal user updated" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update portal user" });
+    }
+  });
+
+  app.delete("/api/admin/portal-users/:id", requireAdmin, async (req, res) => {
+    try {
+      await db.delete(portalUsers).where(eq(portalUsers.id, req.params.id));
+      res.json({ message: "Portal user deleted" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete portal user" });
     }
   });
 
