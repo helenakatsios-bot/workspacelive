@@ -426,21 +426,18 @@ export async function getEmailsForContact(contactId: string, limit: number = 50)
 }
 
 export async function getAllEmails(userId: string, folder?: string, limit: number = 50) {
-  let query = db.select()
-    .from(emails)
-    .where(eq(emails.userId, userId))
-    .orderBy(desc(emails.receivedAt))
-    .limit(limit);
-  
   if (folder) {
-    query = db.select()
+    return await db.select()
       .from(emails)
-      .where(and(eq(emails.userId, userId), eq(emails.folder, folder)))
+      .where(eq(emails.folder, folder))
       .orderBy(desc(emails.receivedAt))
       .limit(limit);
   }
   
-  return await query;
+  return await db.select()
+    .from(emails)
+    .orderBy(desc(emails.receivedAt))
+    .limit(limit);
 }
 
 export async function backfillEmailCompanyLinks(): Promise<number> {

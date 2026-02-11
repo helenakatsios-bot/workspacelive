@@ -7,7 +7,7 @@ import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { eq, ilike } from "drizzle-orm";
-import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts } from "@shared/schema";
+import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts, outlookTokens as outlookTokensTable } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks } from "./outlook";
@@ -1716,23 +1716,32 @@ export async function registerRoutes(
     }
   });
 
-  // Sync emails from Outlook
+  // Sync emails from Outlook (syncs all connected accounts)
   app.post("/api/outlook/sync", requireAuth, async (req, res) => {
     try {
       const protocol = req.headers["x-forwarded-proto"] || req.protocol;
       const host = req.headers["x-forwarded-host"] || req.headers.host;
       const redirectUri = `${protocol}://${host}/api/outlook/callback`;
       
-      const accessToken = await refreshOutlookTokenIfNeeded(req.session.userId!, redirectUri);
-      if (!accessToken) {
-        return res.status(401).json({ message: "Outlook not connected or token expired" });
+      const allTokens = await db.select().from(outlookTokensTable);
+      if (allTokens.length === 0) {
+        return res.status(400).json({ message: "No Outlook accounts connected. Connect Outlook in Admin > Integrations." });
       }
-      
-      const folders = ["inbox", "sentItems", "drafts"];
+
       let totalSynced = 0;
-      for (const folder of folders) {
-        const synced = await syncEmailsToDatabase(req.session.userId!, accessToken, folder);
-        totalSynced += synced;
+      for (const token of allTokens) {
+        try {
+          const accessToken = await refreshOutlookTokenIfNeeded(token.userId, redirectUri);
+          if (!accessToken) continue;
+          
+          const folders = ["inbox", "sentItems", "drafts"];
+          for (const folder of folders) {
+            const synced = await syncEmailsToDatabase(token.userId, accessToken, folder);
+            totalSynced += synced;
+          }
+        } catch (err) {
+          console.error(`[SYNC] Error syncing for user ${token.userId}:`, err);
+        }
       }
       
       res.json({ success: true, synced: totalSynced });
