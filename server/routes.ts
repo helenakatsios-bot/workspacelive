@@ -2239,9 +2239,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Could not parse this PDF. The file may be corrupted or password-protected." });
       }
 
-      if (!pdfText || pdfText.trim().length < 10) {
-        return res.status(400).json({ message: "Could not extract text from this PDF. It may be a scanned image." });
-      }
+      const isScannedPdf = !pdfText || pdfText.trim().length < 10;
+      console.log(`[PDF-EXTRACT] Scanned PDF: ${isScannedPdf}`);
 
       const OpenAI = (await import("openai")).default;
       const openai = new OpenAI({
@@ -2249,12 +2248,7 @@ export async function registerRoutes(
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
 
-      const aiResponse = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: `You are an order data extraction assistant. Extract order/invoice details from the provided text.
+      const systemPrompt = `You are an order data extraction assistant. Extract order/invoice details from the provided content.
 Return a JSON object with these fields:
 {
   "companyName": "the customer/company name",
@@ -2281,15 +2275,70 @@ Rules:
 - Extract ALL line items you can find
 - If prices are not present, use 0
 - Quantities must be integers >= 1
-- Return ONLY the JSON object, no other text`
-          },
-          {
-            role: "user",
-            content: `Extract order details from this PDF:\n\n${pdfText.substring(0, 8000)}`
+- Return ONLY the JSON object, no other text`;
+
+      let aiResponse;
+
+      if (isScannedPdf) {
+        const { execSync } = await import("child_process");
+        const fs = await import("fs");
+        const os = await import("os");
+        const path = await import("path");
+
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pdf-ocr-"));
+        const pdfPath = path.join(tmpDir, "input.pdf");
+        fs.writeFileSync(pdfPath, pdfBuffer);
+
+        try {
+          execSync(`pdftoppm -png -r 200 -l 3 "${pdfPath}" "${path.join(tmpDir, "page")}"`);
+          const pageFiles = fs.readdirSync(tmpDir)
+            .filter((f: string) => f.endsWith(".png"))
+            .sort()
+            .slice(0, 3);
+
+          if (pageFiles.length === 0) {
+            return res.status(400).json({ message: "Could not convert this PDF to images for reading." });
           }
-        ],
-        response_format: { type: "json_object" },
-      });
+
+          const imageContents: any[] = pageFiles.map((f: string) => {
+            const imgBuf = fs.readFileSync(path.join(tmpDir, f));
+            const b64 = imgBuf.toString("base64");
+            return { type: "image_url" as const, image_url: { url: `data:image/png;base64,${b64}` } };
+          });
+
+          console.log(`[PDF-EXTRACT] Converted ${pageFiles.length} page(s) to images for vision OCR`);
+
+          aiResponse = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "system", content: systemPrompt },
+              {
+                role: "user",
+                content: [
+                  { type: "text" as const, text: "Extract order details from this scanned PDF document:" },
+                  ...imageContents,
+                ],
+              }
+            ],
+            response_format: { type: "json_object" },
+          });
+        } finally {
+          try {
+            const files = fs.readdirSync(tmpDir);
+            for (const f of files) fs.unlinkSync(path.join(tmpDir, f));
+            fs.rmdirSync(tmpDir);
+          } catch {}
+        }
+      } else {
+        aiResponse = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `Extract order details from this PDF:\n\n${pdfText.substring(0, 8000)}` }
+          ],
+          response_format: { type: "json_object" },
+        });
+      }
 
       const content = aiResponse.choices[0]?.message?.content || "{}";
       let extractedData;
