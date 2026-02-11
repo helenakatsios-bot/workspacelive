@@ -310,6 +310,34 @@ export async function markEmailAsRead(accessToken: string, messageId: string): P
   await client.api(`/me/messages/${messageId}`).patch({ isRead: true });
 }
 
+export interface OutlookAttachment {
+  id: string;
+  name: string;
+  contentType: string;
+  size: number;
+  isInline: boolean;
+}
+
+export async function fetchEmailAttachments(accessToken: string, messageId: string): Promise<OutlookAttachment[]> {
+  const client = createGraphClient(accessToken);
+  const response = await client.api(`/me/messages/${messageId}/attachments`)
+    .select("id,name,contentType,size,isInline")
+    .get();
+  return (response.value || []).map((a: any) => ({
+    id: a.id,
+    name: a.name,
+    contentType: a.contentType,
+    size: a.size,
+    isInline: a.isInline || false,
+  }));
+}
+
+export async function downloadAttachment(accessToken: string, messageId: string, attachmentId: string): Promise<Buffer> {
+  const client = createGraphClient(accessToken);
+  const attachment = await client.api(`/me/messages/${messageId}/attachments/${attachmentId}`).get();
+  return Buffer.from(attachment.contentBytes, "base64");
+}
+
 export async function syncEmailsToDatabase(
   userId: string,
   accessToken: string,

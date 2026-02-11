@@ -10,7 +10,7 @@ import { eq, ilike } from "drizzle-orm";
 import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts, outlookTokens as outlookTokensTable } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero } from "./xero";
-import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks } from "./outlook";
+import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks, fetchEmailAttachments, downloadAttachment } from "./outlook";
 
 declare module "express-session" {
   interface SessionData {
@@ -2159,6 +2159,245 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Convert email to order error:", error);
       res.status(500).json({ message: "Failed to convert email to order" });
+    }
+  });
+
+  // ==================== EMAIL ATTACHMENT ENDPOINTS ====================
+
+  app.get("/api/emails/:id/attachments", requireAuth, async (req, res) => {
+    try {
+      const emailId = req.params.id;
+      const [email] = await db.select().from(emailsTable).where(eq(emailsTable.id, emailId));
+      if (!email) return res.status(404).json({ message: "Email not found" });
+
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const redirectUri = `${protocol}://${host}/api/outlook/callback`;
+
+      const accessToken = await refreshOutlookTokenIfNeeded(email.userId, redirectUri);
+      if (!accessToken) return res.status(400).json({ message: "Outlook not connected or token expired" });
+
+      const attachments = await fetchEmailAttachments(accessToken, email.outlookMessageId);
+      const pdfAttachments = attachments.filter(a => !a.isInline && (a.contentType === "application/pdf" || a.name?.toLowerCase().endsWith(".pdf")));
+      res.json(pdfAttachments);
+    } catch (error) {
+      console.error("Fetch attachments error:", error);
+      res.status(500).json({ message: "Failed to fetch attachments" });
+    }
+  });
+
+  app.post("/api/emails/:id/extract-pdf-order", requireEdit, async (req, res) => {
+    try {
+      const emailId = req.params.id;
+      const { attachmentId } = req.body;
+      if (!attachmentId) return res.status(400).json({ message: "attachmentId is required" });
+
+      const [email] = await db.select().from(emailsTable).where(eq(emailsTable.id, emailId));
+      if (!email) return res.status(404).json({ message: "Email not found" });
+
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const redirectUri = `${protocol}://${host}/api/outlook/callback`;
+
+      const accessToken = await refreshOutlookTokenIfNeeded(email.userId, redirectUri);
+      if (!accessToken) return res.status(400).json({ message: "Outlook not connected or token expired" });
+
+      const pdfBuffer = await downloadAttachment(accessToken, email.outlookMessageId, attachmentId);
+
+      const pdfParse = (await import("pdf-parse")).default;
+      const pdfData = await pdfParse(pdfBuffer);
+      const pdfText = pdfData.text;
+
+      if (!pdfText || pdfText.trim().length < 10) {
+        return res.status(400).json({ message: "Could not extract text from this PDF. It may be a scanned image." });
+      }
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const aiResponse = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are an order data extraction assistant. Extract order/invoice details from the provided text.
+Return a JSON object with these fields:
+{
+  "companyName": "the customer/company name",
+  "contactName": "contact person name if found",
+  "contactEmail": "email if found",
+  "contactPhone": "phone if found",
+  "deliveryAddress": "delivery/shipping address if found",
+  "orderDate": "date in YYYY-MM-DD format if found",
+  "poNumber": "purchase order number if found",
+  "notes": "any special notes or instructions",
+  "lines": [
+    {
+      "description": "product name/description",
+      "quantity": 1,
+      "unitPrice": 0.00,
+      "lineTotal": 0.00
+    }
+  ],
+  "subtotal": 0.00,
+  "tax": 0.00,
+  "total": 0.00
+}
+Rules:
+- Extract ALL line items you can find
+- If prices are not present, use 0
+- Quantities must be integers >= 1
+- Return ONLY the JSON object, no other text`
+          },
+          {
+            role: "user",
+            content: `Extract order details from this PDF:\n\n${pdfText.substring(0, 8000)}`
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const content = aiResponse.choices[0]?.message?.content || "{}";
+      let extractedData;
+      try {
+        extractedData = JSON.parse(content);
+      } catch {
+        return res.status(500).json({ message: "AI returned invalid data. Please try again." });
+      }
+
+      const allCompanies = await storage.getAllCompanies();
+      let matchedCompanyId: string | null = null;
+
+      if (extractedData.companyName) {
+        const searchName = extractedData.companyName.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+        for (const c of allCompanies) {
+          const legalClean = c.legalName.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+          const tradingClean = (c.tradingName || "").toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+          if (legalClean.includes(searchName) || searchName.includes(legalClean) ||
+              (tradingClean && (tradingClean.includes(searchName) || searchName.includes(tradingClean)))) {
+            matchedCompanyId = c.id;
+            break;
+          }
+        }
+
+        if (!matchedCompanyId && extractedData.contactEmail) {
+          const domain = extractedData.contactEmail.split("@")[1]?.toLowerCase() || "";
+          if (domain && !["gmail.com", "yahoo.com", "hotmail.com", "outlook.com"].includes(domain)) {
+            const domainName = domain.replace(/\.(com|com\.au|net|org|co).*$/, "");
+            if (domainName.length >= 3) {
+              const match = allCompanies.find(c =>
+                c.legalName.toLowerCase().replace(/[^a-z0-9]/g, "").includes(domainName) ||
+                (c.tradingName && c.tradingName.toLowerCase().replace(/[^a-z0-9]/g, "").includes(domainName))
+              );
+              if (match) matchedCompanyId = match.id;
+            }
+          }
+        }
+      }
+
+      res.json({
+        ...extractedData,
+        matchedCompanyId,
+        matchedCompanyName: matchedCompanyId ? allCompanies.find(c => c.id === matchedCompanyId)?.legalName : null,
+        sourceEmailId: emailId,
+        senderEmail: email.fromAddress,
+        senderName: email.fromName,
+      });
+    } catch (error) {
+      console.error("Extract PDF order error:", error);
+      res.status(500).json({ message: "Failed to extract order from PDF" });
+    }
+  });
+
+  app.post("/api/emails/:id/create-order-from-pdf", requireEdit, async (req, res) => {
+    try {
+      const emailId = req.params.id;
+      const { companyId, companyName, contactName, contactEmail, contactPhone, deliveryAddress, poNumber, notes, lines, subtotal, tax, total } = req.body;
+
+      if (!lines || lines.length === 0) {
+        return res.status(400).json({ message: "No order lines provided" });
+      }
+
+      let finalCompanyId = companyId;
+      if (!finalCompanyId) {
+        const newCompany = await storage.createCompany({
+          legalName: companyName || "Unknown Customer",
+        });
+        finalCompanyId = newCompany.id;
+      }
+
+      if (contactEmail) {
+        const existingContacts = await db.select().from(contacts).where(ilike(contacts.email, contactEmail)).limit(1);
+        if (existingContacts.length === 0) {
+          const nameParts = (contactName || "").split(/\s+/);
+          await storage.createContact({
+            companyId: finalCompanyId,
+            firstName: nameParts[0] || contactEmail.split("@")[0] || "",
+            lastName: nameParts.slice(1).join(" ") || "",
+            email: contactEmail,
+            phone: contactPhone || undefined,
+          });
+        }
+      }
+
+      const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}`;
+      const calcTotal = parseFloat(total) || lines.reduce((s: number, l: any) => s + (parseFloat(l.lineTotal) || 0), 0);
+
+      const order = await storage.createOrder({
+        orderNumber,
+        companyId: finalCompanyId,
+        status: "new",
+        orderDate: new Date(),
+        subtotal: (parseFloat(subtotal) || calcTotal).toFixed(2),
+        tax: (parseFloat(tax) || 0).toFixed(2),
+        total: calcTotal.toFixed(2),
+        customerName: contactName || null,
+        customerPhone: contactPhone || null,
+        customerAddress: deliveryAddress || null,
+        customerEmail: contactEmail || null,
+        sourceEmailId: emailId,
+        customerNotes: [
+          poNumber ? `PO: ${poNumber}` : "",
+          notes || "",
+          `Created from PDF attachment`,
+        ].filter(Boolean).join(". "),
+        createdBy: req.session.userId,
+      });
+
+      for (const line of lines) {
+        await storage.createOrderLine({
+          orderId: order.id,
+          productId: null,
+          descriptionOverride: line.description || "Item",
+          quantity: parseInt(line.quantity) || 1,
+          unitPrice: (parseFloat(line.unitPrice) || 0).toFixed(2),
+          discount: "0",
+          lineTotal: (parseFloat(line.lineTotal) || 0).toFixed(2),
+        });
+      }
+
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "create",
+        entityType: "order",
+        entityId: order.id,
+        afterJson: order,
+      });
+      await storage.createActivity({
+        entityType: "order",
+        entityId: order.id,
+        activityType: "system",
+        content: `Order created from PDF attachment on email`,
+        createdBy: req.session.userId,
+      });
+
+      res.status(201).json(order);
+    } catch (error) {
+      console.error("Create order from PDF error:", error);
+      res.status(500).json({ message: "Failed to create order from PDF" });
     }
   });
 

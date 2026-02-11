@@ -1,21 +1,81 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mail, Plus, Send, Inbox, FileEdit, RefreshCw } from "lucide-react";
+import { Mail, Plus, Send, Inbox, FileEdit, RefreshCw, FileText, Loader2, ShoppingCart, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useLocation } from "wouter";
 
 type FolderTab = "all" | "inbox" | "sentItems" | "drafts";
+
+interface PdfAttachment {
+  id: string;
+  name: string;
+  contentType: string;
+  size: number;
+}
+
+interface ExtractedLine {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+interface ExtractedOrder {
+  companyName: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  deliveryAddress: string;
+  orderDate: string;
+  poNumber: string;
+  notes: string;
+  lines: ExtractedLine[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  matchedCompanyId: string | null;
+  matchedCompanyName: string | null;
+  sourceEmailId: string;
+  senderEmail: string;
+  senderName: string;
+}
 
 export default function MarketingEmailPage() {
   const { data: emails, isLoading } = useQuery<any[]>({ queryKey: ["/api/emails"] });
   const [selectedEmail, setSelectedEmail] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState<FolderTab>("all");
   const { toast } = useToast();
+  const [, navigate] = useLocation();
+
+  const [pdfAttachments, setPdfAttachments] = useState<PdfAttachment[]>([]);
+  const [loadingAttachments, setLoadingAttachments] = useState(false);
+  const [extractedOrder, setExtractedOrder] = useState<ExtractedOrder | null>(null);
+  const [extractingPdf, setExtractingPdf] = useState<string | null>(null);
+  const [showOrderReview, setShowOrderReview] = useState(false);
+  const [editableOrder, setEditableOrder] = useState<ExtractedOrder | null>(null);
+
+  useEffect(() => {
+    if (selectedEmail) {
+      setLoadingAttachments(true);
+      setPdfAttachments([]);
+      setExtractedOrder(null);
+      setShowOrderReview(false);
+      setEditableOrder(null);
+      fetch(`/api/emails/${selectedEmail.id}/attachments`, { credentials: "include" })
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setPdfAttachments(data || []))
+        .catch(() => setPdfAttachments([]))
+        .finally(() => setLoadingAttachments(false));
+    }
+  }, [selectedEmail?.id]);
 
   const syncMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/outlook/sync"),
@@ -28,6 +88,77 @@ export default function MarketingEmailPage() {
       toast({ title: "Sync failed", description: "Could not sync emails. Check Outlook connection.", variant: "destructive" });
     },
   });
+
+  const handleExtractPdf = async (attachmentId: string) => {
+    if (!selectedEmail) return;
+    setExtractingPdf(attachmentId);
+    try {
+      const res = await apiRequest("POST", `/api/emails/${selectedEmail.id}/extract-pdf-order`, { attachmentId });
+      const data = await res.json();
+      setExtractedOrder(data);
+      setEditableOrder(JSON.parse(JSON.stringify(data)));
+      setShowOrderReview(true);
+    } catch (error: any) {
+      const msg = error?.message || "Failed to extract order from PDF";
+      toast({ title: "Extraction failed", description: msg, variant: "destructive" });
+    } finally {
+      setExtractingPdf(null);
+    }
+  };
+
+  const createOrderMutation = useMutation({
+    mutationFn: () => {
+      if (!editableOrder || !selectedEmail) throw new Error("No order data");
+      return apiRequest("POST", `/api/emails/${selectedEmail.id}/create-order-from-pdf`, {
+        companyId: editableOrder.matchedCompanyId,
+        companyName: editableOrder.companyName,
+        contactName: editableOrder.contactName,
+        contactEmail: editableOrder.contactEmail,
+        contactPhone: editableOrder.contactPhone,
+        deliveryAddress: editableOrder.deliveryAddress,
+        poNumber: editableOrder.poNumber,
+        notes: editableOrder.notes,
+        lines: editableOrder.lines,
+        subtotal: editableOrder.subtotal,
+        tax: editableOrder.tax,
+        total: editableOrder.total,
+      });
+    },
+    onSuccess: async (res) => {
+      const order = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({ title: "Order created", description: `Order ${order.orderNumber} has been created from the PDF` });
+      setSelectedEmail(null);
+      setShowOrderReview(false);
+      navigate(`/orders`);
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to create order", description: error?.message || "Something went wrong", variant: "destructive" });
+    },
+  });
+
+  const updateEditableLine = (index: number, field: keyof ExtractedLine, value: string) => {
+    if (!editableOrder) return;
+    const newLines = [...editableOrder.lines];
+    if (field === "description") {
+      newLines[index] = { ...newLines[index], description: value };
+    } else {
+      const num = parseFloat(value) || 0;
+      newLines[index] = { ...newLines[index], [field]: num };
+      if (field === "quantity" || field === "unitPrice") {
+        newLines[index].lineTotal = newLines[index].quantity * newLines[index].unitPrice;
+      }
+    }
+    const newSubtotal = newLines.reduce((s, l) => s + l.lineTotal, 0);
+    setEditableOrder({ ...editableOrder, lines: newLines, subtotal: newSubtotal, total: newSubtotal + (editableOrder.tax || 0) });
+  };
+
+  const removeEditableLine = (index: number) => {
+    if (!editableOrder) return;
+    const newLines = editableOrder.lines.filter((_, i) => i !== index);
+    const newSubtotal = newLines.reduce((s, l) => s + l.lineTotal, 0);
+    setEditableOrder({ ...editableOrder, lines: newLines, subtotal: newSubtotal, total: newSubtotal + (editableOrder.tax || 0) });
+  };
 
   const sentEmails = emails?.filter((e) => e.folder === "sentItems") || [];
   const receivedEmails = emails?.filter((e) => e.folder === "inbox") || [];
@@ -209,9 +340,9 @@ export default function MarketingEmailPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!selectedEmail} onOpenChange={(open) => !open && setSelectedEmail(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          {selectedEmail && (
+      <Dialog open={!!selectedEmail} onOpenChange={(open) => { if (!open) { setSelectedEmail(null); setShowOrderReview(false); setExtractedOrder(null); } }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          {selectedEmail && !showOrderReview && (
             <>
               <DialogHeader>
                 <DialogTitle className="text-lg leading-tight pr-6">
@@ -256,6 +387,54 @@ export default function MarketingEmailPage() {
                   </div>
                 </div>
 
+                {pdfAttachments.length > 0 && (
+                  <div className="border rounded-md p-3 space-y-2">
+                    <p className="text-sm font-medium flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      PDF Attachments
+                    </p>
+                    <div className="space-y-2">
+                      {pdfAttachments.map((att) => (
+                        <div key={att.id} className="flex items-center justify-between gap-2 p-2 rounded-md border" data-testid={`pdf-attachment-${att.id}`}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText className="w-4 h-4 text-red-500 flex-shrink-0" />
+                            <span className="text-sm truncate">{att.name}</span>
+                            <span className="text-xs text-muted-foreground flex-shrink-0">
+                              ({(att.size / 1024).toFixed(0)} KB)
+                            </span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleExtractPdf(att.id)}
+                            disabled={extractingPdf !== null}
+                            data-testid={`button-extract-pdf-${att.id}`}
+                          >
+                            {extractingPdf === att.id ? (
+                              <>
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                Extracting...
+                              </>
+                            ) : (
+                              <>
+                                <ShoppingCart className="w-3 h-3 mr-1" />
+                                Create Order
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {loadingAttachments && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Checking for PDF attachments...
+                  </div>
+                )}
+
                 <div className="min-h-[200px]">
                   {selectedEmail.bodyHtml ? (
                     <div
@@ -267,6 +446,184 @@ export default function MarketingEmailPage() {
                   ) : (
                     <p className="text-sm text-muted-foreground">No content available</p>
                   )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {selectedEmail && showOrderReview && editableOrder && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-lg leading-tight pr-6">
+                  Review Extracted Order
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Review the details extracted from the PDF. Edit anything that needs correction before creating the order.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Company</Label>
+                    <Input
+                      value={editableOrder.companyName || ""}
+                      onChange={(e) => setEditableOrder({ ...editableOrder, companyName: e.target.value })}
+                      data-testid="input-pdf-company"
+                    />
+                    {editableOrder.matchedCompanyName && (
+                      <p className="text-xs text-green-600 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        Matched: {editableOrder.matchedCompanyName}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Contact Name</Label>
+                    <Input
+                      value={editableOrder.contactName || ""}
+                      onChange={(e) => setEditableOrder({ ...editableOrder, contactName: e.target.value })}
+                      data-testid="input-pdf-contact-name"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Contact Email</Label>
+                    <Input
+                      value={editableOrder.contactEmail || ""}
+                      onChange={(e) => setEditableOrder({ ...editableOrder, contactEmail: e.target.value })}
+                      data-testid="input-pdf-contact-email"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Contact Phone</Label>
+                    <Input
+                      value={editableOrder.contactPhone || ""}
+                      onChange={(e) => setEditableOrder({ ...editableOrder, contactPhone: e.target.value })}
+                      data-testid="input-pdf-contact-phone"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">PO Number</Label>
+                    <Input
+                      value={editableOrder.poNumber || ""}
+                      onChange={(e) => setEditableOrder({ ...editableOrder, poNumber: e.target.value })}
+                      data-testid="input-pdf-po-number"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Delivery Address</Label>
+                    <Input
+                      value={editableOrder.deliveryAddress || ""}
+                      onChange={(e) => setEditableOrder({ ...editableOrder, deliveryAddress: e.target.value })}
+                      data-testid="input-pdf-delivery-address"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Notes</Label>
+                  <Input
+                    value={editableOrder.notes || ""}
+                    onChange={(e) => setEditableOrder({ ...editableOrder, notes: e.target.value })}
+                    data-testid="input-pdf-notes"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Order Lines</Label>
+                  <div className="border rounded-md overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left p-2 font-medium">Description</th>
+                          <th className="text-right p-2 font-medium w-20">Qty</th>
+                          <th className="text-right p-2 font-medium w-24">Unit Price</th>
+                          <th className="text-right p-2 font-medium w-24">Total</th>
+                          <th className="w-10 p-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {editableOrder.lines.map((line, i) => (
+                          <tr key={i} className="border-b last:border-b-0" data-testid={`pdf-order-line-${i}`}>
+                            <td className="p-2">
+                              <Input
+                                value={line.description}
+                                onChange={(e) => updateEditableLine(i, "description", e.target.value)}
+                                className="text-sm"
+                                data-testid={`input-line-desc-${i}`}
+                              />
+                            </td>
+                            <td className="p-2">
+                              <Input
+                                type="number"
+                                value={line.quantity}
+                                onChange={(e) => updateEditableLine(i, "quantity", e.target.value)}
+                                className="text-sm text-right"
+                                data-testid={`input-line-qty-${i}`}
+                              />
+                            </td>
+                            <td className="p-2">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={line.unitPrice}
+                                onChange={(e) => updateEditableLine(i, "unitPrice", e.target.value)}
+                                className="text-sm text-right"
+                                data-testid={`input-line-price-${i}`}
+                              />
+                            </td>
+                            <td className="p-2 text-right font-medium">
+                              ${line.lineTotal.toFixed(2)}
+                            </td>
+                            <td className="p-2">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => removeEditableLine(i)}
+                                data-testid={`button-remove-line-${i}`}
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t bg-muted/30">
+                          <td colSpan={3} className="p-2 text-right font-medium">Total:</td>
+                          <td className="p-2 text-right font-bold">${editableOrder.total.toFixed(2)}</td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => { setShowOrderReview(false); setExtractedOrder(null); }}
+                    data-testid="button-cancel-pdf-order"
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    onClick={() => createOrderMutation.mutate()}
+                    disabled={createOrderMutation.isPending || editableOrder.lines.length === 0}
+                    data-testid="button-confirm-pdf-order"
+                  >
+                    {createOrderMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4 mr-2" />
+                        Create Order
+                      </>
+                    )}
+                  </Button>
                 </div>
               </div>
             </>
