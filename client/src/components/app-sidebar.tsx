@@ -74,7 +74,6 @@ const mainNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Orders", url: "/orders", icon: ShoppingCart },
   { title: "Order Requests", url: "/orders/requests", icon: ClipboardList },
-  { title: "Emails", url: "/emails", icon: Mail },
   { title: "Products", url: "/products", icon: Package },
 ];
 
