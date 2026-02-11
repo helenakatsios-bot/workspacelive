@@ -74,6 +74,7 @@ const mainNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Orders", url: "/orders", icon: ShoppingCart },
   { title: "Products", url: "/products", icon: Package },
+  { title: "Email", url: "/marketing/email", icon: Mail },
 ];
 
 const crmItems = [
@@ -88,7 +89,6 @@ const crmItems = [
   { title: "Inbox", url: "/crm/inbox", icon: Inbox },
   { title: "Calls", url: "/crm/calls", icon: Phone },
   { title: "Tasks", url: "/crm/tasks", icon: CheckSquare },
-  { title: "Email", url: "/marketing/email", icon: Mail },
   { title: "Forms", url: "/marketing/forms", icon: ClipboardList },
   { title: "Playbooks", url: "/crm/playbooks", icon: BookOpen },
   { title: "Message Templates", url: "/crm/message-templates", icon: MessageSquareText },
