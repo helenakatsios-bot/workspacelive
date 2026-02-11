@@ -73,7 +73,6 @@ import { useTheme } from "@/components/theme-provider";
 const mainNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Orders", url: "/orders", icon: ShoppingCart },
-  { title: "Order Requests", url: "/orders/requests", icon: ClipboardList },
   { title: "Products", url: "/products", icon: Package },
 ];
 
@@ -83,6 +82,7 @@ const crmItems = [
   { title: "Deals", url: "/deals", icon: Target },
   { title: "Tickets", url: "/crm/tickets", icon: Ticket },
   { title: "Orders", url: "/orders", icon: ShoppingCart },
+  { title: "Order Requests", url: "/orders/requests", icon: ClipboardCheck },
   { title: "Projects", url: "/crm/projects", icon: FolderKanban, badge: "BETA" },
   { title: "Segments (Lists)", url: "/crm/segments", icon: ListFilter },
   { title: "Inbox", url: "/crm/inbox", icon: Inbox },
@@ -134,7 +134,7 @@ export function AppSidebar() {
     return location.startsWith(url);
   };
 
-  const isCrmActive = location.startsWith("/crm") || location.startsWith("/marketing") || ["/contacts", "/companies", "/deals", "/orders"].some(p => location.startsWith(p));
+  const isCrmActive = location.startsWith("/crm") || location.startsWith("/marketing") || ["/contacts", "/companies", "/deals", "/orders"].some(p => location.startsWith(p)) || location === "/orders/requests";
   const isTransactionsActive = ["/quotes", "/invoices"].some(p => location.startsWith(p));
   const isSalesActive = location.startsWith("/sales");
 
