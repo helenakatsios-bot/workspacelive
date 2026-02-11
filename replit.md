@@ -35,6 +35,13 @@ A professional B2B CRM and order management system designed for wholesale manufa
   - **API Routes**: GET /api/emails/:id/attachments (list PDFs), POST /api/emails/:id/extract-pdf-order (AI extraction), POST /api/emails/:id/create-order-from-pdf (create order)
   - **Dependencies**: pdfjs-dist, OpenAI via Replit AI Integrations
   - **Location**: Marketing > Email > click email > PDF Attachments section
+- **Customer Portal**: B2B customer-facing portal where customers can log in to view their orders, invoices, and company info. Managed via Admin → Portal tab.
+  - **Portal URL**: /portal (separate session auth from staff)
+  - **Admin Management**: Admin → Portal tab shows portal URL (copy/open), portal user list with create/toggle active/delete
+  - **Database Tables**: portal_users (id, name, email, passwordHash, companyId, active, lastLogin, createdAt)
+  - **API Routes**: POST /api/portal/auth/login, GET /api/portal/auth/me, POST /api/portal/auth/logout, GET /api/portal/dashboard, GET /api/portal/orders, GET /api/portal/invoices, GET /api/portal/products, POST /api/portal/orders (new order), PATCH /api/portal/account (update password)
+  - **Admin API**: GET /api/admin/portal-users, POST /api/admin/portal-users, PATCH /api/admin/portal-users/:id, DELETE /api/admin/portal-users/:id
+  - **Session Keys**: portalUserId, portalCompanyId (separate from staff session)
 - **Email-to-Order Webhook**: Public webhook endpoint that accepts forwarded email content and creates order requests. Designed for use with Power Automate to forward Outlook order emails directly into the CRM.
   - **Webhook URL**: POST /api/public/email-order-webhook (public, secret-auth)
   - **Auth**: X-Webhook-Secret header with stored secret
