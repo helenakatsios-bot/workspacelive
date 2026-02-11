@@ -7,7 +7,7 @@ import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { eq, ilike, and } from "drizzle-orm";
-import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts, outlookTokens as outlookTokensTable } from "@shared/schema";
+import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts, outlookTokens as outlookTokensTable, crmSettings } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks, fetchEmailAttachments, downloadAttachment } from "./outlook";
@@ -1369,9 +1369,16 @@ export async function registerRoutes(
       const baseUrl = process.env.APP_URL || `${req.headers["x-forwarded-proto"] || req.protocol}://${req.headers["x-forwarded-host"] || req.headers.host}`;
       const redirectUri = `${baseUrl}/api/xero/callback`;
       
-      // Generate and store state for CSRF protection
       const state = Math.random().toString(36).substring(2) + Date.now().toString(36);
       req.session.xeroState = state;
+      
+      await db.insert(crmSettings).values({
+        key: `xero_oauth_state_${state}`,
+        value: JSON.stringify({ userId: req.session.userId, createdAt: Date.now() }),
+      }).onConflictDoUpdate({
+        target: crmSettings.key,
+        set: { value: JSON.stringify({ userId: req.session.userId, createdAt: Date.now() }) },
+      });
       
       const xero = createXeroClient(redirectUri);
       const consentUrl = await xero.buildConsentUrl() + `&state=${encodeURIComponent(state)}`;
@@ -1383,31 +1390,48 @@ export async function registerRoutes(
     }
   });
 
-  // Xero OAuth callback - requires valid session with matching state
+  // Xero OAuth callback
   app.get("/api/xero/callback", async (req, res) => {
     try {
-      // Validate state parameter for CSRF protection
       const returnedState = req.query.state as string | undefined;
-      const sessionState = req.session.xeroState;
+      const code = req.query.code as string | undefined;
       
-      // Log state validation for debugging
-      console.log("Xero callback - returned state:", returnedState?.substring(0, 10) + "...");
-      console.log("Xero callback - session state:", sessionState?.substring(0, 10) + "..." || "undefined");
+      console.log("Xero callback hit - code:", !!code, "state:", !!returnedState);
       
-      if (!returnedState || !sessionState || returnedState !== sessionState) {
-        console.error("Xero callback: state mismatch or missing session. Session:", !!sessionState, "Returned:", !!returnedState);
-        return res.redirect("/admin?xero=error&reason=invalid_state");
+      if (!code) {
+        console.error("Xero callback: no authorization code received");
+        return res.redirect("/admin?xero=error&reason=no_code");
       }
       
-      // Clear state after validation
-      delete req.session.xeroState;
+      let userId: string | undefined = req.session.userId;
       
-      // Verify user is still logged in as admin
-      if (!req.session.userId) {
+      if (returnedState) {
+        const [stateRecord] = await db.select().from(crmSettings)
+          .where(eq(crmSettings.key, `xero_oauth_state_${returnedState}`));
+        
+        if (stateRecord) {
+          const stateData = JSON.parse(stateRecord.value || "{}");
+          userId = userId || stateData.userId;
+          
+          const stateAge = Date.now() - (stateData.createdAt || 0);
+          if (stateAge > 10 * 60 * 1000) {
+            console.error("Xero callback: state expired (age:", stateAge, "ms)");
+            await db.delete(crmSettings).where(eq(crmSettings.key, `xero_oauth_state_${returnedState}`));
+            return res.redirect("/admin?xero=error&reason=state_expired");
+          }
+          
+          await db.delete(crmSettings).where(eq(crmSettings.key, `xero_oauth_state_${returnedState}`));
+        } else {
+          console.error("Xero callback: state not found in database");
+        }
+      }
+      
+      if (!userId) {
+        console.error("Xero callback: no user identified");
         return res.redirect("/admin?xero=error&reason=not_authenticated");
       }
       
-      const user = await storage.getUser(req.session.userId);
+      const user = await storage.getUser(userId);
       if (!user || user.role !== "admin") {
         return res.redirect("/admin?xero=error&reason=not_admin");
       }
@@ -1415,18 +1439,35 @@ export async function registerRoutes(
       const baseUrl = process.env.APP_URL || `${req.headers["x-forwarded-proto"] || req.protocol}://${req.headers["x-forwarded-host"] || req.headers.host}`;
       const redirectUri = `${baseUrl}/api/xero/callback`;
       
-      const xero = createXeroClient(redirectUri);
+      const tokenResponse = await fetch("https://identity.xero.com/connect/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Authorization": `Basic ${Buffer.from(`${process.env.XERO_CLIENT_ID}:${process.env.XERO_CLIENT_SECRET}`).toString("base64")}`,
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: redirectUri,
+        }).toString(),
+      });
       
-      // Strip state from URL and call apiCallback without state verification
-      // since we already validated the state ourselves
-      const urlWithoutState = req.url.replace(/[&?]state=[^&]*/, '');
-      const tokenSet = await xero.apiCallback(urlWithoutState);
+      if (!tokenResponse.ok) {
+        const errorText = await tokenResponse.text();
+        console.error("Xero token exchange failed:", errorText);
+        return res.redirect("/admin?xero=error&reason=token_exchange_failed");
+      }
       
-      // Get tenants directly from the connections endpoint instead of updateTenants()
-      // which tries to call Organisation API and may fail with insufficient scopes
+      const tokenData = await tokenResponse.json() as {
+        access_token: string;
+        refresh_token: string;
+        expires_in: number;
+        token_type: string;
+      };
+      
       const connectionsResponse = await fetch("https://api.xero.com/connections", {
         headers: {
-          "Authorization": `Bearer ${tokenSet.access_token}`,
+          "Authorization": `Bearer ${tokenData.access_token}`,
           "Content-Type": "application/json",
         },
       });
@@ -1439,26 +1480,26 @@ export async function registerRoutes(
       const connections = await connectionsResponse.json() as Array<{ tenantId: string; tenantName?: string; tenantType?: string }>;
       const activeTenant = connections[0];
       
-      if (activeTenant && tokenSet.access_token && tokenSet.refresh_token) {
+      if (activeTenant && tokenData.access_token && tokenData.refresh_token) {
         await saveXeroToken(
           activeTenant.tenantId,
           activeTenant.tenantName || "Xero Organisation",
-          tokenSet.access_token,
-          tokenSet.refresh_token,
-          new Date((tokenSet.expires_at || 0) * 1000)
+          tokenData.access_token,
+          tokenData.refresh_token,
+          new Date(Date.now() + tokenData.expires_in * 1000)
         );
         
-        // Audit log the connection
         await storage.createAuditLog({
-          userId: req.session.userId,
+          userId,
           action: "create",
           entityType: "xero_connection",
         });
         
-        // Redirect back to admin page
+        console.log("Xero connected successfully for tenant:", activeTenant.tenantName);
         res.redirect("/admin?xero=connected");
       } else {
-        res.redirect("/admin?xero=error");
+        console.error("Xero callback: missing tenant or tokens");
+        res.redirect("/admin?xero=error&reason=no_tenant");
       }
     } catch (error) {
       console.error("Xero callback error:", error);

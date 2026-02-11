@@ -205,8 +205,7 @@ export default function AdminPage() {
       return response.json();
     },
     onSuccess: (data: { url: string }) => {
-      // Open in new window to avoid iframe blocking from Replit webview
-      window.open(data.url, "_blank");
+      window.location.href = data.url;
     },
     onError: () => {
       toast({ title: "Failed to start Xero connection", variant: "destructive" });
@@ -268,8 +267,7 @@ export default function AdminPage() {
       return response.json();
     },
     onSuccess: (data: { url: string }) => {
-      // Open in new window to avoid iframe blocking from Replit webview
-      window.open(data.url, "_blank");
+      window.location.href = data.url;
     },
     onError: () => {
       toast({ title: "Failed to start Outlook connection", variant: "destructive" });
