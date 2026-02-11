@@ -109,9 +109,11 @@ export async function saveXeroSyncMapping(entityType: string, localId: string, x
 export async function refreshTokenIfNeeded(xero: XeroClient, token: typeof xeroTokens.$inferSelect) {
   const now = new Date();
   const expiresAt = new Date(token.expiresAt);
+  const isExpired = expiresAt.getTime() <= now.getTime();
+  const expiresWithin5Min = expiresAt.getTime() - now.getTime() < 5 * 60 * 1000;
   
-  // Refresh if token expires in less than 5 minutes
-  if (expiresAt.getTime() - now.getTime() < 5 * 60 * 1000) {
+  if (isExpired || expiresWithin5Min) {
+    console.log(`[XERO] Token ${isExpired ? 'expired' : 'expiring soon'}, attempting refresh...`);
     try {
       xero.setTokenSet({
         access_token: token.accessToken,
@@ -131,15 +133,28 @@ export async function refreshTokenIfNeeded(xero: XeroClient, token: typeof xeroT
           newTokenSet.refresh_token,
           new Date((newTokenSet.expires_at || 0) * 1000)
         );
+        console.log("[XERO] Token refreshed successfully");
+        
+        xero.setTokenSet({
+          access_token: newTokenSet.access_token,
+          refresh_token: newTokenSet.refresh_token,
+          expires_at: newTokenSet.expires_at || 0,
+          token_type: "Bearer",
+          scope: XERO_SCOPES,
+        });
         return true;
       }
-    } catch (error) {
-      console.error("Failed to refresh Xero token:", error);
+      console.error("[XERO] Refresh returned empty tokens");
+      return false;
+    } catch (error: any) {
+      console.error("[XERO] Failed to refresh token:", error?.message || error);
+      if (error?.response?.body) {
+        console.error("[XERO] Error response:", JSON.stringify(error.response.body));
+      }
       return false;
     }
   }
   
-  // Set token on client
   xero.setTokenSet({
     access_token: token.accessToken,
     refresh_token: token.refreshToken,

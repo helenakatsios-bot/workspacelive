@@ -1492,7 +1492,8 @@ export async function registerRoutes(
       const refreshed = await refreshTokenIfNeeded(xero, token);
       
       if (!refreshed) {
-        return res.status(401).json({ message: "Xero token expired, please reconnect" });
+        await deleteXeroToken();
+        return res.status(401).json({ message: "Xero session expired. Please go to Admin > Integrations and reconnect Xero." });
       }
       
       const imported = await importContactsFromXero(xero, token.tenantId);
@@ -1510,8 +1511,11 @@ export async function registerRoutes(
         skipped: imported.filter(i => !i.isNew).length,
         contacts: imported,
       });
-    } catch (error) {
-      console.error("Xero import contacts error:", error);
+    } catch (error: any) {
+      console.error("Xero import contacts error:", error?.message || error);
+      if (error?.response?.statusCode === 401 || error?.statusCode === 401) {
+        return res.status(401).json({ message: "Xero session expired. Please go to Admin > Integrations and reconnect Xero." });
+      }
       res.status(500).json({ message: "Failed to import contacts from Xero" });
     }
   });
@@ -1530,7 +1534,8 @@ export async function registerRoutes(
       const refreshed = await refreshTokenIfNeeded(xero, token);
       
       if (!refreshed) {
-        return res.status(401).json({ message: "Xero token expired, please reconnect" });
+        await deleteXeroToken();
+        return res.status(401).json({ message: "Xero session expired. Please go to Admin > Integrations and reconnect Xero." });
       }
       
       const freshToken = await getStoredToken();
@@ -1557,7 +1562,10 @@ export async function registerRoutes(
         details: result.imported,
       });
     } catch (error: any) {
-      console.error("Xero import invoices error:", error);
+      console.error("Xero import invoices error:", error?.message || error);
+      if (error?.response?.statusCode === 401 || error?.statusCode === 401) {
+        return res.status(401).json({ message: "Xero session expired. Please go to Admin > Integrations and reconnect Xero." });
+      }
       res.status(500).json({ message: error.message || "Failed to import invoices from Xero" });
     }
   });
@@ -1587,7 +1595,8 @@ export async function registerRoutes(
       const refreshed = await refreshTokenIfNeeded(xero, token);
       
       if (!refreshed) {
-        return res.status(401).json({ message: "Xero token expired, please reconnect" });
+        await deleteXeroToken();
+        return res.status(401).json({ message: "Xero session expired. Please go to Admin > Integrations and reconnect Xero." });
       }
       
       // Get invoice line items if available (simplified for now)
