@@ -2202,11 +2202,25 @@ export async function registerRoutes(
       const accessToken = await refreshOutlookTokenIfNeeded(email.userId, redirectUri);
       if (!accessToken) return res.status(400).json({ message: "Outlook not connected or token expired" });
 
-      const pdfBuffer = await downloadAttachment(accessToken, email.outlookMessageId, attachmentId);
+      let pdfBuffer: Buffer;
+      try {
+        pdfBuffer = await downloadAttachment(accessToken, email.outlookMessageId, attachmentId);
+        console.log(`[PDF-EXTRACT] Downloaded attachment: ${pdfBuffer.length} bytes`);
+      } catch (dlErr: any) {
+        console.error("[PDF-EXTRACT] Download failed:", dlErr?.message || dlErr);
+        return res.status(500).json({ message: "Failed to download PDF attachment from Outlook" });
+      }
 
-      const pdfParse = (await import("pdf-parse")).default;
-      const pdfData = await pdfParse(pdfBuffer);
-      const pdfText = pdfData.text;
+      let pdfText: string;
+      try {
+        const pdfParse = (await import("pdf-parse")).default;
+        const pdfData = await pdfParse(pdfBuffer);
+        pdfText = pdfData.text;
+        console.log(`[PDF-EXTRACT] Extracted text: ${pdfText.length} chars`);
+      } catch (parseErr: any) {
+        console.error("[PDF-EXTRACT] PDF parse failed:", parseErr?.message || parseErr);
+        return res.status(400).json({ message: "Could not parse this PDF. The file may be corrupted or password-protected." });
+      }
 
       if (!pdfText || pdfText.trim().length < 10) {
         return res.status(400).json({ message: "Could not extract text from this PDF. It may be a scanned image." });
@@ -2669,20 +2683,30 @@ Rules:
 
   app.post("/api/forms", requireEdit, async (req, res) => {
     try {
+      const { name, description, status, fields, submitButtonText, successMessage, notifyEmails } = req.body;
+      if (!name || typeof name !== "string") {
+        return res.status(400).json({ message: "Form name is required" });
+      }
       const form = await storage.createForm({
-        ...req.body,
-        createdBy: (req as any).user.id,
+        name,
+        description: description || null,
+        status: status || "draft",
+        fields: fields || [],
+        submitButtonText: submitButtonText || "Submit",
+        successMessage: successMessage || "Thank you for your submission!",
+        notifyEmails: notifyEmails || null,
+        createdBy: req.session.userId,
       });
       await storage.createAuditLog({
-        userId: (req as any).user.id,
+        userId: req.session.userId,
         action: "create",
         entityType: "form",
         entityId: form.id,
         details: `Created form: ${form.name}`,
       });
       res.status(201).json(form);
-    } catch (error) {
-      console.error("Error creating form:", error);
+    } catch (error: any) {
+      console.error("Error creating form:", error?.message || error);
       res.status(500).json({ message: "Failed to create form" });
     }
   });
@@ -2692,7 +2716,7 @@ Rules:
       const form = await storage.updateForm(req.params.id, req.body);
       if (!form) return res.status(404).json({ message: "Form not found" });
       await storage.createAuditLog({
-        userId: (req as any).user.id,
+        userId: req.session.userId,
         action: "update",
         entityType: "form",
         entityId: form.id,
@@ -2710,7 +2734,7 @@ Rules:
       if (!form) return res.status(404).json({ message: "Form not found" });
       await storage.deleteForm(req.params.id);
       await storage.createAuditLog({
-        userId: (req as any).user.id,
+        userId: req.session.userId,
         action: "delete",
         entityType: "form",
         entityId: req.params.id,
