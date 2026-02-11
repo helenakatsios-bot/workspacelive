@@ -335,6 +335,10 @@ export async function fetchEmailAttachments(accessToken: string, messageId: stri
 export async function downloadAttachment(accessToken: string, messageId: string, attachmentId: string): Promise<Buffer> {
   const client = createGraphClient(accessToken);
   const attachment = await client.api(`/me/messages/${messageId}/attachments/${attachmentId}`).get();
+  console.log(`[PDF-EXTRACT] Attachment type: ${attachment.contentType}, name: ${attachment.name}, size: ${attachment.size}`);
+  if (!attachment.contentBytes) {
+    throw new Error(`Attachment has no content bytes. Type: ${attachment["@odata.type"]}, contentType: ${attachment.contentType}`);
+  }
   return Buffer.from(attachment.contentBytes, "base64");
 }
 

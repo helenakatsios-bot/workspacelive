@@ -2214,11 +2214,18 @@ export async function registerRoutes(
       let pdfText: string;
       try {
         const pdfParse = (await import("pdf-parse")).default;
-        const pdfData = await pdfParse(pdfBuffer);
+        const pdfData = await pdfParse(pdfBuffer, {
+          max: 0,
+        });
         pdfText = pdfData.text;
-        console.log(`[PDF-EXTRACT] Extracted text: ${pdfText.length} chars`);
+        console.log(`[PDF-EXTRACT] Extracted text: ${pdfText.length} chars, pages: ${pdfData.numpages}`);
       } catch (parseErr: any) {
-        console.error("[PDF-EXTRACT] PDF parse failed:", parseErr?.message || parseErr);
+        console.error("[PDF-EXTRACT] PDF parse failed:", parseErr?.message || parseErr, parseErr?.stack);
+        const header = pdfBuffer.slice(0, 5).toString();
+        console.log(`[PDF-EXTRACT] Buffer header: "${header}", size: ${pdfBuffer.length}`);
+        if (header !== "%PDF-") {
+          return res.status(400).json({ message: "This attachment does not appear to be a valid PDF file." });
+        }
         return res.status(400).json({ message: "Could not parse this PDF. The file may be corrupted or password-protected." });
       }
 
