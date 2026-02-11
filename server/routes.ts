@@ -2253,14 +2253,14 @@ export async function registerRoutes(
         return res.status(500).json({ message: "Failed to download PDF attachment from Outlook" });
       }
 
-      let pdfText: string;
-      try {
-        const header = pdfBuffer.slice(0, 5).toString();
-        console.log(`[PDF-EXTRACT] Buffer header: "${header}", size: ${pdfBuffer.length}`);
-        if (header !== "%PDF-") {
-          return res.status(400).json({ message: "This attachment does not appear to be a valid PDF file." });
-        }
+      let pdfText: string = "";
+      const header = pdfBuffer.slice(0, 5).toString();
+      console.log(`[PDF-EXTRACT] Buffer header: "${header}", size: ${pdfBuffer.length}`);
+      if (header !== "%PDF-") {
+        return res.status(400).json({ message: "This attachment does not appear to be a valid PDF file." });
+      }
 
+      try {
         const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
         const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(pdfBuffer), useSystemFonts: true });
         const pdfDoc = await loadingTask.promise;
@@ -2277,8 +2277,8 @@ export async function registerRoutes(
         pdfText = textParts.join("\n");
         console.log(`[PDF-EXTRACT] Extracted text: ${pdfText.length} chars, pages: ${pdfDoc.numPages}`);
       } catch (parseErr: any) {
-        console.error("[PDF-EXTRACT] PDF parse failed:", parseErr?.message || parseErr, parseErr?.stack);
-        return res.status(400).json({ message: "Could not parse this PDF. The file may be corrupted or password-protected." });
+        console.log("[PDF-EXTRACT] pdfjs-dist parse failed, will try OCR:", parseErr?.message);
+        pdfText = "";
       }
 
       const isScannedPdf = !pdfText || pdfText.trim().length < 10;
