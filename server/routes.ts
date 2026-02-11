@@ -1719,8 +1719,6 @@ export async function registerRoutes(
   // Sync emails from Outlook
   app.post("/api/outlook/sync", requireAuth, async (req, res) => {
     try {
-      const { folder = "inbox" } = req.body;
-      
       const protocol = req.headers["x-forwarded-proto"] || req.protocol;
       const host = req.headers["x-forwarded-host"] || req.headers.host;
       const redirectUri = `${protocol}://${host}/api/outlook/callback`;
@@ -1730,9 +1728,14 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Outlook not connected or token expired" });
       }
       
-      const synced = await syncEmailsToDatabase(req.session.userId!, accessToken, folder);
+      const folders = ["inbox", "sentItems", "drafts"];
+      let totalSynced = 0;
+      for (const folder of folders) {
+        const synced = await syncEmailsToDatabase(req.session.userId!, accessToken, folder);
+        totalSynced += synced;
+      }
       
-      res.json({ success: true, synced });
+      res.json({ success: true, synced: totalSynced });
     } catch (error) {
       console.error("Outlook sync error:", error);
       res.status(500).json({ message: "Failed to sync emails from Outlook" });

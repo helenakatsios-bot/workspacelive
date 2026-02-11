@@ -227,7 +227,7 @@ export async function fetchEmails(
   const client = createGraphClient(accessToken);
   
   let folderPath = "inbox";
-  if (folder === "sent") folderPath = "sentItems";
+  if (folder === "sent" || folder === "sentItems") folderPath = "sentItems";
   else if (folder === "drafts") folderPath = "drafts";
   
   const allMessages: OutlookMessage[] = [];
@@ -549,7 +549,7 @@ export function startAutoEmailSync(redirectUri: string, intervalMinutes: number 
             continue;
           }
 
-          const folders = ["inbox", "sentItems"];
+          const folders = ["inbox", "sentItems", "drafts"];
           let totalSynced = 0;
           for (const folder of folders) {
             const synced = await syncEmailsToDatabase(token.userId, accessToken, folder);

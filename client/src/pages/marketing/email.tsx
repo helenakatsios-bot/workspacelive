@@ -1,18 +1,48 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mail, Plus, Send, Inbox, ArrowLeft, Reply, Forward, ExternalLink } from "lucide-react";
+import { Mail, Plus, Send, Inbox, FileEdit, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { format } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+
+type FolderTab = "all" | "inbox" | "sentItems" | "drafts";
 
 export default function MarketingEmailPage() {
-  const { data: emails } = useQuery<any[]>({ queryKey: ["/api/emails"] });
+  const { data: emails, isLoading } = useQuery<any[]>({ queryKey: ["/api/emails"] });
   const [selectedEmail, setSelectedEmail] = useState<any | null>(null);
+  const [activeTab, setActiveTab] = useState<FolderTab>("all");
+  const { toast } = useToast();
+
+  const syncMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/outlook/sync"),
+    onSuccess: async (res) => {
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
+      toast({ title: "Sync complete", description: `${data.synced} new emails synced from Outlook` });
+    },
+    onError: () => {
+      toast({ title: "Sync failed", description: "Could not sync emails. Check Outlook connection.", variant: "destructive" });
+    },
+  });
 
   const sentEmails = emails?.filter((e) => e.folder === "sentItems") || [];
   const receivedEmails = emails?.filter((e) => e.folder === "inbox") || [];
+  const draftEmails = emails?.filter((e) => e.folder === "drafts") || [];
+
+  const filteredEmails = activeTab === "all"
+    ? emails || []
+    : (emails || []).filter((e) => e.folder === activeTab);
+
+  const tabs: { key: FolderTab; label: string; count: number }[] = [
+    { key: "all", label: "All", count: emails?.length || 0 },
+    { key: "inbox", label: "Inbox", count: receivedEmails.length },
+    { key: "sentItems", label: "Sent", count: sentEmails.length },
+    { key: "drafts", label: "Drafts", count: draftEmails.length },
+  ];
 
   return (
     <div className="space-y-6">
@@ -21,13 +51,24 @@ export default function MarketingEmailPage() {
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Email</h1>
           <p className="text-muted-foreground">Email marketing and communications</p>
         </div>
-        <Button data-testid="button-compose-email">
-          <Plus className="w-4 h-4 mr-2" />
-          Compose Email
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+            data-testid="button-sync-emails"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+            {syncMutation.isPending ? "Syncing..." : "Sync Emails"}
+          </Button>
+          <Button data-testid="button-compose-email">
+            <Plus className="w-4 h-4 mr-2" />
+            Compose Email
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card data-testid="card-total-emails">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Emails</CardTitle>
@@ -36,6 +77,16 @@ export default function MarketingEmailPage() {
           <CardContent>
             <div className="text-2xl font-bold">{emails?.length || 0}</div>
             <p className="text-xs text-muted-foreground">Synced from Outlook</p>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-received-emails">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Inbox</CardTitle>
+            <Inbox className="w-4 h-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{receivedEmails.length}</div>
+            <p className="text-xs text-muted-foreground">Received emails</p>
           </CardContent>
         </Card>
         <Card data-testid="card-sent-emails">
@@ -48,32 +99,60 @@ export default function MarketingEmailPage() {
             <p className="text-xs text-muted-foreground">Sent emails</p>
           </CardContent>
         </Card>
-        <Card data-testid="card-received-emails">
+        <Card data-testid="card-draft-emails">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Received</CardTitle>
-            <Inbox className="w-4 h-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Drafts</CardTitle>
+            <FileEdit className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{receivedEmails.length}</div>
-            <p className="text-xs text-muted-foreground">Received emails</p>
+            <div className="text-2xl font-bold">{draftEmails.length}</div>
+            <p className="text-xs text-muted-foreground">Draft emails</p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Recent Emails</CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle>Emails</CardTitle>
+          </div>
+          <div className="flex items-center gap-1 pt-2 flex-wrap">
+            {tabs.map((tab) => (
+              <Button
+                key={tab.key}
+                variant={activeTab === tab.key ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setActiveTab(tab.key)}
+                data-testid={`button-tab-${tab.key}`}
+              >
+                {tab.label}
+                <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5">
+                  {tab.count}
+                </Badge>
+              </Button>
+            ))}
+          </div>
         </CardHeader>
         <CardContent>
-          {!emails || emails.length === 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredEmails.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 gap-3">
               <Mail className="w-10 h-10 text-muted-foreground" />
-              <p className="text-muted-foreground">No emails synced yet</p>
-              <p className="text-sm text-muted-foreground text-center">Connect your Outlook account in Settings to sync emails.</p>
+              <p className="text-muted-foreground">
+                {activeTab === "all" ? "No emails synced yet" : `No ${activeTab === "sentItems" ? "sent" : activeTab} emails`}
+              </p>
+              <p className="text-sm text-muted-foreground text-center">
+                {activeTab === "all"
+                  ? "Connect your Outlook account in Settings and click Sync Emails."
+                  : "Try syncing your emails using the Sync button above."}
+              </p>
             </div>
           ) : (
             <div className="space-y-1">
-              {emails.map((email: any) => (
+              {filteredEmails.map((email: any) => (
                 <div
                   key={email.id}
                   className="flex items-start gap-3 p-3 rounded-md border cursor-pointer hover-elevate"
@@ -81,7 +160,13 @@ export default function MarketingEmailPage() {
                   onClick={() => setSelectedEmail(email)}
                 >
                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Mail className="w-4 h-4 text-primary" />
+                    {email.folder === "sentItems" ? (
+                      <Send className="w-4 h-4 text-primary" />
+                    ) : email.folder === "drafts" ? (
+                      <FileEdit className="w-4 h-4 text-primary" />
+                    ) : (
+                      <Mail className="w-4 h-4 text-primary" />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -91,7 +176,9 @@ export default function MarketingEmailPage() {
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-xs text-muted-foreground truncate">
-                        {email.fromName || email.fromAddress || "Unknown"}
+                        {email.folder === "sentItems"
+                          ? `To: ${email.toAddresses?.[0] || "Unknown"}`
+                          : email.fromName || email.fromAddress || "Unknown"}
                       </p>
                       {email.receivedAt && (
                         <span className="text-xs text-muted-foreground">
@@ -112,7 +199,7 @@ export default function MarketingEmailPage() {
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <Badge variant="secondary" className="text-[10px]">
-                      {email.folder === "sentItems" ? "Sent" : "Inbox"}
+                      {email.folder === "sentItems" ? "Sent" : email.folder === "drafts" ? "Draft" : "Inbox"}
                     </Badge>
                   </div>
                 </div>
@@ -164,7 +251,7 @@ export default function MarketingEmailPage() {
                   <div className="flex items-start gap-2">
                     <span className="text-muted-foreground w-16 flex-shrink-0">Folder:</span>
                     <Badge variant="secondary">
-                      {selectedEmail.folder === "sentItems" ? "Sent" : "Inbox"}
+                      {selectedEmail.folder === "sentItems" ? "Sent" : selectedEmail.folder === "drafts" ? "Draft" : "Inbox"}
                     </Badge>
                   </div>
                 </div>
