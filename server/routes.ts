@@ -2213,19 +2213,29 @@ export async function registerRoutes(
 
       let pdfText: string;
       try {
-        const pdfParse = (await import("pdf-parse")).default;
-        const pdfData = await pdfParse(pdfBuffer, {
-          max: 0,
-        });
-        pdfText = pdfData.text;
-        console.log(`[PDF-EXTRACT] Extracted text: ${pdfText.length} chars, pages: ${pdfData.numpages}`);
-      } catch (parseErr: any) {
-        console.error("[PDF-EXTRACT] PDF parse failed:", parseErr?.message || parseErr, parseErr?.stack);
         const header = pdfBuffer.slice(0, 5).toString();
         console.log(`[PDF-EXTRACT] Buffer header: "${header}", size: ${pdfBuffer.length}`);
         if (header !== "%PDF-") {
           return res.status(400).json({ message: "This attachment does not appear to be a valid PDF file." });
         }
+
+        const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(pdfBuffer), useSystemFonts: true });
+        const pdfDoc = await loadingTask.promise;
+        const textParts: string[] = [];
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+          const page = await pdfDoc.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items
+            .filter((item: any) => "str" in item)
+            .map((item: any) => item.str)
+            .join(" ");
+          textParts.push(pageText);
+        }
+        pdfText = textParts.join("\n");
+        console.log(`[PDF-EXTRACT] Extracted text: ${pdfText.length} chars, pages: ${pdfDoc.numPages}`);
+      } catch (parseErr: any) {
+        console.error("[PDF-EXTRACT] PDF parse failed:", parseErr?.message || parseErr, parseErr?.stack);
         return res.status(400).json({ message: "Could not parse this PDF. The file may be corrupted or password-protected." });
       }
 
