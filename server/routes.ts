@@ -2639,6 +2639,146 @@ Rules:
     }
   });
 
+  // ==================== FORMS ENDPOINTS ====================
+
+  app.get("/api/forms", requireAuth, async (req, res) => {
+    try {
+      const allForms = await storage.getAllForms();
+      const formsWithCounts = await Promise.all(
+        allForms.map(async (form) => {
+          const submissions = await storage.getFormSubmissions(form.id);
+          return { ...form, submissionCount: submissions.length };
+        })
+      );
+      res.json(formsWithCounts);
+    } catch (error) {
+      console.error("Error fetching forms:", error);
+      res.status(500).json({ message: "Failed to fetch forms" });
+    }
+  });
+
+  app.get("/api/forms/:id", requireAuth, async (req, res) => {
+    try {
+      const form = await storage.getForm(req.params.id);
+      if (!form) return res.status(404).json({ message: "Form not found" });
+      res.json(form);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch form" });
+    }
+  });
+
+  app.post("/api/forms", requireEdit, async (req, res) => {
+    try {
+      const form = await storage.createForm({
+        ...req.body,
+        createdBy: (req as any).user.id,
+      });
+      await storage.createAuditLog({
+        userId: (req as any).user.id,
+        action: "create",
+        entityType: "form",
+        entityId: form.id,
+        details: `Created form: ${form.name}`,
+      });
+      res.status(201).json(form);
+    } catch (error) {
+      console.error("Error creating form:", error);
+      res.status(500).json({ message: "Failed to create form" });
+    }
+  });
+
+  app.patch("/api/forms/:id", requireEdit, async (req, res) => {
+    try {
+      const form = await storage.updateForm(req.params.id, req.body);
+      if (!form) return res.status(404).json({ message: "Form not found" });
+      await storage.createAuditLog({
+        userId: (req as any).user.id,
+        action: "update",
+        entityType: "form",
+        entityId: form.id,
+        details: `Updated form: ${form.name}`,
+      });
+      res.json(form);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update form" });
+    }
+  });
+
+  app.delete("/api/forms/:id", requireAdmin, async (req, res) => {
+    try {
+      const form = await storage.getForm(req.params.id);
+      if (!form) return res.status(404).json({ message: "Form not found" });
+      await storage.deleteForm(req.params.id);
+      await storage.createAuditLog({
+        userId: (req as any).user.id,
+        action: "delete",
+        entityType: "form",
+        entityId: req.params.id,
+        details: `Deleted form: ${form.name}`,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete form" });
+    }
+  });
+
+  app.get("/api/forms/:id/submissions", requireAuth, async (req, res) => {
+    try {
+      const submissions = await storage.getFormSubmissions(req.params.id);
+      res.json(submissions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch submissions" });
+    }
+  });
+
+  app.delete("/api/forms/:formId/submissions/:id", requireEdit, async (req, res) => {
+    try {
+      await storage.deleteFormSubmission(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete submission" });
+    }
+  });
+
+  // Public form submission endpoint (no auth required)
+  app.get("/api/public/forms/:id", async (req, res) => {
+    try {
+      const form = await storage.getForm(req.params.id);
+      if (!form || form.status !== "active") {
+        return res.status(404).json({ message: "Form not found or inactive" });
+      }
+      res.json({
+        id: form.id,
+        name: form.name,
+        description: form.description,
+        fields: form.fields,
+        submitButtonText: form.submitButtonText,
+        successMessage: form.successMessage,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch form" });
+    }
+  });
+
+  app.post("/api/public/forms/:id/submit", async (req, res) => {
+    try {
+      const form = await storage.getForm(req.params.id);
+      if (!form || form.status !== "active") {
+        return res.status(404).json({ message: "Form not found or inactive" });
+      }
+      const submission = await storage.createFormSubmission({
+        formId: form.id,
+        data: req.body.data || {},
+        contactId: null,
+        companyId: null,
+      });
+      res.status(201).json({ success: true, message: form.successMessage });
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      res.status(500).json({ message: "Failed to submit form" });
+    }
+  });
+
   // ==================== EMAIL-TO-ORDER WEBHOOK (PUBLIC, KEY-AUTH) ====================
   const webhookRateLimit = new Map<string, { count: number; resetAt: number }>();
   const WEBHOOK_RATE_LIMIT = 30;

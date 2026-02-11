@@ -3,7 +3,7 @@ import { eq, and, gte, lte, desc, ilike, or, sql } from "drizzle-orm";
 import {
   users, companies, contacts, deals, products, quotes, quoteLines,
   orders, orderLines, invoices, attachments, activities, auditLogs,
-  customerOrderRequests, crmSettings,
+  customerOrderRequests, crmSettings, forms, formSubmissions,
   type User, type InsertUser, type Company, type InsertCompany,
   type Contact, type InsertContact, type Deal, type InsertDeal,
   type Product, type InsertProduct, type Quote, type InsertQuote,
@@ -11,7 +11,8 @@ import {
   type OrderLine, type InsertOrderLine, type Invoice, type InsertInvoice,
   type Attachment, type InsertAttachment, type Activity, type InsertActivity,
   type AuditLog, type InsertAuditLog,
-  type CustomerOrderRequest, type InsertCustomerOrderRequest, type CrmSetting
+  type CustomerOrderRequest, type InsertCustomerOrderRequest, type CrmSetting,
+  type Form, type InsertForm, type FormSubmission, type InsertFormSubmission
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
@@ -115,6 +116,19 @@ export interface IStorage {
 
   // Public
   getActiveProducts(): Promise<Product[]>;
+
+  // Forms
+  getForm(id: string): Promise<Form | undefined>;
+  getAllForms(): Promise<Form[]>;
+  createForm(form: InsertForm): Promise<Form>;
+  updateForm(id: string, data: Partial<InsertForm>): Promise<Form | undefined>;
+  deleteForm(id: string): Promise<boolean>;
+
+  // Form Submissions
+  getFormSubmission(id: string): Promise<FormSubmission | undefined>;
+  getFormSubmissions(formId: string): Promise<FormSubmission[]>;
+  createFormSubmission(submission: InsertFormSubmission): Promise<FormSubmission>;
+  deleteFormSubmission(id: string): Promise<boolean>;
 
   // Dashboard Stats
   getDashboardStats(): Promise<{
@@ -549,6 +563,51 @@ export class DatabaseStorage implements IStorage {
       recentCompanies,
       dealsByStage,
     };
+  }
+
+  // Forms
+  async getForm(id: string): Promise<Form | undefined> {
+    const [form] = await db.select().from(forms).where(eq(forms.id, id));
+    return form;
+  }
+
+  async getAllForms(): Promise<Form[]> {
+    return db.select().from(forms).orderBy(desc(forms.createdAt));
+  }
+
+  async createForm(form: InsertForm): Promise<Form> {
+    const [created] = await db.insert(forms).values(form).returning();
+    return created;
+  }
+
+  async updateForm(id: string, data: Partial<InsertForm>): Promise<Form | undefined> {
+    const [updated] = await db.update(forms).set({ ...data, updatedAt: new Date() }).where(eq(forms.id, id)).returning();
+    return updated;
+  }
+
+  async deleteForm(id: string): Promise<boolean> {
+    const result = await db.delete(forms).where(eq(forms.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // Form Submissions
+  async getFormSubmission(id: string): Promise<FormSubmission | undefined> {
+    const [sub] = await db.select().from(formSubmissions).where(eq(formSubmissions.id, id));
+    return sub;
+  }
+
+  async getFormSubmissions(formId: string): Promise<FormSubmission[]> {
+    return db.select().from(formSubmissions).where(eq(formSubmissions.formId, formId)).orderBy(desc(formSubmissions.submittedAt));
+  }
+
+  async createFormSubmission(submission: InsertFormSubmission): Promise<FormSubmission> {
+    const [created] = await db.insert(formSubmissions).values(submission).returning();
+    return created;
+  }
+
+  async deleteFormSubmission(id: string): Promise<boolean> {
+    const result = await db.delete(formSubmissions).where(eq(formSubmissions.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 }
 
