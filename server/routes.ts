@@ -1357,9 +1357,8 @@ export async function registerRoutes(
   // Get Xero OAuth authorization URL
   app.get("/api/xero/auth-url", requireAdmin, async (req, res) => {
     try {
-      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
-      const host = req.headers["x-forwarded-host"] || req.headers.host;
-      const redirectUri = `${protocol}://${host}/api/xero/callback`;
+      const baseUrl = process.env.APP_URL || `${req.headers["x-forwarded-proto"] || req.protocol}://${req.headers["x-forwarded-host"] || req.headers.host}`;
+      const redirectUri = `${baseUrl}/api/xero/callback`;
       
       // Generate and store state for CSRF protection
       const state = Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -1404,9 +1403,8 @@ export async function registerRoutes(
         return res.redirect("/admin?xero=error&reason=not_admin");
       }
       
-      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
-      const host = req.headers["x-forwarded-host"] || req.headers.host;
-      const redirectUri = `${protocol}://${host}/api/xero/callback`;
+      const baseUrl = process.env.APP_URL || `${req.headers["x-forwarded-proto"] || req.protocol}://${req.headers["x-forwarded-host"] || req.headers.host}`;
+      const redirectUri = `${baseUrl}/api/xero/callback`;
       
       const xero = createXeroClient(redirectUri);
       
@@ -1478,9 +1476,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Xero not connected" });
       }
       
-      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
-      const host = req.headers["x-forwarded-host"] || req.headers.host;
-      const redirectUri = `${protocol}://${host}/api/xero/callback`;
+      const baseUrl = process.env.APP_URL || `${req.headers["x-forwarded-proto"] || req.protocol}://${req.headers["x-forwarded-host"] || req.headers.host}`;
+      const redirectUri = `${baseUrl}/api/xero/callback`;
       
       const xero = createXeroClient(redirectUri);
       const refreshed = await refreshTokenIfNeeded(xero, token);
@@ -1517,9 +1514,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Xero not connected" });
       }
       
-      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
-      const host = req.headers["x-forwarded-host"] || req.headers.host;
-      const redirectUri = `${protocol}://${host}/api/xero/callback`;
+      const baseUrl = process.env.APP_URL || `${req.headers["x-forwarded-proto"] || req.protocol}://${req.headers["x-forwarded-host"] || req.headers.host}`;
+      const redirectUri = `${baseUrl}/api/xero/callback`;
       
       const xero = createXeroClient(redirectUri);
       const refreshed = await refreshTokenIfNeeded(xero, token);
@@ -1575,9 +1571,8 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Company not found" });
       }
       
-      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
-      const host = req.headers["x-forwarded-host"] || req.headers.host;
-      const redirectUri = `${protocol}://${host}/api/xero/callback`;
+      const baseUrl = process.env.APP_URL || `${req.headers["x-forwarded-proto"] || req.protocol}://${req.headers["x-forwarded-host"] || req.headers.host}`;
+      const redirectUri = `${baseUrl}/api/xero/callback`;
       
       const xero = createXeroClient(redirectUri);
       const refreshed = await refreshTokenIfNeeded(xero, token);
