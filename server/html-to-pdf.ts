@@ -143,7 +143,14 @@ function extractPlainText(html: string): string {
     .replace(/\n{3,}/g, "\n\n");
 }
 
-export async function convertHtmlToPdf(html: string): Promise<Buffer> {
+export interface OrderContext {
+  customerName?: string;
+  customerAddress?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+}
+
+export async function convertHtmlToPdf(html: string, orderContext?: OrderContext): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     const chunks: Buffer[] = [];
@@ -263,19 +270,29 @@ export async function convertHtmlToPdf(html: string): Promise<Buffer> {
       doc.moveDown(1.2);
     }
 
-    if (parsed.addressLines.length > 0) {
+    const addressLines = orderContext?.customerAddress
+      ? orderContext.customerAddress.split("\n").map(l => l.trim()).filter(l => l.length > 0)
+      : parsed.addressLines;
+    const customerName = orderContext?.customerName || "";
+    const phone = orderContext?.customerPhone || parsed.phone;
+
+    if (addressLines.length > 0 || customerName) {
       doc.fontSize(12).font("Helvetica-Bold").fillColor("#000000").text("Shipping address");
       doc.moveDown(0.3);
       doc.fontSize(11).font("Helvetica").fillColor("#333333");
-      for (const line of parsed.addressLines) {
+      if (customerName) {
+        doc.text(customerName);
+        doc.moveDown(0.2);
+      }
+      for (const line of addressLines) {
         doc.text(line);
-        doc.moveDown(0.4);
+        doc.moveDown(0.2);
       }
       doc.moveDown(0.5);
     }
 
-    if (parsed.phone) {
-      doc.fontSize(11).font("Helvetica").fillColor("#333333").text(parsed.phone);
+    if (phone) {
+      doc.fontSize(11).font("Helvetica").fillColor("#333333").text(phone);
       doc.moveDown(1);
     }
 

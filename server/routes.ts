@@ -1001,7 +1001,16 @@ export async function registerRoutes(
         try {
           const { convertHtmlToPdf } = await import("./html-to-pdf");
           console.log(`[PURAX-SYNC] Converting original email HTML to PDF for order ${order.orderNumber}`);
-          pdfBuffer = await convertHtmlToPdf(originalEmailHtml);
+          const customerAddress = order.customerAddress || company?.shippingAddress || company?.billingAddress || "";
+          const customerName = order.customerName
+            || (contact ? `${contact.firstName} ${contact.lastName}`.trim() : "")
+            || order.customerNotes?.match(/Customer:\s*([^.]+)/)?.[1]?.trim() || "";
+          pdfBuffer = await convertHtmlToPdf(originalEmailHtml, {
+            customerName,
+            customerAddress,
+            customerPhone: order.customerPhone || contact?.phone || "",
+            customerEmail: order.customerEmail || contact?.email || "",
+          });
         } catch (emailPdfError) {
           console.error(`[PURAX-SYNC] Failed to convert email HTML to PDF, falling back to generated PDF:`, emailPdfError);
           const { generateOrderPdf } = await import("./pdf");
