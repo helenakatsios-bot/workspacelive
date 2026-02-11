@@ -138,6 +138,23 @@ export default function MarketingEmailPage() {
     },
   });
 
+  const convertToOrderMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedEmail) throw new Error("No email selected");
+      return apiRequest("POST", `/api/emails/${selectedEmail.id}/convert-to-order`);
+    },
+    onSuccess: async (res) => {
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({ title: "Order created", description: `Order ${data.orderNumber || ""} has been created from this email` });
+      setSelectedEmail(null);
+      navigate("/orders");
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to convert", description: error?.message || "Could not create order from this email", variant: "destructive" });
+    },
+  });
+
   const updateEditableLine = (index: number, field: keyof ExtractedLine, value: string) => {
     if (!editableOrder) return;
     const newLines = [...editableOrder.lines];
@@ -409,6 +426,27 @@ export default function MarketingEmailPage() {
                       {selectedEmail.folder === "sentItems" ? "Sent" : selectedEmail.folder === "drafts" ? "Draft" : "Inbox"}
                     </Badge>
                   </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    onClick={() => convertToOrderMutation.mutate()}
+                    disabled={convertToOrderMutation.isPending}
+                    data-testid="button-convert-to-order"
+                  >
+                    {convertToOrderMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Converting...
+                      </>
+                    ) : (
+                      <>
+                        <ShoppingCart className="w-4 h-4 mr-2" />
+                        Convert to Order
+                      </>
+                    )}
+                  </Button>
                 </div>
 
                 {pdfAttachments.length > 0 && (
