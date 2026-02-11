@@ -62,7 +62,10 @@ const statusOptions = [
 ];
 
 export default function OrderDetailPage() {
-  const [, params] = useRoute("/orders/:id");
+  const [matchView, paramsView] = useRoute("/orders/:id");
+  const [matchEdit, paramsEdit] = useRoute("/orders/:id/edit");
+  const params = paramsView || paramsEdit;
+  const isEditMode = matchEdit;
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { canEdit, canViewPricing } = useAuth();

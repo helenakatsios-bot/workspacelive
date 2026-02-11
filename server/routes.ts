@@ -1897,6 +1897,7 @@ export async function registerRoutes(
           const summaryText = preview.substring(summaryStart + "Order summary".length, subtotalStart).trim();
           const allLines = summaryText.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
           let currentProduct = "";
+          let currentVariant = "";
           let currentPrice = 0;
           let currentQty = 1;
           for (const line of allLines) {
@@ -1912,22 +1913,30 @@ export async function registerRoutes(
             }
             const lineTotalMatch = line.match(/^\$([0-9,.]+)$/);
             if (lineTotalMatch && currentProduct && currentPrice > 0) {
+              const fullDescription = currentVariant ? `${currentProduct} - ${currentVariant}` : currentProduct;
               const lineTotal = parseFloat(lineTotalMatch[1].replace(",", ""));
-              lines.push({ description: currentProduct, quantity: currentQty, unitPrice: currentPrice, lineTotal });
+              lines.push({ description: fullDescription, quantity: currentQty, unitPrice: currentPrice, lineTotal });
               currentProduct = "";
+              currentVariant = "";
               currentPrice = 0;
               currentQty = 1;
               continue;
             }
+            if (/^(King|Queen|Standard|Single|Double|Super)\b/i.test(line) || /^\d+\s*g\s*\//i.test(line) || /\/\s*(Cotton|Polyester|Silk|Satin|Bamboo|Microfibre)/i.test(line)) {
+              currentVariant = line;
+              continue;
+            }
             if (!line.startsWith("$") && line.length > 2 &&
-                !line.includes("View order") && !line.match(/^(King|Queen|Standard|Single|Double|Super)\b/i) &&
+                !line.includes("View order") &&
                 !line.match(/^[A-Z]+\d+/) && !line.match(/^\(\-?\$/) &&
                 !line.match(/^Shipping/) && !line.match(/^Total/)) {
               currentProduct = line;
+              currentVariant = "";
             }
           }
           if (currentProduct && currentPrice > 0 && lines.length === 0) {
-            lines.push({ description: currentProduct, quantity: currentQty, unitPrice: currentPrice, lineTotal: currentPrice * currentQty });
+            const fullDescription = currentVariant ? `${currentProduct} - ${currentVariant}` : currentProduct;
+            lines.push({ description: fullDescription, quantity: currentQty, unitPrice: currentPrice, lineTotal: currentPrice * currentQty });
           }
         }
 
