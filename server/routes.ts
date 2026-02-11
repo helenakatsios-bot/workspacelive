@@ -868,7 +868,22 @@ export async function registerRoutes(
       if (!before) {
         return res.status(404).json({ message: "Order not found" });
       }
-      const order = await storage.updateOrder(req.params.id, req.body);
+      const updateData = { ...req.body };
+      if (updateData.orderDate !== undefined) {
+        if (typeof updateData.orderDate === "string" && updateData.orderDate) {
+          updateData.orderDate = new Date(updateData.orderDate);
+        } else if (!updateData.orderDate) {
+          delete updateData.orderDate;
+        }
+      }
+      if (updateData.requestedShipDate !== undefined) {
+        if (typeof updateData.requestedShipDate === "string" && updateData.requestedShipDate) {
+          updateData.requestedShipDate = new Date(updateData.requestedShipDate);
+        } else if (updateData.requestedShipDate === null || updateData.requestedShipDate === "") {
+          updateData.requestedShipDate = null;
+        }
+      }
+      const order = await storage.updateOrder(req.params.id, updateData);
       await storage.createAuditLog({
         userId: req.session.userId,
         action: "update",
@@ -890,6 +905,46 @@ export async function registerRoutes(
       res.json(order);
     } catch (error) {
       console.error("Update order error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/orders/:id/lines", requireEdit, async (req, res) => {
+    try {
+      const order = await storage.getOrder(req.params.id);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      const { lines } = req.body;
+      if (!Array.isArray(lines)) {
+        return res.status(400).json({ message: "Lines must be an array" });
+      }
+      await storage.deleteOrderLinesByOrderId(req.params.id);
+      const createdLines = [];
+      for (const line of lines) {
+        const created = await storage.createOrderLine({
+          orderId: req.params.id,
+          productId: line.productId || null,
+          descriptionOverride: line.descriptionOverride || line.productName || "",
+          quantity: line.quantity || 1,
+          unitPrice: String(line.unitPrice || "0"),
+          discount: String(line.discount || "0"),
+          lineTotal: String(line.lineTotal || "0"),
+        });
+        createdLines.push(created);
+      }
+      const subtotal = createdLines.reduce((sum, l) => sum + parseFloat(String(l.lineTotal || "0")), 0);
+      const tax = subtotal * 0.1;
+      const total = subtotal + tax;
+      await storage.updateOrder(req.params.id, {
+        subtotal: subtotal.toFixed(2),
+        tax: tax.toFixed(2),
+        total: total.toFixed(2),
+      });
+      recalcCompanyRevenue(order.companyId);
+      res.json(createdLines);
+    } catch (error) {
+      console.error("Update order lines error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

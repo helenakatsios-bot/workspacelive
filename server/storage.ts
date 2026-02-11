@@ -77,6 +77,9 @@ export interface IStorage {
   // Order Lines
   getOrderLines(orderId: string): Promise<OrderLine[]>;
   createOrderLine(line: InsertOrderLine): Promise<OrderLine>;
+  updateOrderLine(id: string, data: Partial<InsertOrderLine>): Promise<OrderLine | undefined>;
+  deleteOrderLine(id: string): Promise<boolean>;
+  deleteOrderLinesByOrderId(orderId: string): Promise<void>;
 
   // Invoices
   getInvoice(id: string): Promise<Invoice | undefined>;
@@ -384,6 +387,20 @@ export class DatabaseStorage implements IStorage {
   async createOrderLine(line: InsertOrderLine): Promise<OrderLine> {
     const [created] = await db.insert(orderLines).values(line).returning();
     return created;
+  }
+
+  async updateOrderLine(id: string, data: Partial<InsertOrderLine>): Promise<OrderLine | undefined> {
+    const [updated] = await db.update(orderLines).set(data).where(eq(orderLines.id, id)).returning();
+    return updated;
+  }
+
+  async deleteOrderLine(id: string): Promise<boolean> {
+    const result = await db.delete(orderLines).where(eq(orderLines.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async deleteOrderLinesByOrderId(orderId: string): Promise<void> {
+    await db.delete(orderLines).where(eq(orderLines.orderId, orderId));
   }
 
   // Invoices
