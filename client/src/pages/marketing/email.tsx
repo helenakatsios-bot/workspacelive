@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mail, Plus, Send, Inbox, FileEdit, RefreshCw, FileText, Loader2, ShoppingCart, Check, X } from "lucide-react";
+import { Mail, Plus, Send, Inbox, FileEdit, RefreshCw, FileText, Loader2, ShoppingCart, Check, X, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -55,6 +55,7 @@ export default function MarketingEmailPage() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
 
+  const [searchQuery, setSearchQuery] = useState("");
   const [pdfAttachments, setPdfAttachments] = useState<PdfAttachment[]>([]);
   const [loadingAttachments, setLoadingAttachments] = useState(false);
   const [extractedOrder, setExtractedOrder] = useState<ExtractedOrder | null>(null);
@@ -164,9 +165,22 @@ export default function MarketingEmailPage() {
   const receivedEmails = emails?.filter((e) => e.folder === "inbox") || [];
   const draftEmails = emails?.filter((e) => e.folder === "drafts") || [];
 
-  const filteredEmails = activeTab === "all"
+  const tabFiltered = activeTab === "all"
     ? emails || []
     : (emails || []).filter((e) => e.folder === activeTab);
+
+  const filteredEmails = searchQuery.trim()
+    ? tabFiltered.filter((e: any) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          (e.subject || "").toLowerCase().includes(q) ||
+          (e.fromName || "").toLowerCase().includes(q) ||
+          (e.fromAddress || "").toLowerCase().includes(q) ||
+          (e.bodyPreview || "").toLowerCase().includes(q) ||
+          ((e.toAddresses || []) as string[]).some((a: string) => a.toLowerCase().includes(q))
+        );
+      })
+    : tabFiltered;
 
   const tabs: { key: FolderTab; label: string; count: number }[] = [
     { key: "all", label: "All", count: emails?.length || 0 },
@@ -246,6 +260,16 @@ export default function MarketingEmailPage() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <CardTitle>Emails</CardTitle>
+            <div className="relative w-full max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search emails..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8"
+                data-testid="input-search-emails"
+              />
+            </div>
           </div>
           <div className="flex items-center gap-1 pt-2 flex-wrap">
             {tabs.map((tab) => (

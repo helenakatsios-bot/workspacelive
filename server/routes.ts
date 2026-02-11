@@ -6,7 +6,7 @@ import { pool, db } from "./db";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { eq, ilike } from "drizzle-orm";
+import { eq, ilike, and } from "drizzle-orm";
 import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts, outlookTokens as outlookTokensTable } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero } from "./xero";
@@ -1766,10 +1766,11 @@ export async function registerRoutes(
       const { folder, companyId, contactId, limit = "50" } = req.query;
       
       let emailList;
+      const currentUserId = req.session.userId!;
       if (companyId) {
-        emailList = await getEmailsForCompany(companyId as string, parseInt(limit as string));
+        emailList = await getEmailsForCompany(companyId as string, parseInt(limit as string), currentUserId);
       } else if (contactId) {
-        emailList = await getEmailsForContact(contactId as string, parseInt(limit as string));
+        emailList = await getEmailsForContact(contactId as string, parseInt(limit as string), currentUserId);
       } else {
         emailList = await getAllEmails(req.session.userId!, folder as string | undefined, parseInt(limit as string));
       }
@@ -2559,7 +2560,9 @@ Rules:
   app.get("/api/emails/:id", requireAuth, async (req, res) => {
     try {
       const emailId = req.params.id;
-      const [email] = await db.select().from(emailsTable).where(eq(emailsTable.id, emailId));
+      const [email] = await db.select().from(emailsTable).where(
+        and(eq(emailsTable.id, emailId), eq(emailsTable.userId, req.session.userId!))
+      );
       if (!email) return res.status(404).json({ message: "Email not found" });
       res.json(email);
     } catch (error) {
