@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2, Webhook, Key } from "lucide-react";
+import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2, Webhook, Key, Globe, Building2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -354,6 +354,10 @@ export default function AdminPage() {
           <TabsTrigger value="order-form" className="gap-2" data-testid="tab-order-form">
             <ShoppingCart className="w-4 h-4" />
             Order Form
+          </TabsTrigger>
+          <TabsTrigger value="portal" className="gap-2" data-testid="tab-portal">
+            <Globe className="w-4 h-4" />
+            Portal
           </TabsTrigger>
         </TabsList>
 
@@ -812,6 +816,10 @@ export default function AdminPage() {
         <TabsContent value="order-form" className="mt-6">
           <OrderFormSettings />
         </TabsContent>
+
+        <TabsContent value="portal" className="mt-6">
+          <PortalUsersManagement />
+        </TabsContent>
       </Tabs>
 
       <Dialog open={userDialogOpen} onOpenChange={setUserDialogOpen}>
@@ -1232,6 +1240,307 @@ function OrderFormSettings() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function PortalUsersManagement() {
+  const { toast } = useToast();
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newCompanyId, setNewCompanyId] = useState("");
+  const [companySearch, setCompanySearch] = useState("");
+
+  const { data: portalUsers, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/portal-users"],
+  });
+
+  const { data: companies } = useQuery<any[]>({
+    queryKey: ["/api/companies"],
+  });
+
+  const filteredCompanies = useMemo(() => {
+    if (!companies) return [];
+    if (!companySearch) return companies.slice(0, 30);
+    const q = companySearch.toLowerCase();
+    return companies.filter((c: any) =>
+      (c.tradingName || "").toLowerCase().includes(q) ||
+      c.legalName.toLowerCase().includes(q)
+    ).slice(0, 30);
+  }, [companies, companySearch]);
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/admin/portal-users", {
+        name: newName,
+        email: newEmail,
+        password: newPassword,
+        companyId: newCompanyId,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-users"] });
+      toast({ title: "Portal user created" });
+      setCreateDialogOpen(false);
+      setNewName("");
+      setNewEmail("");
+      setNewPassword("");
+      setNewCompanyId("");
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error?.message || "Failed to create portal user", variant: "destructive" });
+    },
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
+      return apiRequest("PATCH", `/api/admin/portal-users/${id}`, { active });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-users"] });
+      toast({ title: "Portal user updated" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/admin/portal-users/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-users"] });
+      toast({ title: "Portal user deleted" });
+      setDeleteUserId(null);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete portal user", variant: "destructive" });
+    },
+  });
+
+  const portalUrl = `${window.location.origin}/portal`;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle>Customer Portal</CardTitle>
+            <CardDescription>Manage portal access for your B2B customers</CardDescription>
+          </div>
+          <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-create-portal-user">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Portal User
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-2 p-3 rounded-md border bg-muted/30">
+            <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">Portal URL</p>
+              <p className="text-sm font-mono truncate" data-testid="text-portal-url">{portalUrl}</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(portalUrl);
+                toast({ title: "Copied portal URL" });
+              }}
+              data-testid="button-copy-portal-url"
+            >
+              <Copy className="w-4 h-4 mr-1" />
+              Copy
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(portalUrl, "_blank")}
+              data-testid="button-open-portal"
+            >
+              <ExternalLink className="w-4 h-4 mr-1" />
+              Open
+            </Button>
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : portalUsers && portalUsers.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last Login</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {portalUsers.map((pu: any) => (
+                  <TableRow key={pu.id} data-testid={`row-portal-user-${pu.id}`}>
+                    <TableCell className="font-medium">{pu.name}</TableCell>
+                    <TableCell className="text-sm">{pu.email}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-sm">{pu.companyName || "Unknown"}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={pu.active}
+                        onCheckedChange={(checked) => toggleActiveMutation.mutate({ id: pu.id, active: checked })}
+                        data-testid={`switch-active-${pu.id}`}
+                      />
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {pu.lastLogin ? format(new Date(pu.lastLogin), "MMM d, yyyy") : "Never"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {format(new Date(pu.createdAt), "MMM d, yyyy")}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setDeleteUserId(pu.id)}
+                        data-testid={`button-delete-portal-user-${pu.id}`}
+                      >
+                        <Trash2 className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p>No portal users yet</p>
+              <p className="text-xs mt-1">Add portal users to give your customers access to view orders and invoices</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Portal User</DialogTitle>
+            <DialogDescription>
+              Create a login for a customer to access their orders and invoices via the portal.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!newCompanyId) {
+                toast({ title: "Error", description: "Please select a company", variant: "destructive" });
+                return;
+              }
+              createMutation.mutate();
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="portal-name">Full Name</Label>
+              <Input
+                id="portal-name"
+                placeholder="e.g. John Smith"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                required
+                data-testid="input-portal-user-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="portal-email">Email</Label>
+              <Input
+                id="portal-email"
+                type="email"
+                placeholder="john@example.com"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                required
+                data-testid="input-portal-user-email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="portal-pass">Password</Label>
+              <Input
+                id="portal-pass"
+                type="password"
+                placeholder="Minimum 6 characters"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                minLength={6}
+                data-testid="input-portal-user-password"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Company</Label>
+              <Select value={newCompanyId} onValueChange={setNewCompanyId}>
+                <SelectTrigger data-testid="select-portal-company">
+                  <SelectValue placeholder="Select a company..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <div className="p-2">
+                    <Input
+                      placeholder="Search companies..."
+                      value={companySearch}
+                      onChange={(e) => setCompanySearch(e.target.value)}
+                      className="h-8"
+                      data-testid="input-portal-company-search"
+                    />
+                  </div>
+                  {filteredCompanies.map((c: any) => (
+                    <SelectItem key={c.id} value={c.id} data-testid={`option-portal-company-${c.id}`}>
+                      {c.tradingName || c.legalName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setCreateDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createMutation.isPending} data-testid="button-save-portal-user">
+                {createMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Create User
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteUserId} onOpenChange={(open) => !open && setDeleteUserId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Portal User</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove this customer's portal access. They will no longer be able to log in.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteUserId && deleteMutation.mutate(deleteUserId)}
+              data-testid="button-confirm-delete-portal-user"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
