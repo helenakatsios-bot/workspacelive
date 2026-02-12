@@ -777,8 +777,6 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                     <TableRow>
                       <TableHead>Product</TableHead>
                       {hasFillingOption && <TableHead>Filling</TableHead>}
-                      <TableHead>SKU</TableHead>
-                      <TableHead className="text-right">Price</TableHead>
                       <TableHead className="text-center w-[140px]">Quantity</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -806,8 +804,6 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                             </Select>
                           </TableCell>
                         )}
-                        <TableCell className="text-muted-foreground text-sm">{product.sku}</TableCell>
-                        <TableCell className="text-right">${parseFloat(product.unitPrice || "0").toFixed(2)}</TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
                             <Button
@@ -867,9 +863,6 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                                 </SelectContent>
                               </Select>
                             </TableCell>
-                            {hasFillingOption && <TableCell />}
-                            <TableCell />
-                            <TableCell />
                             <TableCell>
                               <div className="flex items-center justify-center gap-1">
                                 <Button
@@ -908,7 +901,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                           </TableRow>
                         ))}
                         <TableRow>
-                          <TableCell colSpan={5}>
+                          <TableCell colSpan={3}>
                             <Button variant="outline" size="sm" onClick={addCustomLine} data-testid="button-add-custom-insert">
                               <Plus className="w-3 h-3 mr-1" /> Add Custom Size
                             </Button>
