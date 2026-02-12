@@ -615,7 +615,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const FILLING_OPTIONS: Record<string, string[]> = {
     '4 SEASONS FILLED': ['Duck', 'Goose'],
     'MATTRESS TOPPER FILLED': ['Duck', 'Goose'],
-    '80% WINTER FILLED': ['Duck', 'Goose', 'Hungarian'],
+    '80% WINTER FILLED': ['Duck', 'Goose'],
     '80% MID WARM FILLED': ['Duck', 'Goose', 'Hungarian'],
     'PIPED PILLOWS': ['Duck', 'Goose', 'Hungarian'],
     'STRIP PILLOW': ['Hungarian'],
