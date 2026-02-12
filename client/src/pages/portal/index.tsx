@@ -46,7 +46,8 @@ const portalQueryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: async ({ queryKey }) => {
-        const res = await fetch(queryKey[0] as string, { credentials: "include" });
+        const url = queryKey.join("/");
+        const res = await fetch(url, { credentials: "include" });
         if (!res.ok) {
           if (res.status === 401) throw new Error("UNAUTHORIZED");
           throw new Error(await res.text());
