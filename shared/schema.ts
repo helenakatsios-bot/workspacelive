@@ -494,6 +494,22 @@ export type OrderStatus = "new" | "confirmed" | "in_production" | "ready" | "dis
 export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "void";
 export type ActivityType = "note" | "email" | "call" | "status_change" | "file_upload" | "system";
 
+// ============ COMPANY PRICES ============
+export const companyPrices = pgTable("company_prices", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id, { onDelete: "cascade" }),
+  productId: varchar("product_id", { length: 36 }).notNull().references(() => products.id, { onDelete: "cascade" }),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("company_prices_company_idx").on(table.companyId),
+  index("company_prices_product_idx").on(table.productId),
+]);
+
+export const insertCompanyPriceSchema = createInsertSchema(companyPrices).omit({ id: true, updatedAt: true });
+export type InsertCompanyPrice = z.infer<typeof insertCompanyPriceSchema>;
+export type CompanyPrice = typeof companyPrices.$inferSelect;
+
 // ============ VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
