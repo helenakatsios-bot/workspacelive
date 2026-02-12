@@ -2214,9 +2214,15 @@ export async function registerRoutes(
 
       if (isShopifyEmail) {
         company = allCompanies.find(
-          (c) => c.legalName.toLowerCase().includes("puradown") ||
-                 (c.tradingName && c.tradingName.toLowerCase().includes("puradown"))
+          (c) => c.legalName.toLowerCase() === "puradown website sales" ||
+                 (c.tradingName && c.tradingName.toLowerCase() === "puradown website sales")
         );
+        if (!company) {
+          company = allCompanies.find(
+            (c) => c.legalName.toLowerCase().includes("puradown") ||
+                   (c.tradingName && c.tradingName.toLowerCase().includes("puradown"))
+          );
+        }
       }
 
       if (!company) {
@@ -2288,9 +2294,9 @@ export async function registerRoutes(
       }
 
       if (!company) {
-        const companyNameFromSubject = subject.replace(/order/i, "").replace(/re:/i, "").replace(/fw:/i, "").replace(/fwd:/i, "").trim();
-        company = await storage.createCompany({
-          legalName: companyNameFromSubject || customerName || "Unknown Customer",
+        const senderInfo = realSenderEmail || email.fromAddress || "unknown sender";
+        return res.status(400).json({ 
+          message: `Could not match to an existing company. Sender: ${senderInfo}. Subject: "${subject}". Please create the order manually and select the correct company.`
         });
       }
 
@@ -2644,10 +2650,9 @@ Rules:
 
       let finalCompanyId = companyId;
       if (!finalCompanyId) {
-        const newCompany = await storage.createCompany({
-          legalName: companyName || "Unknown Customer",
+        return res.status(400).json({ 
+          message: `Could not match "${companyName || "Unknown"}" to an existing company. Please select the correct company before creating the order.`
         });
-        finalCompanyId = newCompany.id;
       }
 
       if (contactEmail) {
@@ -3273,16 +3278,8 @@ Rules:
       );
 
       if (!company) {
-        company = await storage.createCompany({
-          legalName: orderRequest.companyName,
-          shippingAddress: orderRequest.shippingAddress || undefined,
-        });
-        await storage.createAuditLog({
-          userId: req.session.userId,
-          action: "create",
-          entityType: "company",
-          entityId: company.id,
-          afterJson: company,
+        return res.status(400).json({ 
+          message: `Could not match "${orderRequest.companyName}" to an existing company. Please check the company name and try again, or create the order manually with the correct company.`
         });
       }
 
