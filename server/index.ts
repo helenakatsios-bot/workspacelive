@@ -181,6 +181,107 @@ app.use((req, res, next) => {
     console.error("Dedup error:", error);
   }
 
+  // Auto-import contacts from HubSpot CSV if contacts table is empty
+  try {
+    const contactCount = await pool.query("SELECT COUNT(*) as cnt FROM contacts");
+    if (parseInt(contactCount.rows[0].cnt) === 0) {
+      console.log("Contacts table is empty, running HubSpot import...");
+      const fs = await import("fs");
+      const pathMod = await import("path");
+      const csvPaths = [
+        pathMod.default.join(process.cwd(), "attached_assets/hubspot-crm-exports-all-contacts-2026-02-10_1770680837777.csv"),
+        pathMod.default.join(__dirname, "../attached_assets/hubspot-crm-exports-all-contacts-2026-02-10_1770680837777.csv"),
+      ];
+      let csvContent = "";
+      for (const p of csvPaths) {
+        if (fs.default.existsSync(p)) {
+          csvContent = fs.default.readFileSync(p, "utf-8");
+          break;
+        }
+      }
+      if (csvContent) {
+        const allCompanies = (await pool.query("SELECT id, legal_name, trading_name FROM companies")).rows;
+        const normalizeForMatch = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(ptyltd|ptylimited|pty|ltd|limited|cod|inc|corp|au|com|net)/g, "");
+        const lines = csvContent.split("\n").filter((l: string) => l.trim());
+        let imported = 0;
+        const existingEmails = new Set<string>();
+        const genericDomains = ["gmail", "hotmail", "yahoo", "outlook", "bigpond", "live", "icloud", "y7mail", "ozemail", "iinet", "westnet", "optusnet", "tpg", "netspace", "aapt", "me", "rocketmail"];
+
+        const parseCsvLine = (line: string) => {
+          const fields: string[] = [];
+          let current = "";
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') inQuotes = !inQuotes;
+            else if (char === "," && !inQuotes) { fields.push(current.trim()); current = ""; }
+            else current += char;
+          }
+          fields.push(current.trim());
+          return fields;
+        };
+
+        for (let i = 1; i < lines.length; i++) {
+          const fields = parseCsvLine(lines[i]);
+          if (fields.length < 4) continue;
+          const email = fields[3] || "";
+          const firstName = fields[1] || "";
+          const lastName = fields[2] || "";
+          const phone = fields[4] || "";
+          const associatedCompany = fields[11] || "";
+          if (!email || existingEmails.has(email.toLowerCase())) continue;
+
+          let matchedCompanyId: string | null = null;
+          const emailDomain = email.split("@")[1] || "";
+          const domainBase = emailDomain.split(".")[0];
+
+          if (domainBase && !genericDomains.includes(domainBase.toLowerCase())) {
+            const normalizedDomain = normalizeForMatch(domainBase);
+            for (const company of allCompanies) {
+              const nLegal = normalizeForMatch(company.legal_name);
+              const nTrading = company.trading_name ? normalizeForMatch(company.trading_name) : "";
+              if (nLegal.includes(normalizedDomain) || normalizedDomain.includes(nLegal) ||
+                  (nTrading && (nTrading.includes(normalizedDomain) || normalizedDomain.includes(nTrading)))) {
+                matchedCompanyId = company.id;
+                break;
+              }
+            }
+          }
+
+          if (!matchedCompanyId && associatedCompany) {
+            const normalizedAssoc = normalizeForMatch(associatedCompany);
+            for (const company of allCompanies) {
+              const nLegal = normalizeForMatch(company.legal_name);
+              const nTrading = company.trading_name ? normalizeForMatch(company.trading_name) : "";
+              if (nLegal === normalizedAssoc || nTrading === normalizedAssoc) {
+                matchedCompanyId = company.id;
+                break;
+              }
+            }
+          }
+
+          if (matchedCompanyId) {
+            try {
+              await pool.query(
+                `INSERT INTO contacts (company_id, first_name, last_name, email, phone) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
+                [matchedCompanyId, firstName || email.split("@")[0], lastName || "", email, phone || null]
+              );
+              imported++;
+              existingEmails.add(email.toLowerCase());
+            } catch (err: any) {
+              // skip individual errors
+            }
+          }
+        }
+        console.log(`Imported ${imported} contacts from HubSpot CSV`);
+      } else {
+        console.log("HubSpot CSV not found, skipping contact import");
+      }
+    }
+  } catch (error) {
+    console.error("Contact import error:", error);
+  }
+
   // Seed database with sample data
   try {
     await seedDatabase();
