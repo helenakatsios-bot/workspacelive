@@ -231,6 +231,7 @@ const statusColors: Record<string, string> = {
 };
 
 function StatusBadge({ status }: { status: string }) {
+  if (!status) status = "unknown";
   const colorClass = statusColors[status] || "bg-gray-100 text-gray-800";
   const label = status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
   return <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colorClass}`}>{label}</span>;
