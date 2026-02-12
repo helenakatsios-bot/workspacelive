@@ -630,6 +630,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     return products.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || (p.category || "").toLowerCase().includes(q));
   }, [products, search]);
 
+  const TOP_CATEGORIES = ['INSERTS'];
   const BOTTOM_CATEGORIES = ['SILVER BLANKET', 'KHAKI BLANKET', 'MICROSOFT'];
 
   const grouped = useMemo(() => {
@@ -640,15 +641,19 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       groups[cat].push(p);
     }
     const sorted: Record<string, any[]> = {};
+    const topEntries: [string, any[]][] = [];
+    const middleEntries: [string, any[]][] = [];
     const bottomEntries: [string, any[]][] = [];
     for (const [cat, prods] of Object.entries(groups)) {
-      if (BOTTOM_CATEGORIES.includes(cat)) {
+      if (TOP_CATEGORIES.includes(cat)) {
+        topEntries.push([cat, prods]);
+      } else if (BOTTOM_CATEGORIES.includes(cat)) {
         bottomEntries.push([cat, prods]);
       } else {
-        sorted[cat] = prods;
+        middleEntries.push([cat, prods]);
       }
     }
-    for (const [cat, prods] of bottomEntries) {
+    for (const [cat, prods] of [...topEntries, ...middleEntries, ...bottomEntries]) {
       sorted[cat] = prods;
     }
     return sorted;
