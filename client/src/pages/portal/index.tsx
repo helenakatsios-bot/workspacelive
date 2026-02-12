@@ -609,7 +609,16 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const FILLING_CATEGORIES = ['4 SEASONS FILLED', 'MATTRESS TOPPER FILLED', '80% DUCK WINTER FILLED', '80% MID WARM FILLED', 'PIPED PILLOWS', 'STRIP PILLOW'];
+  const FILLING_OPTIONS: Record<string, string[]> = {
+    '4 SEASONS FILLED': ['Duck', 'Goose', 'Hungarian'],
+    'MATTRESS TOPPER FILLED': ['Duck', 'Goose', 'Hungarian'],
+    '80% DUCK WINTER FILLED': ['Duck', 'Goose', 'Hungarian'],
+    '80% MID WARM FILLED': ['Duck', 'Goose', 'Hungarian'],
+    'PIPED PILLOWS': ['Duck', 'Goose', 'Hungarian'],
+    'STRIP PILLOW': ['Duck', 'Goose', 'Hungarian'],
+    'STRIPPED QUILT': ['Goose', 'Hungarian'],
+  };
+  const FILLING_CATEGORIES = Object.keys(FILLING_OPTIONS);
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
@@ -753,9 +762,9 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                                 <SelectValue placeholder="Select..." />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="Duck">Duck</SelectItem>
-                                <SelectItem value="Goose">Goose</SelectItem>
-                                <SelectItem value="Hungarian">Hungarian</SelectItem>
+                                {(FILLING_OPTIONS[category] || []).map((opt) => (
+                                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </TableCell>
