@@ -247,6 +247,25 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== DOWNLOAD ROUTES ====================
+  app.get("/api/download/price-template", requireAuth, async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const filePath = path.join(process.cwd(), "client/public/product-price-template.csv");
+      if (fs.existsSync(filePath)) {
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", "attachment; filename=product-price-template.csv");
+        const stream = fs.createReadStream(filePath);
+        stream.pipe(res);
+      } else {
+        res.status(404).json({ message: "Template file not found" });
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Failed to download template" });
+    }
+  });
+
   // ==================== COMPANIES ROUTES ====================
   app.get("/api/companies", requireAuth, async (req, res) => {
     try {
@@ -671,24 +690,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Get products error:", error);
       res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.get("/api/products/price-template", requireAuth, async (_req, res) => {
-    try {
-      const fs = await import("fs");
-      const path = await import("path");
-      const filePath = path.join(process.cwd(), "client/public/product-price-template.csv");
-      if (fs.existsSync(filePath)) {
-        res.setHeader("Content-Type", "text/csv");
-        res.setHeader("Content-Disposition", "attachment; filename=product-price-template.csv");
-        const stream = fs.createReadStream(filePath);
-        stream.pipe(res);
-      } else {
-        res.status(404).json({ message: "Template file not found" });
-      }
-    } catch (error) {
-      res.status(500).json({ message: "Failed to download template" });
     }
   });
 
