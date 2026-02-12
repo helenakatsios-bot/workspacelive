@@ -617,7 +617,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     'MATTRESS TOPPER FILLED': ['Duck', 'Goose'],
     '80% WINTER FILLED': ['Duck', 'Goose'],
     '80% MID WARM FILLED': ['Duck', 'Goose', 'Hungarian'],
-    'PIPED PILLOWS': ['Duck', 'Goose', 'Hungarian'],
+    'PIPED PILLOWS': ['Duck', 'Goose'],
     'STRIP PILLOW': ['Hungarian'],
     'CHAMBER PILLOW': ['Duck'],
     'STRIPPED QUILT': ['Hungarian'],
