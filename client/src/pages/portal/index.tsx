@@ -609,7 +609,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const FILLING_CATEGORIES = ['4 SEASONS FILLED', 'MATTRESS TOPPER FILLED'];
+  const FILLING_CATEGORIES = ['4 SEASONS FILLED', 'MATTRESS TOPPER FILLED', '80% DUCK WINTER FILLED', '80% MID WARM FILLED', 'PIPED PILLOWS', 'STRIP PILLOW'];
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
@@ -755,6 +755,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                               <SelectContent>
                                 <SelectItem value="Duck">Duck</SelectItem>
                                 <SelectItem value="Goose">Goose</SelectItem>
+                                <SelectItem value="Hungarian">Hungarian</SelectItem>
                               </SelectContent>
                             </Select>
                           </TableCell>
