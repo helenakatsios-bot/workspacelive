@@ -867,8 +867,9 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                                 </SelectContent>
                               </Select>
                             </TableCell>
-                            <TableCell className="text-muted-foreground text-sm">CUSTOM</TableCell>
-                            <TableCell className="text-right">-</TableCell>
+                            {hasFillingOption && <TableCell />}
+                            <TableCell />
+                            <TableCell />
                             <TableCell>
                               <div className="flex items-center justify-center gap-1">
                                 <Button
