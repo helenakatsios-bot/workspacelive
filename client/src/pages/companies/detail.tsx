@@ -32,6 +32,8 @@ import {
   Settings,
   ToggleLeft,
   Ticket,
+  Download,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -156,6 +158,67 @@ export default function CompanyDetailPage() {
       toast({ title: "Custom price removed" });
     },
   });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [bulkImporting, setBulkImporting] = useState(false);
+
+  const handleBulkPriceImport = async (file: File) => {
+    setBulkImporting(true);
+    try {
+      const text = await file.text();
+      const lines = text.split("\n").filter(l => l.trim());
+      if (lines.length < 2) {
+        toast({ title: "Empty file", description: "The CSV file has no data rows", variant: "destructive" });
+        return;
+      }
+      const header = lines[0].toLowerCase();
+      const skuCol = header.split(",").findIndex(h => h.replace(/"/g, "").trim() === "sku");
+      const priceCol = header.split(",").findIndex(h => {
+        const val = h.replace(/"/g, "").trim();
+        return val === "customer price" || val === "customerprice" || val === "price";
+      });
+      if (skuCol === -1 || priceCol === -1) {
+        toast({ title: "Invalid CSV format", description: "CSV must have 'SKU' and 'Customer Price' columns", variant: "destructive" });
+        return;
+      }
+      const prices: { sku: string; price: string }[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const fields: string[] = [];
+        let current = "";
+        let inQuotes = false;
+        for (const char of lines[i]) {
+          if (char === '"') inQuotes = !inQuotes;
+          else if (char === "," && !inQuotes) { fields.push(current.trim()); current = ""; }
+          else current += char;
+        }
+        fields.push(current.trim());
+        const sku = fields[skuCol]?.replace(/"/g, "").trim();
+        const price = fields[priceCol]?.replace(/"/g, "").replace(/\$/g, "").trim();
+        if (sku && price && parseFloat(price) > 0) {
+          prices.push({ sku, price });
+        }
+      }
+      if (prices.length === 0) {
+        toast({ title: "No valid prices", description: "No rows with valid SKU and price found", variant: "destructive" });
+        return;
+      }
+      const res = await apiRequest("POST", `/api/companies/${params?.id}/prices/bulk`, { prices });
+      const result = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id, "prices"] });
+      toast({
+        title: `Imported ${result.imported} prices`,
+        description: result.skipped > 0 ? `${result.skipped} rows skipped` : undefined,
+      });
+      if (result.errors?.length > 0) {
+        console.warn("Bulk import errors:", result.errors);
+      }
+    } catch (err: any) {
+      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+    } finally {
+      setBulkImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const toggleCreditMutation = useMutation({
     mutationFn: async () => {
@@ -751,8 +814,46 @@ export default function CompanyDetailPage() {
             <TabsContent value="pricing" className="mt-4 space-y-4">
               <Card>
                 <CardHeader className="p-4 pb-2">
-                  <CardTitle className="text-base">Customer-Specific Pricing</CardTitle>
-                  <p className="text-xs text-muted-foreground">Set custom prices for this company. Products without a custom price will use the default catalogue price.</p>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <CardTitle className="text-base">Customer-Specific Pricing</CardTitle>
+                      <p className="text-xs text-muted-foreground">Set custom prices for this company. Products without a custom price will use the default catalogue price.</p>
+                    </div>
+                    {canEdit && (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => window.open(`/api/companies/${params?.id}/prices/export`, "_blank")}
+                          data-testid="button-export-prices"
+                        >
+                          <Download className="w-3.5 h-3.5 mr-1" />
+                          Export CSV
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={bulkImporting}
+                          data-testid="button-import-prices"
+                        >
+                          {bulkImporting ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Upload className="w-3.5 h-3.5 mr-1" />}
+                          Import CSV
+                        </Button>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".csv"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleBulkPriceImport(file);
+                          }}
+                          data-testid="input-file-prices"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-2">
                   <div className="flex items-center gap-2 mb-3">

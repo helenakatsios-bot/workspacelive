@@ -530,6 +530,65 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/companies/:id/prices/export", requireAuth, async (req, res) => {
+    try {
+      const allProducts = await storage.getAllProducts();
+      const companyPrices = await storage.getCompanyPrices(req.params.id);
+      const priceMap = new Map(companyPrices.map(cp => [cp.productId, cp.unitPrice]));
+      const activeProducts = allProducts.filter(p => p.active);
+      const esc = (s: string) => '"' + String(s).replace(/"/g, '""') + '"';
+      let csv = "Product Name,SKU,Category,Default Price,Customer Price\n";
+      for (const p of activeProducts) {
+        const customPrice = priceMap.get(p.id) || "";
+        csv += `${esc(p.name)},${esc(p.sku)},${esc(p.category || "")},${esc(p.unitPrice)},${esc(customPrice)}\n`;
+      }
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="company-prices.csv"`);
+      res.send(csv);
+    } catch (error) {
+      console.error("Export prices error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/companies/:id/prices/bulk", requireEdit, async (req, res) => {
+    try {
+      const { prices } = req.body;
+      if (!Array.isArray(prices)) {
+        return res.status(400).json({ message: "prices array is required" });
+      }
+      const allProducts = await storage.getAllProducts();
+      const skuMap = new Map(allProducts.map(p => [p.sku.toLowerCase(), p.id]));
+      let imported = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+      for (const item of prices) {
+        const sku = (item.sku || "").trim().toLowerCase();
+        const price = parseFloat(item.price);
+        if (!sku || isNaN(price) || price <= 0) {
+          skipped++;
+          continue;
+        }
+        const productId = skuMap.get(sku);
+        if (!productId) {
+          errors.push(`SKU not found: ${item.sku}`);
+          skipped++;
+          continue;
+        }
+        try {
+          await storage.setCompanyPrice(req.params.id, productId, String(price));
+          imported++;
+        } catch (err: any) {
+          errors.push(`Error setting price for ${item.sku}: ${err.message}`);
+        }
+      }
+      res.json({ imported, skipped, errors: errors.slice(0, 20) });
+    } catch (error) {
+      console.error("Bulk price import error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ==================== CONTACTS ROUTES ====================
   app.get("/api/contacts", requireAuth, async (req, res) => {
     try {
