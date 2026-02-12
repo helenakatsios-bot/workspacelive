@@ -64,7 +64,7 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
+async function runStartupTasks() {
   // One-time cleanup: remove demo data, keep only purax accounts
   try {
     const demoCheck = await pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE legal_name ILIKE '%Acme%' OR legal_name ILIKE '%BuildRight%'`);
@@ -94,29 +94,19 @@ app.use((req, res, next) => {
   try {
     const bcrypt = await import("bcryptjs");
     const freshHash = await bcrypt.default.hash("admin123", 10);
-    const helenaExists = await pool.query(`SELECT id FROM users WHERE email = 'helena@purax.com.au'`);
-    if (helenaExists.rows.length > 0) {
-      await pool.query(`UPDATE users SET password_hash = $1, role = 'admin', active = true WHERE email = 'helena@purax.com.au'`, [freshHash]);
-    } else {
-      await pool.query(`INSERT INTO users (name, email, password_hash, role, active) VALUES ('Helena Katsios', 'helena@purax.com.au', $1, 'admin', true)`, [freshHash]);
-    }
-    const yanaExists = await pool.query(`SELECT id FROM users WHERE email = 'yana@purax.com.au'`);
-    if (yanaExists.rows.length > 0) {
-      await pool.query(`UPDATE users SET password_hash = $1, role = 'admin', active = true WHERE email = 'yana@purax.com.au'`, [freshHash]);
-    } else {
-      await pool.query(`INSERT INTO users (name, email, password_hash, role, active) VALUES ('Yana', 'yana@purax.com.au', $1, 'admin', true)`, [freshHash]);
-    }
-    const micheleExists = await pool.query(`SELECT id FROM users WHERE email = 'michele@purax.com.au'`);
-    if (micheleExists.rows.length > 0) {
-      await pool.query(`UPDATE users SET password_hash = $1, role = 'admin', active = true WHERE email = 'michele@purax.com.au'`, [freshHash]);
-    } else {
-      await pool.query(`INSERT INTO users (name, email, password_hash, role, active) VALUES ('Michele', 'michele@purax.com.au', $1, 'admin', true)`, [freshHash]);
-    }
-    const stephenExists = await pool.query(`SELECT id FROM users WHERE email = 'stephen@purax.com.au'`);
-    if (stephenExists.rows.length > 0) {
-      await pool.query(`UPDATE users SET password_hash = $1, role = 'admin', active = true WHERE email = 'stephen@purax.com.au'`, [freshHash]);
-    } else {
-      await pool.query(`INSERT INTO users (name, email, password_hash, role, active) VALUES ('Stephen', 'stephen@purax.com.au', $1, 'admin', true)`, [freshHash]);
+    const accounts = [
+      { name: "Helena Katsios", email: "helena@purax.com.au" },
+      { name: "Yana", email: "yana@purax.com.au" },
+      { name: "Michele", email: "michele@purax.com.au" },
+      { name: "Stephen", email: "stephen@purax.com.au" },
+    ];
+    for (const acct of accounts) {
+      const exists = await pool.query(`SELECT id FROM users WHERE email = $1`, [acct.email]);
+      if (exists.rows.length > 0) {
+        await pool.query(`UPDATE users SET password_hash = $1, role = 'admin', active = true WHERE email = $2`, [freshHash, acct.email]);
+      } else {
+        await pool.query(`INSERT INTO users (name, email, password_hash, role, active) VALUES ($1, $2, $3, 'admin', true)`, [acct.name, acct.email, freshHash]);
+      }
     }
     console.log("Admin accounts synced successfully");
   } catch (error) {
@@ -130,7 +120,7 @@ app.use((req, res, next) => {
     console.error("Data sync error:", error);
   }
 
-  // One-time deduplication of companies
+  // One-time deduplication of companies using bulk SQL
   try {
     const dupCheck = await pool.query(`
       SELECT COUNT(*) as cnt FROM (
@@ -139,37 +129,38 @@ app.use((req, res, next) => {
       ) dupes
     `);
     if (parseInt(dupCheck.rows[0].cnt) > 0) {
-      console.log("Found duplicate companies, deduplicating...");
+      console.log("Found duplicate companies, deduplicating with bulk SQL...");
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
-        // Get the "keep" id (oldest) and "remove" ids (newer duplicates) for each group
-        const dupeGroups = await client.query(`
-          SELECT legal_name, trading_name,
-            MIN(id) as keep_id,
-            ARRAY_REMOVE(ARRAY_AGG(id ORDER BY created_at ASC), MIN(id)) as remove_ids
+        // Create temp table mapping duplicate IDs to the ID we want to keep
+        await client.query(`
+          CREATE TEMP TABLE dedup_map AS
+          SELECT id as dupe_id,
+            FIRST_VALUE(id) OVER (PARTITION BY legal_name, trading_name ORDER BY created_at ASC) as keep_id
           FROM companies
-          GROUP BY legal_name, trading_name
-          HAVING COUNT(*) > 1
+          WHERE (legal_name, COALESCE(trading_name, '')) IN (
+            SELECT legal_name, COALESCE(trading_name, '')
+            FROM companies GROUP BY legal_name, COALESCE(trading_name, '') HAVING COUNT(*) > 1
+          )
         `);
-        for (const group of dupeGroups.rows) {
-          const keepId = group.keep_id;
-          const removeIds = group.remove_ids;
-          // Reassign any foreign key references from duplicates to the original
-          await client.query(`UPDATE portal_users SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
-          await client.query(`UPDATE company_prices SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
-          await client.query(`UPDATE contacts SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
-          await client.query(`UPDATE deals SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
-          await client.query(`UPDATE orders SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
-          await client.query(`UPDATE invoices SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
-          await client.query(`UPDATE quotes SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
-          await client.query(`UPDATE emails SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
-          await client.query(`UPDATE form_submissions SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
-          // Now safe to delete the duplicates
-          await client.query(`DELETE FROM companies WHERE id = ANY($1)`, [removeIds]);
+        // Only keep rows where dupe_id != keep_id (those are the ones to remove)
+        await client.query(`DELETE FROM dedup_map WHERE dupe_id = keep_id`);
+        const countRes = await client.query(`SELECT COUNT(*) as cnt FROM dedup_map`);
+        console.log(`Found ${countRes.rows[0].cnt} duplicate company records to remove`);
+        // Bulk reassign all foreign keys
+        const fkTables = ['portal_users', 'company_prices', 'contacts', 'deals', 'orders', 'invoices', 'quotes', 'emails', 'form_submissions'];
+        for (const table of fkTables) {
+          await client.query(`
+            UPDATE ${table} SET company_id = dm.keep_id
+            FROM dedup_map dm WHERE ${table}.company_id = dm.dupe_id
+          `);
         }
+        // Delete all duplicates
+        await client.query(`DELETE FROM companies WHERE id IN (SELECT dupe_id FROM dedup_map)`);
+        await client.query(`DROP TABLE dedup_map`);
         await client.query("COMMIT");
-        console.log(`Deduplicated ${dupeGroups.rows.length} company groups`);
+        console.log(`Deduplication complete`);
       } catch (err) {
         await client.query("ROLLBACK");
         console.error("Dedup transaction failed:", err);
@@ -289,6 +280,10 @@ app.use((req, res, next) => {
     console.error("Failed to seed database:", error);
   }
 
+  console.log("All startup tasks completed");
+}
+
+(async () => {
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
@@ -331,6 +326,9 @@ app.use((req, res, next) => {
       const redirectUri = "https://puraxfeatherholdingscrm.replit.app/api/outlook/callback";
       startAutoEmailSync(redirectUri, 5);
       startInactivityChecker(redirectUri);
+
+      // Run all startup database tasks in the background after port is open
+      runStartupTasks().catch(err => console.error("Startup tasks error:", err));
     },
   );
 })();
