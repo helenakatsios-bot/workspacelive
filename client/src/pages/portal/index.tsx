@@ -630,6 +630,8 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     return products.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || (p.category || "").toLowerCase().includes(q));
   }, [products, search]);
 
+  const BOTTOM_CATEGORIES = ['SILVER BLANKET', 'KHAKI BLANKET', 'MICROSOFT'];
+
   const grouped = useMemo(() => {
     const groups: Record<string, any[]> = {};
     for (const p of filteredProducts) {
@@ -637,7 +639,19 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(p);
     }
-    return groups;
+    const sorted: Record<string, any[]> = {};
+    const bottomEntries: [string, any[]][] = [];
+    for (const [cat, prods] of Object.entries(groups)) {
+      if (BOTTOM_CATEGORIES.includes(cat)) {
+        bottomEntries.push([cat, prods]);
+      } else {
+        sorted[cat] = prods;
+      }
+    }
+    for (const [cat, prods] of bottomEntries) {
+      sorted[cat] = prods;
+    }
+    return sorted;
   }, [filteredProducts]);
 
   const cartItems = useMemo(() => {
