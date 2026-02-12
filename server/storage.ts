@@ -3,7 +3,7 @@ import { eq, and, gte, lte, desc, ilike, or, sql } from "drizzle-orm";
 import {
   users, companies, contacts, deals, products, quotes, quoteLines,
   orders, orderLines, invoices, attachments, activities, auditLogs,
-  customerOrderRequests, crmSettings, forms, formSubmissions,
+  customerOrderRequests, crmSettings, forms, formSubmissions, companyPrices,
   type User, type InsertUser, type Company, type InsertCompany,
   type Contact, type InsertContact, type Deal, type InsertDeal,
   type Product, type InsertProduct, type Quote, type InsertQuote,
@@ -12,7 +12,8 @@ import {
   type Attachment, type InsertAttachment, type Activity, type InsertActivity,
   type AuditLog, type InsertAuditLog,
   type CustomerOrderRequest, type InsertCustomerOrderRequest, type CrmSetting,
-  type Form, type InsertForm, type FormSubmission, type InsertFormSubmission
+  type Form, type InsertForm, type FormSubmission, type InsertFormSubmission,
+  type CompanyPrice, type InsertCompanyPrice
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
@@ -132,6 +133,11 @@ export interface IStorage {
   getFormSubmissions(formId: string): Promise<FormSubmission[]>;
   createFormSubmission(submission: InsertFormSubmission): Promise<FormSubmission>;
   deleteFormSubmission(id: string): Promise<boolean>;
+
+  // Company Prices
+  getCompanyPrices(companyId: string): Promise<CompanyPrice[]>;
+  setCompanyPrice(companyId: string, productId: string, unitPrice: string): Promise<CompanyPrice>;
+  deleteCompanyPrice(companyId: string, productId: string): Promise<boolean>;
 
   // Dashboard Stats
   getDashboardStats(): Promise<{
@@ -624,6 +630,31 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFormSubmission(id: string): Promise<boolean> {
     const result = await db.delete(formSubmissions).where(eq(formSubmissions.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // Company Prices
+  async getCompanyPrices(companyId: string): Promise<CompanyPrice[]> {
+    return db.select().from(companyPrices).where(eq(companyPrices.companyId, companyId));
+  }
+
+  async setCompanyPrice(companyId: string, productId: string, unitPrice: string): Promise<CompanyPrice> {
+    const existing = await db.select().from(companyPrices)
+      .where(and(eq(companyPrices.companyId, companyId), eq(companyPrices.productId, productId)));
+    if (existing.length > 0) {
+      const [updated] = await db.update(companyPrices)
+        .set({ unitPrice, updatedAt: new Date() })
+        .where(and(eq(companyPrices.companyId, companyId), eq(companyPrices.productId, productId)))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(companyPrices).values({ companyId, productId, unitPrice }).returning();
+    return created;
+  }
+
+  async deleteCompanyPrice(companyId: string, productId: string): Promise<boolean> {
+    const result = await db.delete(companyPrices)
+      .where(and(eq(companyPrices.companyId, companyId), eq(companyPrices.productId, productId)));
     return (result.rowCount ?? 0) > 0;
   }
 }

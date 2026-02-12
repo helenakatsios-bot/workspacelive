@@ -13,6 +13,10 @@ A professional B2B CRM and order management system designed for wholesale manufa
 - **"Clients Since July 2021" Report**: One-click access to all companies that have placed orders from July 1, 2021 to today. Located in the Reporting section of the sidebar with CSV export capability.
 - **HubSpot-style Company Profile**: 3-column layout - left panel (company info, status, quick actions), center panel (About/Activity/Orders/Files tabs), right panel (collapsible Contacts/Deals/Orders panels)
 - **Client Grading System**: Automatic A/B/C grading based on order revenue (A: >$500K, B: $100K-$500K, C: <$100K). Companies page has grade filter, revenue sorting, and last order sorting. Revenue recalculates automatically on order create/update. Admin "Recalculate" button for bulk recalculation. Grade can be manually overridden on company edit form.
+- **Customer-Specific Pricing**: Per-company product pricing. Set custom prices on the company profile "Pricing" tab. Portal customers see their company-specific prices when ordering. Orders created via portal use company-specific prices automatically.
+  - **Database Tables**: company_prices (id, companyId, productId, unitPrice, updatedAt)
+  - **API Routes**: GET /api/companies/:id/prices, PUT /api/companies/:id/prices (body: {productId, unitPrice}), DELETE /api/companies/:id/prices/:productId
+  - **Portal Integration**: Portal products endpoint overlays company-specific prices; portal order creation uses company-specific prices
 - **Contact Import**: 399 contacts imported from HubSpot CSV export, matched to existing companies by email domain and name. Import script at server/import-contacts.ts.
 - **Date-Based Order Filtering**: Orders page includes powerful date range filtering with preset options including "Since July 2021"
 - **Role-Based Access Control**: Four user roles with different permissions:

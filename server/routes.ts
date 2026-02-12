@@ -456,6 +456,41 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== COMPANY PRICES ROUTES ====================
+  app.get("/api/companies/:id/prices", requireAuth, async (req, res) => {
+    try {
+      const prices = await storage.getCompanyPrices(req.params.id);
+      res.json(prices);
+    } catch (error) {
+      console.error("Get company prices error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/companies/:id/prices", requireEdit, async (req, res) => {
+    try {
+      const { productId, unitPrice } = req.body;
+      if (!productId || unitPrice === undefined) {
+        return res.status(400).json({ message: "productId and unitPrice are required" });
+      }
+      const price = await storage.setCompanyPrice(req.params.id, productId, unitPrice);
+      res.json(price);
+    } catch (error) {
+      console.error("Set company price error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/companies/:id/prices/:productId", requireEdit, async (req, res) => {
+    try {
+      await storage.deleteCompanyPrice(req.params.id, req.params.productId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete company price error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ==================== CONTACTS ROUTES ====================
   app.get("/api/contacts", requireAuth, async (req, res) => {
     try {
@@ -3640,13 +3675,24 @@ Rules:
         AND (category IS NULL OR category NOT IN (${hiddenCategories.map((_, i) => `$${i + 1}`).join(', ')}))
         ORDER BY category, name
       `, hiddenCategories);
+
+      const companyId = req.session.portalCompanyId;
+      let priceMap = new Map<string, string>();
+      if (companyId) {
+        const companyPricesList = await storage.getCompanyPrices(companyId);
+        for (const cp of companyPricesList) {
+          priceMap.set(cp.productId, cp.unitPrice);
+        }
+      }
+
       res.json(result.rows.map((r: any) => ({
         id: r.id,
         sku: r.sku,
         name: r.name,
         description: r.description,
         category: r.category,
-        unitPrice: r.unit_price,
+        unitPrice: priceMap.get(r.id) || r.unit_price,
+        hasCustomPrice: priceMap.has(r.id),
       })));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch products" });
@@ -3665,6 +3711,8 @@ Rules:
       const [portalUser] = await db.select().from(portalUsers).where(eq(portalUsers.id, req.session.portalUserId!));
 
       let subtotal = 0;
+      const companyPricesList = await storage.getCompanyPrices(companyId);
+      const companyPriceMap = new Map(companyPricesList.map(cp => [cp.productId, cp.unitPrice]));
       const orderLines: Array<{ productId: string | null; quantity: number; unitPrice: number; lineTotal: number; descriptionOverride: string }> = [];
       if (hasItems) {
         for (const item of items) {
@@ -3672,7 +3720,8 @@ Rules:
           if (prodResult.rows.length === 0) continue;
           const prod = prodResult.rows[0];
           const qty = Math.max(1, parseInt(item.quantity) || 1);
-          const price = parseFloat(prod.unit_price);
+          const customPrice = companyPriceMap.get(prod.id);
+          const price = customPrice ? parseFloat(customPrice) : parseFloat(prod.unit_price);
           const lineTotal = price * qty;
           subtotal += lineTotal;
           orderLines.push({

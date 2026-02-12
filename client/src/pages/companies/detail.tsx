@@ -61,7 +61,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Company, Contact, Order, Activity, Deal } from "@shared/schema";
+import type { Company, Contact, Order, Activity, Deal, Product, CompanyPrice } from "@shared/schema";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function CompanyDetailPage() {
   const [, params] = useRoute("/companies/:id");
@@ -119,6 +120,42 @@ export default function CompanyDetailPage() {
 
   const [emailsOpen, setEmailsOpen] = useState(true);
   const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
+
+  const { data: allProducts } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    enabled: activeTab === "pricing",
+  });
+
+  const { data: companyPricesData } = useQuery<CompanyPrice[]>({
+    queryKey: ["/api/companies", params?.id, "prices"],
+    enabled: !!params?.id && activeTab === "pricing",
+  });
+
+  const [pricingSearch, setPricingSearch] = useState("");
+  const [pricingCategory, setPricingCategory] = useState("all");
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [editingPriceValue, setEditingPriceValue] = useState("");
+
+  const setPriceMutation = useMutation({
+    mutationFn: async ({ productId, unitPrice }: { productId: string; unitPrice: string }) => {
+      return apiRequest("PUT", `/api/companies/${params?.id}/prices`, { productId, unitPrice });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id, "prices"] });
+      setEditingPriceId(null);
+      toast({ title: "Price updated" });
+    },
+  });
+
+  const deletePriceMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      return apiRequest("DELETE", `/api/companies/${params?.id}/prices/${productId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id, "prices"] });
+      toast({ title: "Custom price removed" });
+    },
+  });
 
   const toggleCreditMutation = useMutation({
     mutationFn: async () => {
@@ -527,10 +564,11 @@ export default function CompanyDetailPage() {
         {/* CENTER PANEL - Main Content Tabs */}
         <div>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="about" data-testid="tab-about">About</TabsTrigger>
               <TabsTrigger value="activities" data-testid="tab-activities">Activities</TabsTrigger>
               <TabsTrigger value="revenue" data-testid="tab-revenue">Revenue</TabsTrigger>
+              <TabsTrigger value="pricing" data-testid="tab-pricing">Pricing</TabsTrigger>
             </TabsList>
 
             {/* ABOUT TAB */}
@@ -705,6 +743,207 @@ export default function CompanyDetailPage() {
                       <p className="text-sm">No orders yet</p>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* PRICING TAB */}
+            <TabsContent value="pricing" className="mt-4 space-y-4">
+              <Card>
+                <CardHeader className="p-4 pb-2">
+                  <CardTitle className="text-base">Customer-Specific Pricing</CardTitle>
+                  <p className="text-xs text-muted-foreground">Set custom prices for this company. Products without a custom price will use the default catalogue price.</p>
+                </CardHeader>
+                <CardContent className="p-4 pt-2">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Input
+                      placeholder="Search products..."
+                      value={pricingSearch}
+                      onChange={(e) => setPricingSearch(e.target.value)}
+                      className="flex-1"
+                      data-testid="input-pricing-search"
+                    />
+                    <Select value={pricingCategory} onValueChange={setPricingCategory}>
+                      <SelectTrigger className="w-[180px]" data-testid="select-pricing-category">
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Categories</SelectItem>
+                        {Array.from(new Set((allProducts || []).map(p => p.category).filter(Boolean))).sort().map(cat => (
+                          <SelectItem key={cat} value={cat!}>{cat}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {(() => {
+                    const priceMap = new Map((companyPricesData || []).map(cp => [cp.productId, cp.unitPrice]));
+                    const activeProducts = (allProducts || []).filter(p => p.active);
+                    const filtered = activeProducts.filter(p => {
+                      const matchSearch = !pricingSearch || p.name.toLowerCase().includes(pricingSearch.toLowerCase()) || p.sku.toLowerCase().includes(pricingSearch.toLowerCase());
+                      const matchCategory = pricingCategory === "all" || p.category === pricingCategory;
+                      return matchSearch && matchCategory;
+                    });
+
+                    const customPriced = filtered.filter(p => priceMap.has(p.id));
+                    const defaultPriced = filtered.filter(p => !priceMap.has(p.id));
+
+                    return (
+                      <div className="space-y-4">
+                        {customPriced.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">Custom Prices ({customPriced.length})</p>
+                            <div className="space-y-1">
+                              {customPriced.map(product => {
+                                const customPrice = priceMap.get(product.id);
+                                const isEditing = editingPriceId === product.id;
+                                return (
+                                  <div key={product.id} className="flex items-center justify-between p-2 rounded-md border" data-testid={`row-price-${product.id}`}>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">{product.name}</p>
+                                      <p className="text-xs text-muted-foreground">{product.sku} {product.category && `· ${product.category}`}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2 ml-2">
+                                      <span className="text-xs text-muted-foreground line-through">${Number(product.unitPrice).toFixed(2)}</span>
+                                      {isEditing ? (
+                                        <div className="flex items-center gap-1">
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            value={editingPriceValue}
+                                            onChange={(e) => setEditingPriceValue(e.target.value)}
+                                            className="w-24"
+                                            data-testid="input-edit-price"
+                                            autoFocus
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter") {
+                                                setPriceMutation.mutate({ productId: product.id, unitPrice: editingPriceValue });
+                                              } else if (e.key === "Escape") {
+                                                setEditingPriceId(null);
+                                              }
+                                            }}
+                                          />
+                                          <Button
+                                            size="sm"
+                                            onClick={() => setPriceMutation.mutate({ productId: product.id, unitPrice: editingPriceValue })}
+                                            disabled={setPriceMutation.isPending}
+                                            data-testid="button-save-price"
+                                          >
+                                            Save
+                                          </Button>
+                                          <Button size="sm" variant="ghost" onClick={() => setEditingPriceId(null)} data-testid="button-cancel-price">
+                                            Cancel
+                                          </Button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-1">
+                                          <Badge variant="secondary" className="font-mono" data-testid={`text-custom-price-${product.id}`}>${Number(customPrice).toFixed(2)}</Badge>
+                                          {canEdit && (
+                                            <>
+                                              <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                onClick={() => { setEditingPriceId(product.id); setEditingPriceValue(customPrice || ""); }}
+                                                data-testid={`button-edit-price-${product.id}`}
+                                              >
+                                                <Edit className="w-3.5 h-3.5" />
+                                              </Button>
+                                              <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                onClick={() => deletePriceMutation.mutate(product.id)}
+                                                disabled={deletePriceMutation.isPending}
+                                                data-testid={`button-delete-price-${product.id}`}
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </Button>
+                                            </>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-2">
+                            {customPriced.length > 0 ? "Default Prices" : "All Products"} ({defaultPriced.length})
+                          </p>
+                          <div className="space-y-1">
+                            {defaultPriced.map(product => {
+                              const isEditing = editingPriceId === product.id;
+                              return (
+                                <div key={product.id} className="flex items-center justify-between p-2 rounded-md border" data-testid={`row-default-${product.id}`}>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">{product.name}</p>
+                                    <p className="text-xs text-muted-foreground">{product.sku} {product.category && `· ${product.category}`}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2 ml-2">
+                                    {isEditing ? (
+                                      <div className="flex items-center gap-1">
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          value={editingPriceValue}
+                                          onChange={(e) => setEditingPriceValue(e.target.value)}
+                                          className="w-24"
+                                          data-testid="input-set-price"
+                                          autoFocus
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              setPriceMutation.mutate({ productId: product.id, unitPrice: editingPriceValue });
+                                            } else if (e.key === "Escape") {
+                                              setEditingPriceId(null);
+                                            }
+                                          }}
+                                        />
+                                        <Button
+                                          size="sm"
+                                          onClick={() => setPriceMutation.mutate({ productId: product.id, unitPrice: editingPriceValue })}
+                                          disabled={setPriceMutation.isPending}
+                                          data-testid="button-save-new-price"
+                                        >
+                                          Set
+                                        </Button>
+                                        <Button size="sm" variant="ghost" onClick={() => setEditingPriceId(null)}>
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-sm font-mono text-muted-foreground">${Number(product.unitPrice).toFixed(2)}</span>
+                                        {canEdit && (
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            onClick={() => { setEditingPriceId(product.id); setEditingPriceValue(product.unitPrice); }}
+                                            data-testid={`button-set-price-${product.id}`}
+                                          >
+                                            <Edit className="w-3.5 h-3.5" />
+                                          </Button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {filtered.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No products found</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             </TabsContent>
