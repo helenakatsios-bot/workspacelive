@@ -605,6 +605,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
 
   const [cart, setCart] = useState<Record<string, number>>({});
   const [fillings, setFillings] = useState<Record<string, string>>({});
+  const [customDescriptions, setCustomDescriptions] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -617,6 +618,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     'PIPED PILLOWS': ['Duck', 'Goose', 'Hungarian'],
     'STRIP PILLOW': ['Duck', 'Goose', 'Hungarian'],
     'STRIPPED QUILT': ['Goose', 'Hungarian'],
+    'INSERTS': ['100% Feather', 'Duck Feather - Foam', 'Duck Feather - Fibre', '100% Polyester', '30% Down 70% Feather', '50% Down 50% Feather', '80% Down 20% Feather'],
   };
   const FILLING_CATEGORIES = Object.keys(FILLING_OPTIONS);
 
@@ -660,9 +662,11 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       const fillingSelections = cartItems
         .filter((item) => fillings[item.id])
         .map((item) => `${item.name}: ${fillings[item.id]} filling`);
-      const fullNotes = fillingSelections.length > 0
-        ? [notes, "Filling selections: " + fillingSelections.join(", ")].filter(Boolean).join("\n\n")
-        : notes;
+      const customSizes = cartItems
+        .filter((item) => customDescriptions[item.id])
+        .map((item) => `Custom Insert: ${customDescriptions[item.id]}`);
+      const extraNotes = [...fillingSelections.length > 0 ? ["Filling selections: " + fillingSelections.join(", ")] : [], ...customSizes.length > 0 ? ["Custom sizes: " + customSizes.join(", ")] : []];
+      const fullNotes = [notes, ...extraNotes].filter(Boolean).join("\n\n");
       const res = await fetch("/api/portal/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -750,7 +754,17 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                       <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
                         <TableCell>
                           <p className="font-medium">{product.name}</p>
-                          {product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
+                          {product.name === 'CUSTOM INSERT' ? (
+                            <Input
+                              placeholder="Enter custom size (e.g. 70x70cm)"
+                              value={customDescriptions[product.id] || ""}
+                              onChange={(e) => setCustomDescriptions((prev) => ({ ...prev, [product.id]: e.target.value }))}
+                              className="mt-1 h-8 text-xs"
+                              data-testid={`input-custom-size-${product.id}`}
+                            />
+                          ) : (
+                            product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>
+                          )}
                         </TableCell>
                         {hasFillingOption && (
                           <TableCell>
