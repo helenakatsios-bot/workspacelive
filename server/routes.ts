@@ -3655,30 +3655,47 @@ Rules:
 
   app.post("/api/portal/orders", requirePortalAuth, async (req, res) => {
     try {
-      const { items, customerNotes, shippingAddress } = req.body;
-      if (!items || !Array.isArray(items) || items.length === 0) {
+      const { items, customItems, customerNotes, shippingAddress } = req.body;
+      const hasItems = items && Array.isArray(items) && items.length > 0;
+      const hasCustomItems = customItems && Array.isArray(customItems) && customItems.length > 0;
+      if (!hasItems && !hasCustomItems) {
         return res.status(400).json({ message: "At least one item is required" });
       }
       const companyId = req.session.portalCompanyId!;
       const [portalUser] = await db.select().from(portalUsers).where(eq(portalUsers.id, req.session.portalUserId!));
 
       let subtotal = 0;
-      const orderLines: Array<{ productId: string; quantity: number; unitPrice: number; lineTotal: number; descriptionOverride: string }> = [];
-      for (const item of items) {
-        const prodResult = await pool.query("SELECT id, name, unit_price FROM products WHERE id = $1 AND active = true", [item.productId]);
-        if (prodResult.rows.length === 0) continue;
-        const prod = prodResult.rows[0];
-        const qty = Math.max(1, parseInt(item.quantity) || 1);
-        const price = parseFloat(prod.unit_price);
-        const lineTotal = price * qty;
-        subtotal += lineTotal;
-        orderLines.push({
-          productId: prod.id,
-          quantity: qty,
-          unitPrice: price,
-          lineTotal,
-          descriptionOverride: prod.name,
-        });
+      const orderLines: Array<{ productId: string | null; quantity: number; unitPrice: number; lineTotal: number; descriptionOverride: string }> = [];
+      if (hasItems) {
+        for (const item of items) {
+          const prodResult = await pool.query("SELECT id, name, unit_price FROM products WHERE id = $1 AND active = true", [item.productId]);
+          if (prodResult.rows.length === 0) continue;
+          const prod = prodResult.rows[0];
+          const qty = Math.max(1, parseInt(item.quantity) || 1);
+          const price = parseFloat(prod.unit_price);
+          const lineTotal = price * qty;
+          subtotal += lineTotal;
+          orderLines.push({
+            productId: prod.id,
+            quantity: qty,
+            unitPrice: price,
+            lineTotal,
+            descriptionOverride: prod.name,
+          });
+        }
+      }
+      if (hasCustomItems) {
+        for (const ci of customItems) {
+          const qty = Math.max(1, parseInt(ci.quantity) || 1);
+          const desc = `CUSTOM INSERT: ${ci.size}${ci.filling ? ` (${ci.filling})` : ''}${ci.weight ? ` [${ci.weight}]` : ''}`;
+          orderLines.push({
+            productId: null,
+            quantity: qty,
+            unitPrice: 0,
+            lineTotal: 0,
+            descriptionOverride: desc,
+          });
+        }
       }
 
       const tax = Math.round(subtotal * 10) / 100;

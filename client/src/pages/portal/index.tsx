@@ -687,16 +687,25 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       const fillingSelections = cartItems
         .filter((item) => fillings[item.id])
         .map((item) => `${item.name}: ${fillings[item.id]} filling`);
+      const weightSelections = cartItems
+        .filter((item) => weights[item.id])
+        .map((item) => `${item.name}: ${weights[item.id]}`);
       const customSizeNotes = customLines
         .filter((l) => l.size)
-        .map((l) => `Custom Insert: ${l.size}${l.filling ? ` (${l.filling})` : ''} x${l.qty}`);
-      const extraNotes = [...fillingSelections.length > 0 ? ["Filling selections: " + fillingSelections.join(", ")] : [], ...customSizeNotes.length > 0 ? ["Custom inserts: " + customSizeNotes.join(", ")] : []];
+        .map((l) => `Custom Insert: ${l.size}${l.filling ? ` (${l.filling})` : ''}${l.weight ? ` [${l.weight}]` : ''} x${l.qty}`);
+      const extraNotes = [
+        ...(fillingSelections.length > 0 ? ["Filling selections: " + fillingSelections.join(", ")] : []),
+        ...(weightSelections.length > 0 ? ["Weight selections: " + weightSelections.join(", ")] : []),
+        ...(customSizeNotes.length > 0 ? ["Custom inserts: " + customSizeNotes.join(", ")] : []),
+      ];
       const fullNotes = [notes, ...extraNotes].filter(Boolean).join("\n\n");
+      const activeCustomLines = customLines.filter((l) => l.size && l.qty > 0);
       const res = await fetch("/api/portal/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           items: cartItems.map((item) => ({ productId: item.id, quantity: item.qty, filling: fillings[item.id] || undefined })),
+          customItems: activeCustomLines.map((l) => ({ size: l.size, filling: l.filling, weight: l.weight, quantity: l.qty })),
           customerNotes: fullNotes,
         }),
         credentials: "include",
