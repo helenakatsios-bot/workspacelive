@@ -633,7 +633,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   }, [products, search]);
 
   const TOP_CATEGORIES = ['INSERTS'];
-  const BOTTOM_CATEGORIES = ['SILVER BLANKET', 'KHAKI BLANKET', 'MICROSOFT'];
+  const BOTTOM_CATEGORIES = ['MICROSOFT', 'SILVER BLANKET', 'KHAKI BLANKET'];
 
   const grouped = useMemo(() => {
     const groups: Record<string, any[]> = {};
