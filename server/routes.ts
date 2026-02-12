@@ -317,6 +317,26 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/companies/deduplicate", requireAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        DELETE FROM companies
+        WHERE id IN (
+          SELECT id FROM (
+            SELECT id, legal_name, trading_name, created_at,
+              ROW_NUMBER() OVER (PARTITION BY legal_name, trading_name ORDER BY created_at ASC) as rn
+            FROM companies
+          ) ranked
+          WHERE rn > 1
+        )
+      `);
+      res.json({ message: "Duplicates removed", deleted: result.rowCount });
+    } catch (error) {
+      console.error("Deduplicate error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/companies/:id/contacts", requireAuth, async (req, res) => {
     try {
       const contacts = await storage.getContactsByCompany(req.params.id);
