@@ -612,6 +612,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const [customLines, setCustomLines] = useState<{ id: string; size: string; filling: string; weight: string; qty: number }[]>([]);
   const [weights, setWeights] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -723,6 +724,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
           items: cartItems.map((item) => ({ productId: item.id, quantity: item.qty, filling: fillings[item.id] || undefined })),
           customItems: activeCustomLines.map((l) => ({ size: l.size, filling: l.filling, weight: l.weight, quantity: l.qty })),
           customerNotes: fullNotes,
+          shippingAddress: deliveryAddress || undefined,
         }),
         credentials: "include",
       });
@@ -1020,6 +1022,21 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
                   data-testid="input-order-notes"
+                />
+              </div>
+
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-muted-foreground" />
+                  <Label htmlFor="delivery-address" className="font-semibold">Delivery</Label>
+                </div>
+                <Textarea
+                  id="delivery-address"
+                  placeholder="Enter delivery address..."
+                  value={deliveryAddress}
+                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                  rows={3}
+                  data-testid="input-delivery-address"
                 />
               </div>
 
