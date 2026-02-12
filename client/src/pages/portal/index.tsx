@@ -18,6 +18,7 @@ import {
   Truck,
   DollarSign,
   Clock,
+  X,
   Lock,
   Eye,
   EyeOff,
@@ -606,6 +607,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const [cart, setCart] = useState<Record<string, number>>({});
   const [fillings, setFillings] = useState<Record<string, string>>({});
   const [customDescriptions, setCustomDescriptions] = useState<Record<string, string>>({});
+  const [customLines, setCustomLines] = useState<{ id: string; size: string; filling: string; qty: number }[]>([]);
   const [notes, setNotes] = useState("");
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -673,7 +675,8 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const cartTotal = cartItems.reduce((sum, item) => sum + item.qty * parseFloat(item.unitPrice || "0"), 0);
 
   const handleSubmit = async () => {
-    if (cartItems.length === 0) {
+    const hasCustomLines = customLines.some((l) => l.size && l.qty > 0);
+    if (cartItems.length === 0 && !hasCustomLines) {
       toast({ title: "Empty cart", description: "Add at least one product to your order", variant: "destructive" });
       return;
     }
@@ -682,10 +685,10 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       const fillingSelections = cartItems
         .filter((item) => fillings[item.id])
         .map((item) => `${item.name}: ${fillings[item.id]} filling`);
-      const customSizes = cartItems
-        .filter((item) => customDescriptions[item.id])
-        .map((item) => `Custom Insert: ${customDescriptions[item.id]}`);
-      const extraNotes = [...fillingSelections.length > 0 ? ["Filling selections: " + fillingSelections.join(", ")] : [], ...customSizes.length > 0 ? ["Custom sizes: " + customSizes.join(", ")] : []];
+      const customSizeNotes = customLines
+        .filter((l) => l.size)
+        .map((l) => `Custom Insert: ${l.size}${l.filling ? ` (${l.filling})` : ''} x${l.qty}`);
+      const extraNotes = [...fillingSelections.length > 0 ? ["Filling selections: " + fillingSelections.join(", ")] : [], ...customSizeNotes.length > 0 ? ["Custom inserts: " + customSizeNotes.join(", ")] : []];
       const fullNotes = [notes, ...extraNotes].filter(Boolean).join("\n\n");
       const res = await fetch("/api/portal/orders", {
         method: "POST",
@@ -719,6 +722,16 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       }
       return { ...prev, [productId]: next };
     });
+  };
+
+  const addCustomLine = () => {
+    setCustomLines((prev) => [...prev, { id: `custom-${Date.now()}`, size: "", filling: "", qty: 1 }]);
+  };
+  const updateCustomLine = (id: string, field: string, value: any) => {
+    setCustomLines((prev) => prev.map((l) => l.id === id ? { ...l, [field]: value } : l));
+  };
+  const removeCustomLine = (id: string) => {
+    setCustomLines((prev) => prev.filter((l) => l.id !== id));
   };
 
   if (loadingProducts) {
@@ -770,21 +783,11 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {prods.map((product: any) => (
+                    {prods.filter((product: any) => product.name !== 'CUSTOM INSERT').map((product: any) => (
                       <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
                         <TableCell>
                           <p className="font-medium">{product.name.replace(/\s*[\-–]\s*\(.*?\)\s*/g, '').replace(/\s*\(.*?\)\s*/g, '').trim()}</p>
-                          {product.name === 'CUSTOM INSERT' ? (
-                            <Input
-                              placeholder="Enter custom size (e.g. 70x70cm)"
-                              value={customDescriptions[product.id] || ""}
-                              onChange={(e) => setCustomDescriptions((prev) => ({ ...prev, [product.id]: e.target.value }))}
-                              className="mt-1 h-8 text-xs"
-                              data-testid={`input-custom-size-${product.id}`}
-                            />
-                          ) : (
-                            product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>
-                          )}
+                          {product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
                         </TableCell>
                         {hasFillingOption && (
                           <TableCell>
@@ -833,6 +836,85 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                         </TableCell>
                       </TableRow>
                     ))}
+                    {category === 'INSERTS' && (
+                      <>
+                        {customLines.map((line) => (
+                          <TableRow key={line.id} data-testid={`row-custom-${line.id}`}>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-sm whitespace-nowrap">CUSTOM INSERT</p>
+                                <Input
+                                  placeholder="Enter size (e.g. 70x70cm)"
+                                  value={line.size}
+                                  onChange={(e) => updateCustomLine(line.id, "size", e.target.value)}
+                                  className="h-8 text-xs"
+                                  data-testid={`input-custom-size-${line.id}`}
+                                />
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Select
+                                value={line.filling}
+                                onValueChange={(val) => updateCustomLine(line.id, "filling", val)}
+                              >
+                                <SelectTrigger className="w-[120px]" data-testid={`select-filling-custom-${line.id}`}>
+                                  <SelectValue placeholder="Select..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {(FILLING_OPTIONS['INSERTS'] || []).map((opt) => (
+                                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">CUSTOM</TableCell>
+                            <TableCell className="text-right">-</TableCell>
+                            <TableCell>
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => updateCustomLine(line.id, "qty", Math.max(1, line.qty - 1))}
+                                  disabled={line.qty <= 1}
+                                  data-testid={`button-decrease-custom-${line.id}`}
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </Button>
+                                <span className="w-8 text-center text-sm font-medium" data-testid={`text-qty-custom-${line.id}`}>
+                                  {line.qty}
+                                </span>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => updateCustomLine(line.id, "qty", line.qty + 1)}
+                                  data-testid={`button-increase-custom-${line.id}`}
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-destructive"
+                                  onClick={() => removeCustomLine(line.id)}
+                                  data-testid={`button-remove-custom-${line.id}`}
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow>
+                          <TableCell colSpan={5}>
+                            <Button variant="outline" size="sm" onClick={addCustomLine} data-testid="button-add-custom-insert">
+                              <Plus className="w-3 h-3 mr-1" /> Add Custom Size
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      </>
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
