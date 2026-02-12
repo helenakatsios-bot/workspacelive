@@ -617,6 +617,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     '80% MID WARM FILLED': ['Duck', 'Goose', 'Hungarian'],
     'PIPED PILLOWS': ['Duck', 'Goose', 'Hungarian'],
     'STRIP PILLOW': ['Duck', 'Goose', 'Hungarian'],
+    'CHAMBER PILLOW': ['Duck'],
     'STRIPPED QUILT': ['Goose', 'Hungarian'],
     'INSERTS': ['100% Feather', 'Duck Feather - Foam', 'Duck Feather - Fibre', '100% Polyester', '30% Down 70% Feather', '50% Down 50% Feather', '80% Down 20% Feather'],
   };
