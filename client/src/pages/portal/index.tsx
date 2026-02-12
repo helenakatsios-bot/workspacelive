@@ -754,7 +754,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                     {prods.map((product: any) => (
                       <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
                         <TableCell>
-                          <p className="font-medium">{product.name}</p>
+                          <p className="font-medium">{product.name.replace(/\s*[\-–]\s*\(.*?\)\s*/g, '').replace(/\s*\(.*?\)\s*/g, '').trim()}</p>
                           {product.name === 'CUSTOM INSERT' ? (
                             <Input
                               placeholder="Enter custom size (e.g. 70x70cm)"
