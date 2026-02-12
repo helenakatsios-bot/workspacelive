@@ -608,7 +608,8 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const [cart, setCart] = useState<Record<string, number>>({});
   const [fillings, setFillings] = useState<Record<string, string>>({});
   const [customDescriptions, setCustomDescriptions] = useState<Record<string, string>>({});
-  const [customLines, setCustomLines] = useState<{ id: string; size: string; filling: string; qty: number }[]>([]);
+  const [customLines, setCustomLines] = useState<{ id: string; size: string; filling: string; weight: string; qty: number }[]>([]);
+  const [weights, setWeights] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -726,7 +727,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   };
 
   const addCustomLine = () => {
-    setCustomLines((prev) => [...prev, { id: `custom-${Date.now()}`, size: "", filling: "", qty: 1 }]);
+    setCustomLines((prev) => [...prev, { id: `custom-${Date.now()}`, size: "", filling: "", weight: "", qty: 1 }]);
   };
   const updateCustomLine = (id: string, field: string, value: any) => {
     setCustomLines((prev) => prev.map((l) => l.id === id ? { ...l, [field]: value } : l));
@@ -778,6 +779,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                     <TableRow>
                       <TableHead>Product</TableHead>
                       {hasFillingOption && <TableHead>Filling</TableHead>}
+                      {category === 'INSERTS' && <TableHead>Weight</TableHead>}
                       <TableHead className="text-center w-[140px]">Quantity</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -801,6 +803,23 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                                 {(FILLING_OPTIONS[category] || []).map((opt) => (
                                   <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                                 ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        )}
+                        {category === 'INSERTS' && (
+                          <TableCell>
+                            <Select
+                              value={weights[product.id] || ""}
+                              onValueChange={(val) => setWeights((prev) => ({ ...prev, [product.id]: val }))}
+                            >
+                              <SelectTrigger className="w-[140px]" data-testid={`select-weight-${product.id}`}>
+                                <SelectValue placeholder="Select..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Normal">Normal</SelectItem>
+                                <SelectItem value="Firm Fill">Firm Fill</SelectItem>
+                                <SelectItem value="Extra Firm Fill">Extra Firm Fill</SelectItem>
                               </SelectContent>
                             </Select>
                           </TableCell>
@@ -861,6 +880,21 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                                   {(FILLING_OPTIONS['INSERTS'] || []).map((opt) => (
                                     <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                                   ))}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>
+                              <Select
+                                value={line.weight || ""}
+                                onValueChange={(val) => updateCustomLine(line.id, "weight", val)}
+                              >
+                                <SelectTrigger className="w-[140px]" data-testid={`select-weight-custom-${line.id}`}>
+                                  <SelectValue placeholder="Select..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Normal">Normal</SelectItem>
+                                  <SelectItem value="Firm Fill">Firm Fill</SelectItem>
+                                  <SelectItem value="Extra Firm Fill">Extra Firm Fill</SelectItem>
                                 </SelectContent>
                               </Select>
                             </TableCell>
