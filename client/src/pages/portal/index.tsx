@@ -682,6 +682,21 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       toast({ title: "Empty cart", description: "Add at least one product to your order", variant: "destructive" });
       return;
     }
+    if (products) {
+      const missingFilling = cartItems.filter((item) => {
+        const cat = (item as any).category || "";
+        return FILLING_CATEGORIES.includes(cat) && !fillings[item.id];
+      });
+      if (missingFilling.length > 0) {
+        toast({ title: "Filling required", description: `Please select a filling for: ${missingFilling.map((i) => i.name).join(", ")}`, variant: "destructive" });
+        return;
+      }
+    }
+    const missingCustomFilling = customLines.filter((l) => l.size && l.qty > 0 && !l.filling);
+    if (missingCustomFilling.length > 0) {
+      toast({ title: "Filling required", description: "Please select a filling for all custom inserts", variant: "destructive" });
+      return;
+    }
     setSubmitting(true);
     try {
       const fillingSelections = cartItems
