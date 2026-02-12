@@ -139,18 +139,43 @@ app.use((req, res, next) => {
       ) dupes
     `);
     if (parseInt(dupCheck.rows[0].cnt) > 0) {
-      const result = await pool.query(`
-        DELETE FROM companies
-        WHERE id IN (
-          SELECT id FROM (
-            SELECT id,
-              ROW_NUMBER() OVER (PARTITION BY legal_name, trading_name ORDER BY created_at ASC) as rn
-            FROM companies
-          ) ranked
-          WHERE rn > 1
-        )
-      `);
-      console.log(`Removed ${result.rowCount} duplicate companies`);
+      console.log("Found duplicate companies, deduplicating...");
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        // Get the "keep" id (oldest) and "remove" ids (newer duplicates) for each group
+        const dupeGroups = await client.query(`
+          SELECT legal_name, trading_name,
+            MIN(id) as keep_id,
+            ARRAY_REMOVE(ARRAY_AGG(id ORDER BY created_at ASC), MIN(id)) as remove_ids
+          FROM companies
+          GROUP BY legal_name, trading_name
+          HAVING COUNT(*) > 1
+        `);
+        for (const group of dupeGroups.rows) {
+          const keepId = group.keep_id;
+          const removeIds = group.remove_ids;
+          // Reassign any foreign key references from duplicates to the original
+          await client.query(`UPDATE portal_users SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
+          await client.query(`UPDATE company_prices SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
+          await client.query(`UPDATE contacts SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
+          await client.query(`UPDATE deals SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
+          await client.query(`UPDATE orders SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
+          await client.query(`UPDATE invoices SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
+          await client.query(`UPDATE quotes SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
+          await client.query(`UPDATE emails SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
+          await client.query(`UPDATE form_submissions SET company_id = $1 WHERE company_id = ANY($2)`, [keepId, removeIds]);
+          // Now safe to delete the duplicates
+          await client.query(`DELETE FROM companies WHERE id = ANY($1)`, [removeIds]);
+        }
+        await client.query("COMMIT");
+        console.log(`Deduplicated ${dupeGroups.rows.length} company groups`);
+      } catch (err) {
+        await client.query("ROLLBACK");
+        console.error("Dedup transaction failed:", err);
+      } finally {
+        client.release();
+      }
     }
   } catch (error) {
     console.error("Dedup error:", error);
