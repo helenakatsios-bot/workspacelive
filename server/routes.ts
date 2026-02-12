@@ -3624,10 +3624,22 @@ Rules:
 
   app.get("/api/portal/products", requirePortalAuth, async (req, res) => {
     try {
+      const hiddenCategories = [
+        '4 SEASONS CASE',
+        'CASSETTES CASES',
+        'CHANNELLED CASES',
+        'GOLD PILLOW CASE',
+        'GOLD QUILT CASE',
+        'MATTRESS TOPPER CASE',
+        'MEN JACKET',
+        'WOMAN JACKET',
+      ];
       const result = await pool.query(`
         SELECT id, sku, name, description, category, unit_price
-        FROM products WHERE active = true ORDER BY category, name
-      `);
+        FROM products WHERE active = true
+        AND (category IS NULL OR category NOT IN (${hiddenCategories.map((_, i) => `$${i + 1}`).join(', ')}))
+        ORDER BY category, name
+      `, hiddenCategories);
       res.json(result.rows.map((r: any) => ({
         id: r.id,
         sku: r.sku,
