@@ -130,6 +130,32 @@ app.use((req, res, next) => {
     console.error("Data sync error:", error);
   }
 
+  // One-time deduplication of companies
+  try {
+    const dupCheck = await pool.query(`
+      SELECT COUNT(*) as cnt FROM (
+        SELECT legal_name, trading_name, COUNT(*) as c 
+        FROM companies GROUP BY legal_name, trading_name HAVING COUNT(*) > 1
+      ) dupes
+    `);
+    if (parseInt(dupCheck.rows[0].cnt) > 0) {
+      const result = await pool.query(`
+        DELETE FROM companies
+        WHERE id IN (
+          SELECT id FROM (
+            SELECT id,
+              ROW_NUMBER() OVER (PARTITION BY legal_name, trading_name ORDER BY created_at ASC) as rn
+            FROM companies
+          ) ranked
+          WHERE rn > 1
+        )
+      `);
+      console.log(`Removed ${result.rowCount} duplicate companies`);
+    }
+  } catch (error) {
+    console.error("Dedup error:", error);
+  }
+
   // Seed database with sample data
   try {
     await seedDatabase();
