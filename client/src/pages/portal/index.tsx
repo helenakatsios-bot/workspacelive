@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -603,9 +604,12 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   });
 
   const [cart, setCart] = useState<Record<string, number>>({});
+  const [fillings, setFillings] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const FILLING_CATEGORIES = ['4 SEASONS FILLED', 'MATTRESS TOPPER FILLED'];
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
@@ -644,12 +648,18 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     }
     setSubmitting(true);
     try {
+      const fillingSelections = cartItems
+        .filter((item) => fillings[item.id])
+        .map((item) => `${item.name}: ${fillings[item.id]} filling`);
+      const fullNotes = fillingSelections.length > 0
+        ? [notes, "Filling selections: " + fillingSelections.join(", ")].filter(Boolean).join("\n\n")
+        : notes;
       const res = await fetch("/api/portal/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: cartItems.map((item) => ({ productId: item.id, quantity: item.qty })),
-          customerNotes: notes,
+          items: cartItems.map((item) => ({ productId: item.id, quantity: item.qty, filling: fillings[item.id] || undefined })),
+          customerNotes: fullNotes,
         }),
         credentials: "include",
       });
@@ -708,7 +718,9 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
             />
           </div>
 
-          {Object.entries(grouped).map(([category, prods]) => (
+          {Object.entries(grouped).map(([category, prods]) => {
+            const hasFillingOption = FILLING_CATEGORIES.includes(category);
+            return (
             <Card key={category}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-muted-foreground">{category}</CardTitle>
@@ -718,6 +730,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                   <TableHeader>
                     <TableRow>
                       <TableHead>Product</TableHead>
+                      {hasFillingOption && <TableHead>Filling</TableHead>}
                       <TableHead>SKU</TableHead>
                       <TableHead className="text-right">Price</TableHead>
                       <TableHead className="text-center w-[140px]">Quantity</TableHead>
@@ -730,6 +743,22 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                           <p className="font-medium">{product.name}</p>
                           {product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
                         </TableCell>
+                        {hasFillingOption && (
+                          <TableCell>
+                            <Select
+                              value={fillings[product.id] || ""}
+                              onValueChange={(val) => setFillings((prev) => ({ ...prev, [product.id]: val }))}
+                            >
+                              <SelectTrigger className="w-[120px]" data-testid={`select-filling-${product.id}`}>
+                                <SelectValue placeholder="Select..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Duck">Duck</SelectItem>
+                                <SelectItem value="Goose">Goose</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        )}
                         <TableCell className="text-muted-foreground text-sm">{product.sku}</TableCell>
                         <TableCell className="text-right">${parseFloat(product.unitPrice || "0").toFixed(2)}</TableCell>
                         <TableCell>
@@ -764,7 +793,8 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                 </Table>
               </CardContent>
             </Card>
-          ))}
+          );
+          })}
         </div>
 
         <div className="space-y-4">
