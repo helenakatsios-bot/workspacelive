@@ -3879,7 +3879,7 @@ Rules:
       const orderNumber = `PO-${Date.now().toString(36).toUpperCase()}`;
 
       const orderResult = await pool.query(`
-        INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, customer_notes, customer_name, customer_email, shipping_address)
+        INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, customer_notes, customer_name, customer_email, customer_address)
         VALUES (gen_random_uuid(), $1, $2, 'new', NOW(), $3, $4, $5, $6, $7, $8, $9)
         RETURNING id, order_number
       `, [orderNumber, companyId, subtotal.toFixed(2), tax.toFixed(2), total.toFixed(2),
