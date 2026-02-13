@@ -510,6 +510,25 @@ export const insertCompanyPriceSchema = createInsertSchema(companyPrices).omit({
 export type InsertCompanyPrice = z.infer<typeof insertCompanyPriceSchema>;
 export type CompanyPrice = typeof companyPrices.$inferSelect;
 
+// ============ COMPANY VARIANT PRICES ============
+export const companyVariantPrices = pgTable("company_variant_prices", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id, { onDelete: "cascade" }),
+  productId: varchar("product_id", { length: 36 }).notNull().references(() => products.id, { onDelete: "cascade" }),
+  filling: text("filling").notNull(),
+  weight: text("weight"),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("company_variant_prices_company_idx").on(table.companyId),
+  index("company_variant_prices_product_idx").on(table.productId),
+  index("company_variant_prices_lookup_idx").on(table.companyId, table.productId, table.filling, table.weight),
+]);
+
+export const insertCompanyVariantPriceSchema = createInsertSchema(companyVariantPrices).omit({ id: true, updatedAt: true });
+export type InsertCompanyVariantPrice = z.infer<typeof insertCompanyVariantPriceSchema>;
+export type CompanyVariantPrice = typeof companyVariantPrices.$inferSelect;
+
 // ============ VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),

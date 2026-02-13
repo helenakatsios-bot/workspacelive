@@ -665,18 +665,38 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     return sorted;
   }, [filteredProducts]);
 
+  const getVariantPrice = (product: any, filling?: string, weight?: string): string => {
+    if (!product?.variantPrices || product.variantPrices.length === 0) return product?.unitPrice || "0";
+    if (!filling) return product.unitPrice || "0";
+    const f = filling.trim();
+    const w = weight?.trim() || null;
+    const variants = product.variantPrices.filter((vp: any) => vp.filling?.trim() === f);
+    if (variants.length === 0) return product.unitPrice || "0";
+    if (w) {
+      const exactMatch = variants.find((vp: any) => vp.weight?.trim() === w);
+      if (exactMatch) return exactMatch.unitPrice;
+    }
+    const nullWeight = variants.find((vp: any) => !vp.weight);
+    if (nullWeight) return nullWeight.unitPrice;
+    const normalWeight = variants.find((vp: any) => vp.weight?.trim() === "Normal");
+    if (normalWeight) return normalWeight.unitPrice;
+    return variants[0].unitPrice;
+  };
+
   const cartItems = useMemo(() => {
     if (!products) return [];
     return Object.entries(cart)
       .filter(([, qty]) => qty > 0)
       .map(([id, qty]) => {
         const product = products.find((p) => p.id === id);
-        return product ? { ...product, qty } : null;
+        if (!product) return null;
+        const effectivePrice = getVariantPrice(product, fillings[id], weights[id]);
+        return { ...product, qty, effectivePrice };
       })
       .filter(Boolean) as any[];
-  }, [cart, products]);
+  }, [cart, products, fillings, weights]);
 
-  const cartTotal = cartItems.reduce((sum, item) => sum + item.qty * parseFloat(item.unitPrice || "0"), 0);
+  const cartTotal = cartItems.reduce((sum, item) => sum + item.qty * parseFloat(item.effectivePrice || item.unitPrice || "0"), 0);
 
   const handleSubmit = async () => {
     const hasCustomLines = customLines.some((l) => l.size && l.qty > 0);
@@ -721,7 +741,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: cartItems.map((item) => ({ productId: item.id, quantity: item.qty, filling: fillings[item.id] || undefined })),
+          items: cartItems.map((item) => ({ productId: item.id, quantity: item.qty, filling: fillings[item.id] || undefined, weight: weights[item.id] || undefined })),
           customItems: activeCustomLines.map((l) => ({ size: l.size, filling: l.filling, weight: l.weight, quantity: l.qty })),
           customerNotes: fullNotes,
           shippingAddress: deliveryAddress || undefined,
@@ -819,7 +839,14 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                           {product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
                         </TableCell>
                         <TableCell className="text-right">
-                          <span className="font-medium">${parseFloat(product.unitPrice || "0").toFixed(2)}</span>
+                          {(() => {
+                            const displayPrice = getVariantPrice(product, fillings[product.id], weights[product.id]);
+                            return (
+                              <span className="font-medium">
+                                ${parseFloat(displayPrice).toFixed(2)}
+                              </span>
+                            );
+                          })()}
                         </TableCell>
                         {hasFillingOption && (
                           <TableCell>
@@ -1001,8 +1028,11 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                 <div className="space-y-2">
                   {cartItems.map((item) => (
                     <div key={item.id} className="flex justify-between text-sm" data-testid={`cart-item-${item.id}`}>
-                      <span className="truncate mr-2">{item.name} x{item.qty}</span>
-                      <span className="flex-shrink-0 font-medium">${(item.qty * parseFloat(item.unitPrice || "0")).toFixed(2)}</span>
+                      <span className="truncate mr-2">
+                        {item.name} x{item.qty}
+                        {fillings[item.id] && <span className="text-xs text-muted-foreground ml-1">({fillings[item.id]}{weights[item.id] ? `, ${weights[item.id]}` : ""})</span>}
+                      </span>
+                      <span className="flex-shrink-0 font-medium">${(item.qty * parseFloat(item.effectivePrice || item.unitPrice || "0")).toFixed(2)}</span>
                     </div>
                   ))}
                   <div className="border-t pt-2 flex justify-between font-semibold">

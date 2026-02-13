@@ -7,6 +7,7 @@ import { pool } from "./db";
 import { syncProductionData } from "./data-sync";
 import { startAutoEmailSync } from "./outlook";
 import { startInactivityChecker } from "./inactivity-checker";
+import { importPuradownPrices } from "./import-puradown-prices";
 
 const app = express();
 const httpServer = createServer(app);
@@ -278,6 +279,13 @@ async function runStartupTasks() {
     await seedDatabase();
   } catch (error) {
     console.error("Failed to seed database:", error);
+  }
+
+  // Import Puradown variant prices from CSV
+  try {
+    await importPuradownPrices();
+  } catch (error) {
+    console.error("Puradown price import error:", error);
   }
 
   console.log("All startup tasks completed");

@@ -3773,10 +3773,20 @@ Rules:
 
       const companyId = req.session.portalCompanyId;
       let priceMap = new Map<string, string>();
+      let variantPriceMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
       if (companyId) {
         const companyPricesList = await storage.getCompanyPrices(companyId);
         for (const cp of companyPricesList) {
           priceMap.set(cp.productId, cp.unitPrice);
+        }
+        const variantResult = await pool.query(
+          `SELECT product_id, filling, weight, unit_price FROM company_variant_prices WHERE company_id = $1 ORDER BY filling, weight`,
+          [companyId]
+        );
+        for (const vp of variantResult.rows) {
+          const key = vp.product_id;
+          if (!variantPriceMap.has(key)) variantPriceMap.set(key, []);
+          variantPriceMap.get(key)!.push({ filling: vp.filling, weight: vp.weight, unitPrice: vp.unit_price });
         }
       }
 
@@ -3788,6 +3798,7 @@ Rules:
         category: r.category,
         unitPrice: priceMap.get(r.id) || r.unit_price,
         hasCustomPrice: priceMap.has(r.id),
+        variantPrices: variantPriceMap.get(r.id) || [],
       })));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch products" });
@@ -3808,6 +3819,11 @@ Rules:
       let subtotal = 0;
       const companyPricesList = await storage.getCompanyPrices(companyId);
       const companyPriceMap = new Map(companyPricesList.map(cp => [cp.productId, cp.unitPrice]));
+      const variantResult = await pool.query(
+        `SELECT product_id, filling, weight, unit_price FROM company_variant_prices WHERE company_id = $1`,
+        [companyId]
+      );
+      const variantPrices = variantResult.rows;
       const orderLines: Array<{ productId: string | null; quantity: number; unitPrice: number; lineTotal: number; descriptionOverride: string }> = [];
       if (hasItems) {
         for (const item of items) {
@@ -3815,16 +3831,32 @@ Rules:
           if (prodResult.rows.length === 0) continue;
           const prod = prodResult.rows[0];
           const qty = Math.max(1, parseInt(item.quantity) || 1);
-          const customPrice = companyPriceMap.get(prod.id);
-          const price = customPrice ? parseFloat(customPrice) : parseFloat(prod.unit_price);
+          let price: number;
+          if (item.filling) {
+            const f = (item.filling || "").trim();
+            const w = (item.weight || "").trim() || null;
+            const prodVariants = variantPrices.filter((vp: any) => vp.product_id === prod.id && (vp.filling || "").trim() === f);
+            let variantMatch = null;
+            if (w) {
+              variantMatch = prodVariants.find((vp: any) => (vp.weight || "").trim() === w);
+            }
+            if (!variantMatch) {
+              variantMatch = prodVariants.find((vp: any) => !vp.weight) || prodVariants.find((vp: any) => (vp.weight || "").trim() === "Normal") || prodVariants[0] || null;
+            }
+            price = variantMatch ? parseFloat(variantMatch.unit_price) : (companyPriceMap.has(prod.id) ? parseFloat(companyPriceMap.get(prod.id)!) : parseFloat(prod.unit_price));
+          } else {
+            const customPrice = companyPriceMap.get(prod.id);
+            price = customPrice ? parseFloat(customPrice) : parseFloat(prod.unit_price);
+          }
           const lineTotal = price * qty;
           subtotal += lineTotal;
+          const desc = item.filling ? `${prod.name} (${item.filling}${item.weight ? `, ${item.weight}` : ''})` : prod.name;
           orderLines.push({
             productId: prod.id,
             quantity: qty,
             unitPrice: price,
             lineTotal,
-            descriptionOverride: prod.name,
+            descriptionOverride: desc,
           });
         }
       }
