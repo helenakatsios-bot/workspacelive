@@ -637,7 +637,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   }, [products, search]);
 
   const TOP_CATEGORIES = ['INSERTS'];
-  const BOTTOM_CATEGORIES = ['MICROSOFT', 'SILVER BLANKET', 'KHAKI BLANKET'];
+  const BOTTOM_CATEGORIES = ['MICROSOFT', 'KHAKI BLANKET', 'SILVER BLANKET'];
 
   const grouped = useMemo(() => {
     const groups: Record<string, any[]> = {};
@@ -659,6 +659,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
         middleEntries.push([cat, prods]);
       }
     }
+    bottomEntries.sort((a, b) => BOTTOM_CATEGORIES.indexOf(a[0]) - BOTTOM_CATEGORIES.indexOf(b[0]));
     for (const [cat, prods] of [...topEntries, ...middleEntries, ...bottomEntries]) {
       sorted[cat] = prods;
     }
