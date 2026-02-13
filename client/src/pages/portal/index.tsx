@@ -825,10 +825,10 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                   <TableHeader>
                     <TableRow>
                       <TableHead>Product</TableHead>
-                      <TableHead className="text-right">Price</TableHead>
                       {hasFillingOption && <TableHead>Filling</TableHead>}
                       {category === 'INSERTS' && <TableHead>Weight</TableHead>}
                       <TableHead className="text-center w-[140px]">Quantity</TableHead>
+                      <TableHead className="text-right">Price</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -837,16 +837,6 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                         <TableCell>
                           <p className="font-medium">{product.name.replace(/\s*[\-–]\s*\(.*?\)\s*/g, '').replace(/\s*\(.*?\)\s*/g, '').trim()}</p>
                           {product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {(() => {
-                            const displayPrice = getVariantPrice(product, fillings[product.id], weights[product.id]);
-                            return (
-                              <span className="font-medium">
-                                ${parseFloat(displayPrice).toFixed(2)}
-                              </span>
-                            );
-                          })()}
                         </TableCell>
                         {hasFillingOption && (
                           <TableCell>
@@ -908,6 +898,16 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                             </Button>
                           </div>
                         </TableCell>
+                        <TableCell className="text-right">
+                          {(() => {
+                            const displayPrice = getVariantPrice(product, fillings[product.id], weights[product.id]);
+                            return (
+                              <span className="font-medium">
+                                ${parseFloat(displayPrice).toFixed(2)}
+                              </span>
+                            );
+                          })()}
+                        </TableCell>
                       </TableRow>
                     ))}
                     {category === 'INSERTS' && (
@@ -925,9 +925,6 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                                   data-testid={`input-custom-size-${line.id}`}
                                 />
                               </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <span className="text-xs text-muted-foreground">TBD</span>
                             </TableCell>
                             <TableCell>
                               <Select
@@ -993,6 +990,9 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                                   <X className="w-3 h-3" />
                                 </Button>
                               </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span className="text-xs text-muted-foreground">TBD</span>
                             </TableCell>
                           </TableRow>
                         ))}
