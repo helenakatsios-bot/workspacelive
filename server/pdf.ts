@@ -157,20 +157,18 @@ export function generateOrderPdf(data: OrderPdfData): Promise<Buffer> {
     doc.moveDown(0.5);
 
     const tableLeft = 50;
-    const colItem = 220;
-    const colSku = 80;
+    const colItem = 300;
     const colQty = 50;
     const colPrice = 75;
-    const colTotal = pageWidth - colItem - colSku - colQty - colPrice;
+    const colTotal = pageWidth - colItem - colQty - colPrice;
 
     let tableY = doc.y;
     doc.rect(tableLeft, tableY, pageWidth, 20).fill("#f0f0f0");
     doc.fillColor("#333333").fontSize(8).font("Helvetica-Bold");
     doc.text("ITEM", tableLeft + 5, tableY + 6, { width: colItem - 10 });
-    doc.text("SKU", tableLeft + colItem + 5, tableY + 6, { width: colSku - 10 });
-    doc.text("QTY", tableLeft + colItem + colSku + 5, tableY + 6, { width: colQty - 10, align: "center" });
-    doc.text("UNIT PRICE", tableLeft + colItem + colSku + colQty + 5, tableY + 6, { width: colPrice - 10, align: "right" });
-    doc.text("TOTAL", tableLeft + colItem + colSku + colQty + colPrice + 5, tableY + 6, { width: colTotal - 10, align: "right" });
+    doc.text("QTY", tableLeft + colItem + 5, tableY + 6, { width: colQty - 10, align: "center" });
+    doc.text("UNIT PRICE", tableLeft + colItem + colQty + 5, tableY + 6, { width: colPrice - 10, align: "right" });
+    doc.text("TOTAL", tableLeft + colItem + colQty + colPrice + 5, tableY + 6, { width: colTotal - 10, align: "right" });
 
     tableY += 22;
 
@@ -183,7 +181,6 @@ export function generateOrderPdf(data: OrderPdfData): Promise<Buffer> {
       }
 
       const itemName = line.descriptionOverride || line.productName || "Unknown Item";
-      const sku = line.productSku || "";
 
       const nameHeight = doc.heightOfString(itemName, { width: colItem - 10 });
       const rowHeight = Math.max(nameHeight + 6, 18);
@@ -194,10 +191,9 @@ export function generateOrderPdf(data: OrderPdfData): Promise<Buffer> {
       }
 
       doc.text(itemName, tableLeft + 5, tableY + 4, { width: colItem - 10 });
-      doc.text(sku, tableLeft + colItem + 5, tableY + 4, { width: colSku - 10 });
-      doc.text(String(line.quantity), tableLeft + colItem + colSku + 5, tableY + 4, { width: colQty - 10, align: "center" });
-      doc.text(formatCurrency(line.unitPrice), tableLeft + colItem + colSku + colQty + 5, tableY + 4, { width: colPrice - 10, align: "right" });
-      doc.text(formatCurrency(line.lineTotal), tableLeft + colItem + colSku + colQty + colPrice + 5, tableY + 4, { width: colTotal - 10, align: "right" });
+      doc.text(String(line.quantity), tableLeft + colItem + 5, tableY + 4, { width: colQty - 10, align: "center" });
+      doc.text(formatCurrency(line.unitPrice), tableLeft + colItem + colQty + 5, tableY + 4, { width: colPrice - 10, align: "right" });
+      doc.text(formatCurrency(line.lineTotal), tableLeft + colItem + colQty + colPrice + 5, tableY + 4, { width: colTotal - 10, align: "right" });
 
       tableY += rowHeight + 2;
     }

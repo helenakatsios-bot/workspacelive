@@ -1222,7 +1222,7 @@ export async function registerRoutes(
       }
 
       const orderDetailsText = linesWithProducts.map(line =>
-        `${line.quantity}x ${line.productName}${line.productSku ? ` (${line.productSku})` : ""} @ $${line.unitPrice} = $${line.lineTotal}`
+        `${line.quantity}x ${line.productName} @ $${line.unitPrice} = $${line.lineTotal}`
       ).join("\n");
 
       const customerName = order.customerName
