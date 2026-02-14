@@ -173,6 +173,7 @@ export const orders = pgTable("orders", {
   customerAddress: text("customer_address"),
   deliveryMethod: text("delivery_method"),
   paymentMethod: text("payment_method"),
+  paymentStatus: text("payment_status").default("unpaid"), // unpaid, paid
   sourceEmailId: varchar("source_email_id", { length: 36 }).references(() => emails.id),
   puraxSyncStatus: text("purax_sync_status").default("not_sent"), // not_sent, sent, failed
   puraxSyncedAt: timestamp("purax_synced_at"),
