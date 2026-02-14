@@ -324,6 +324,7 @@ function PortalDashboard({ onNavigate }: { onNavigate: (page: string) => void })
                   <TableHead>Order</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Payment</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                 </TableRow>
               </TableHeader>
@@ -333,6 +334,15 @@ function PortalDashboard({ onNavigate }: { onNavigate: (page: string) => void })
                     <TableCell className="font-medium">{order.orderNumber}</TableCell>
                     <TableCell>{order.orderDate ? format(new Date(order.orderDate), "MMM d, yyyy") : "-"}</TableCell>
                     <TableCell><StatusBadge status={order.status} /></TableCell>
+                    <TableCell>
+                      <Badge className={order.paymentStatus === "paid"
+                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+                        : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"}
+                        data-testid={`badge-payment-${order.id}`}
+                      >
+                        {order.paymentStatus === "paid" ? "Paid" : "Unpaid"}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-right">${parseFloat(order.total || "0").toLocaleString("en-AU", { minimumFractionDigits: 2 })}</TableCell>
                   </TableRow>
                 ))}
@@ -395,6 +405,7 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
                   <TableHead>Order #</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Payment</TableHead>
                   <TableHead>Tracking</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead></TableHead>
@@ -406,6 +417,15 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
                     <TableCell className="font-medium">{order.orderNumber}</TableCell>
                     <TableCell>{order.orderDate ? format(new Date(order.orderDate), "MMM d, yyyy") : "-"}</TableCell>
                     <TableCell><StatusBadge status={order.status} /></TableCell>
+                    <TableCell>
+                      <Badge className={order.paymentStatus === "paid"
+                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+                        : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"}
+                        data-testid={`badge-payment-${order.id}`}
+                      >
+                        {order.paymentStatus === "paid" ? "Paid" : "Unpaid"}
+                      </Badge>
+                    </TableCell>
                     <TableCell>{order.trackingNumber || "-"}</TableCell>
                     <TableCell className="text-right">${parseFloat(order.total || "0").toLocaleString("en-AU", { minimumFractionDigits: 2 })}</TableCell>
                     <TableCell><ChevronRight className="w-4 h-4 text-muted-foreground" /></TableCell>
@@ -460,6 +480,14 @@ function PortalOrderDetail({ orderId, onBack }: { orderId: string; onBack: () =>
           </p>
         </div>
         <StatusBadge status={order.status} />
+        <Badge
+          className={order.paymentStatus === "paid"
+            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+            : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"}
+          data-testid="badge-payment-status"
+        >
+          {order.paymentStatus === "paid" ? "Paid" : "Unpaid"}
+        </Badge>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

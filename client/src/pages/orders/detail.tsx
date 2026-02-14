@@ -269,6 +269,17 @@ export default function OrderDetailPage() {
     },
   });
 
+  const togglePaymentStatusMutation = useMutation({
+    mutationFn: async (paymentStatus: string) => {
+      return apiRequest("PATCH", `/api/orders/${params?.id}`, { paymentStatus });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({ title: "Payment status updated" });
+    },
+  });
+
   const deleteOrderMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("DELETE", `/api/orders/${params?.id}`);
@@ -748,6 +759,15 @@ export default function OrderDetailPage() {
           <Badge className={getStatusColor(order.status)}>
             {order.status.replace("_", " ")}
           </Badge>
+          <Badge
+            className={order.paymentStatus === "paid"
+              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+              : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"}
+            data-testid="badge-payment-status"
+          >
+            <CreditCard className="w-3 h-3 mr-1" />
+            {order.paymentStatus === "paid" ? "Paid" : "Unpaid"}
+          </Badge>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -774,6 +794,19 @@ export default function OrderDetailPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <Button
+                variant={order.paymentStatus === "paid" ? "outline" : "default"}
+                onClick={() => togglePaymentStatusMutation.mutate(order.paymentStatus === "paid" ? "unpaid" : "paid")}
+                disabled={togglePaymentStatusMutation.isPending}
+                data-testid="button-toggle-payment"
+              >
+                <CreditCard className="w-4 h-4 mr-2" />
+                {togglePaymentStatusMutation.isPending
+                  ? "Updating..."
+                  : order.paymentStatus === "paid"
+                    ? "Mark Unpaid"
+                    : "Mark Paid"}
+              </Button>
               <Button variant="outline" onClick={startEditing} data-testid="button-edit">
                 <Edit className="w-4 h-4 mr-2" />
                 Edit

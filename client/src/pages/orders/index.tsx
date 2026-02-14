@@ -260,6 +260,7 @@ export default function OrdersPage() {
                   <TableHead>Company</TableHead>
                   <TableHead className="hidden md:table-cell">Order Date</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="hidden md:table-cell">Payment</TableHead>
                   {canViewPricing && <TableHead className="hidden lg:table-cell text-right">Total</TableHead>}
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
@@ -301,6 +302,15 @@ export default function OrdersPage() {
                     <TableCell>
                       <Badge className={getStatusColor(order.status)}>
                         {order.status.replace("_", " ")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <Badge className={order.paymentStatus === "paid"
+                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+                        : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"}
+                        data-testid={`badge-payment-${order.id}`}
+                      >
+                        {order.paymentStatus === "paid" ? "Paid" : "Unpaid"}
                       </Badge>
                     </TableCell>
                     {canViewPricing && (
