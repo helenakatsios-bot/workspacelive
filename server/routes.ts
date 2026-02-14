@@ -3876,15 +3876,22 @@ Rules:
 
       const tax = Math.round(subtotal * 10) / 100;
       const total = subtotal + tax;
-      const orderNumber = `PO-${Date.now().toString(36).toUpperCase()}`;
+
+      const countResult = await pool.query(
+        `SELECT COUNT(*) as cnt FROM orders WHERE company_id = $1 AND customer_name = $2`,
+        [companyId, portalUser?.name || ""]
+      );
+      const nextNum = parseInt(countResult.rows[0].cnt || "0") + 1;
+      const customerName = portalUser?.name || "Portal Order";
+      const orderNumber = `${customerName} - ${nextNum}`;
 
       const orderResult = await pool.query(`
         INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, customer_notes, customer_name, customer_email, customer_address)
         VALUES (gen_random_uuid(), $1, $2, 'new', NOW(), $3, $4, $5, $6, $7, $8, $9)
         RETURNING id, order_number
       `, [orderNumber, companyId, subtotal.toFixed(2), tax.toFixed(2), total.toFixed(2),
-          customerNotes || `Order placed via Customer Portal by ${portalUser?.name || "portal user"}`,
-          portalUser?.name || "", portalUser?.email || "", deliveryAddress || null]);
+          customerNotes || `Order placed by ${customerName}`,
+          customerName, portalUser?.email || "", deliveryAddress || null]);
 
       const orderId = orderResult.rows[0].id;
 
