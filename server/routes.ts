@@ -3745,6 +3745,7 @@ Rules:
         total: r.total,
         balanceDue: r.balance_due,
         companyName: r.company_name,
+        xeroOnlineUrl: r.xero_online_url,
       })));
     } catch (error) {
       console.error("Portal invoices error:", error);

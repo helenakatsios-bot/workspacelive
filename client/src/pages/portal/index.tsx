@@ -23,6 +23,7 @@ import {
   Eye,
   EyeOff,
   ChevronRight,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -601,6 +602,7 @@ function PortalInvoices() {
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead className="text-right">Balance Due</TableHead>
+                  <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -612,6 +614,20 @@ function PortalInvoices() {
                     <TableCell><StatusBadge status={inv.status} /></TableCell>
                     <TableCell className="text-right">${parseFloat(inv.total || "0").toLocaleString("en-AU", { minimumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-medium">${parseFloat(inv.balanceDue || "0").toLocaleString("en-AU", { minimumFractionDigits: 2 })}</TableCell>
+                    <TableCell>
+                      {inv.xeroOnlineUrl && (
+                        <a href={inv.xeroOnlineUrl} target="_blank" rel="noopener noreferrer">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            data-testid={`button-view-invoice-${inv.id}`}
+                          >
+                            <ExternalLink className="w-3 h-3 mr-1" />
+                            View
+                          </Button>
+                        </a>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

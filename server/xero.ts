@@ -303,6 +303,7 @@ interface XeroInvoiceRaw {
   Contact?: { ContactID: string; Name?: string };
   Date?: string;
   DueDate?: string;
+  AmountDue?: number;
   Status?: string;
   SubTotal?: number;
   TotalTax?: number;
@@ -315,6 +316,61 @@ interface XeroInvoiceRaw {
     LineAmount?: number;
     AccountCode?: string;
   }>;
+}
+
+async function fetchXeroOnlineInvoiceUrl(accessToken: string, tenantId: string, invoiceId: string): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://api.xero.com/api.xro/2.0/Invoices/${invoiceId}/OnlineInvoice`,
+      {
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Xero-Tenant-Id": tenantId,
+          "Accept": "application/json",
+        },
+      }
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.OnlineInvoices?.[0]?.OnlineInvoiceUrl || null;
+  } catch {
+    return null;
+  }
+}
+
+async function createInvoiceFromXero(
+  xInv: XeroInvoiceRaw,
+  companyId: string,
+  orderId: string,
+  invNumber: string,
+  accessToken: string,
+  tenantId: string,
+) {
+  let invoiceStatus = "draft";
+  if (xInv.Status === "DRAFT") invoiceStatus = "draft";
+  else if (xInv.Status === "SUBMITTED" || xInv.Status === "AUTHORISED") invoiceStatus = "sent";
+  else if (xInv.Status === "PAID") invoiceStatus = "paid";
+  else if (xInv.Status === "VOIDED") invoiceStatus = "void";
+  else if (xInv.Status === "OVERDUE") invoiceStatus = "overdue";
+
+  const onlineUrl = await fetchXeroOnlineInvoiceUrl(accessToken, tenantId, xInv.InvoiceID);
+
+  const balanceDue = xInv.Status === "PAID" ? "0" : String(xInv.AmountDue ?? xInv.Total ?? 0);
+
+  await db.insert(invoices).values({
+    invoiceNumber: invNumber,
+    orderId,
+    companyId,
+    status: invoiceStatus,
+    issueDate: xInv.Date ? new Date(xInv.Date) : new Date(),
+    dueDate: xInv.DueDate ? new Date(xInv.DueDate) : null,
+    subtotal: String(xInv.SubTotal || 0),
+    tax: String(xInv.TotalTax || 0),
+    total: String(xInv.Total || 0),
+    balanceDue,
+    xeroInvoiceId: xInv.InvoiceID,
+    xeroOnlineUrl: onlineUrl,
+  }).onConflictDoNothing();
 }
 
 export async function importInvoicesFromXero(accessToken: string, tenantId: string) {
@@ -394,6 +450,11 @@ export async function importInvoicesFromXero(accessToken: string, tenantId: stri
         const existingOrder = await db.select().from(orders).where(eq(orders.orderNumber, orderNumber)).limit(1);
         if (existingOrder.length > 0) {
           await saveXeroSyncMapping("order", existingOrder[0].id, xInv.InvoiceID);
+          // Also ensure invoice record exists for portal visibility
+          const existingInvoice = await db.select().from(invoices).where(eq(invoices.xeroInvoiceId, xInv.InvoiceID)).limit(1);
+          if (existingInvoice.length === 0) {
+            await createInvoiceFromXero(xInv, companyId, existingOrder[0].id, invNumber, accessToken, tenantId);
+          }
           imported.push({ invoiceNumber: invNumber, companyName, isNew: false, total: xInv.Total || 0 });
           continue;
         }
@@ -435,6 +496,9 @@ export async function importInvoicesFromXero(accessToken: string, tenantId: stri
         }
 
         await saveXeroSyncMapping("order", newOrder.id, xInv.InvoiceID);
+
+        // Create invoice record for portal visibility
+        await createInvoiceFromXero(xInv, companyId, newOrder.id, invNumber, accessToken, tenantId);
 
         imported.push({ invoiceNumber: invNumber, companyName, isNew: true, total: xInv.Total || 0 });
       } catch (err: any) {

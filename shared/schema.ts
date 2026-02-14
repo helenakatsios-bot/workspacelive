@@ -222,6 +222,7 @@ export const invoices = pgTable("invoices", {
   total: decimal("total", { precision: 12, scale: 2 }).notNull().default("0"),
   balanceDue: decimal("balance_due", { precision: 12, scale: 2 }).notNull().default("0"),
   xeroInvoiceId: text("xero_invoice_id"),
+  xeroOnlineUrl: text("xero_online_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   index("invoices_company_idx").on(table.companyId),
