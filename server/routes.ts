@@ -9,7 +9,7 @@ import { z } from "zod";
 import { eq, ilike, and } from "drizzle-orm";
 import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts, outlookTokens as outlookTokensTable, crmSettings, portalUsers } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
-import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero } from "./xero";
+import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero, autoSyncXeroInvoices } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks, fetchEmailAttachments, downloadAttachment } from "./outlook";
 
 declare module "express-session" {
@@ -353,6 +353,16 @@ export async function registerRoutes(
       res.json(orders);
     } catch (error) {
       console.error("Get company orders error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/companies/:id/invoices", requireAuth, async (req, res) => {
+    try {
+      const companyInvoices = await storage.getCompanyInvoices(req.params.id);
+      res.json(companyInvoices);
+    } catch (error) {
+      console.error("Get company invoices error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

@@ -1,6 +1,6 @@
 import { XeroClient, Contact as XeroContact, Invoice as XeroInvoice, LineItem, Invoices } from "xero-node";
 import { db } from "./db";
-import { xeroTokens, xeroSyncMapping, companies, contacts, invoices, orders, orderLines } from "@shared/schema";
+import { xeroTokens, xeroSyncMapping, companies, contacts, invoices, orders, orderLines, crmSettings } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 
 const XERO_CLIENT_ID = process.env.XERO_CLIENT_ID;
@@ -516,4 +516,162 @@ export async function importInvoicesFromXero(accessToken: string, tenantId: stri
   }
 
   return { imported, errors };
+}
+
+async function getLastXeroSyncTime(): Promise<Date | null> {
+  const [setting] = await db.select().from(crmSettings).where(eq(crmSettings.key, "last_xero_invoice_sync"));
+  if (setting?.value) {
+    return new Date(setting.value);
+  }
+  return null;
+}
+
+async function saveLastXeroSyncTime(time: Date) {
+  const [existing] = await db.select().from(crmSettings).where(eq(crmSettings.key, "last_xero_invoice_sync"));
+  if (existing) {
+    await db.update(crmSettings).set({ value: time.toISOString() }).where(eq(crmSettings.key, "last_xero_invoice_sync"));
+  } else {
+    await db.insert(crmSettings).values({ key: "last_xero_invoice_sync", value: time.toISOString() });
+  }
+}
+
+export async function autoSyncXeroInvoices(accessToken: string, tenantId: string) {
+  let updated = 0;
+  let created = 0;
+  let page = 1;
+  let hasMore = true;
+
+  const lastSync = await getLastXeroSyncTime();
+  const fallback = new Date();
+  fallback.setDate(fallback.getDate() - 7);
+  const modifiedAfter = lastSync || fallback;
+  modifiedAfter.setMinutes(modifiedAfter.getMinutes() - 5);
+  const ifModifiedSince = modifiedAfter.toUTCString();
+
+  while (hasMore) {
+    const response = await fetch(
+      `https://api.xero.com/api.xro/2.0/Invoices?page=${page}&where=Type%3D%3D%22ACCREC%22&order=UpdatedDateUTC%20DESC`,
+      {
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Xero-Tenant-Id": tenantId,
+          "Accept": "application/json",
+          "If-Modified-Since": ifModifiedSince,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`[XERO-AUTOSYNC] API error (page ${page}):`, await response.text());
+      break;
+    }
+
+    const data = await response.json();
+    const xeroInvoices: XeroInvoiceRaw[] = data.Invoices || [];
+
+    if (xeroInvoices.length === 0) {
+      hasMore = false;
+      break;
+    }
+
+    for (const xInv of xeroInvoices) {
+      if (!xInv.InvoiceID) continue;
+
+      const invNumber = xInv.InvoiceNumber || xInv.InvoiceID.substring(0, 8);
+
+      let invoiceStatus = "draft";
+      if (xInv.Status === "DRAFT") invoiceStatus = "draft";
+      else if (xInv.Status === "SUBMITTED" || xInv.Status === "AUTHORISED") invoiceStatus = "sent";
+      else if (xInv.Status === "PAID") invoiceStatus = "paid";
+      else if (xInv.Status === "VOIDED") invoiceStatus = "void";
+      else if (xInv.Status === "OVERDUE") invoiceStatus = "overdue";
+
+      const balanceDue = xInv.Status === "PAID" ? "0" : String(xInv.AmountDue ?? xInv.Total ?? 0);
+
+      const existingInvoice = await db.select().from(invoices).where(eq(invoices.xeroInvoiceId, xInv.InvoiceID)).limit(1);
+
+      if (existingInvoice.length > 0) {
+        await db.update(invoices).set({
+          status: invoiceStatus,
+          balanceDue,
+          subtotal: String(xInv.SubTotal || 0),
+          tax: String(xInv.TotalTax || 0),
+          total: String(xInv.Total || 0),
+          dueDate: xInv.DueDate ? new Date(xInv.DueDate) : null,
+        }).where(eq(invoices.id, existingInvoice[0].id));
+        updated++;
+      } else {
+        let companyId: string | undefined;
+
+        if (xInv.Contact?.ContactID) {
+          const companyMapping = await getXeroSyncMappingByXeroId("company", xInv.Contact.ContactID);
+          if (companyMapping) {
+            companyId = companyMapping.localId;
+          }
+        }
+
+        if (!companyId) continue;
+
+        const existingMapping = await getXeroSyncMappingByXeroId("order", xInv.InvoiceID);
+        const orderId = existingMapping?.localId || null;
+
+        await createInvoiceFromXero(xInv, companyId, orderId || "", invNumber, accessToken, tenantId);
+        created++;
+      }
+    }
+
+    if (xeroInvoices.length < 100) {
+      hasMore = false;
+    } else {
+      page++;
+    }
+  }
+
+  await saveLastXeroSyncTime(new Date());
+
+  return { updated, created };
+}
+
+let xeroSyncInterval: ReturnType<typeof setInterval> | null = null;
+
+export function startAutoXeroInvoiceSync(intervalMinutes: number = 15) {
+  if (xeroSyncInterval) {
+    clearInterval(xeroSyncInterval);
+  }
+
+  const syncAll = async () => {
+    try {
+      const token = await getStoredToken();
+      if (!token) return;
+
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : process.env.REPL_SLUG
+          ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+          : "http://localhost:5000";
+      const redirectUri = `${baseUrl}/api/xero/callback`;
+
+      const xero = createXeroClient(redirectUri);
+      const refreshed = await refreshTokenIfNeeded(xero, token);
+      if (!refreshed) {
+        console.log("[XERO-AUTOSYNC] Token refresh failed, skipping sync");
+        return;
+      }
+
+      const freshToken = await getStoredToken();
+      if (!freshToken) return;
+
+      const result = await autoSyncXeroInvoices(freshToken.accessToken, freshToken.tenantId);
+      if (result.updated > 0 || result.created > 0) {
+        console.log(`[XERO-AUTOSYNC] Synced invoices: ${result.updated} updated, ${result.created} created`);
+      }
+    } catch (err) {
+      console.error("[XERO-AUTOSYNC] Error in auto invoice sync:", err);
+    }
+  };
+
+  setTimeout(syncAll, 10000);
+
+  xeroSyncInterval = setInterval(syncAll, intervalMinutes * 60 * 1000);
+  console.log(`[XERO-AUTOSYNC] Invoice auto-sync started (every ${intervalMinutes} minutes)`);
 }

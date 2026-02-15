@@ -34,6 +34,8 @@ import {
   Ticket,
   Download,
   Upload,
+  Receipt,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,7 +65,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Company, Contact, Order, Activity, Deal, Product, CompanyPrice } from "@shared/schema";
+import type { Company, Contact, Order, Activity, Deal, Product, CompanyPrice, Invoice } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function CompanyDetailPage() {
@@ -102,6 +104,11 @@ export default function CompanyDetailPage() {
 
   const { data: deals } = useQuery<Deal[]>({
     queryKey: ["/api/companies", params?.id, "deals"],
+    enabled: !!params?.id,
+  });
+
+  const { data: companyInvoices } = useQuery<Invoice[]>({
+    queryKey: ["/api/companies", params?.id, "invoices"],
     enabled: !!params?.id,
   });
 
@@ -627,10 +634,11 @@ export default function CompanyDetailPage() {
         {/* CENTER PANEL - Main Content Tabs */}
         <div>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="about" data-testid="tab-about">About</TabsTrigger>
               <TabsTrigger value="activities" data-testid="tab-activities">Activities</TabsTrigger>
               <TabsTrigger value="revenue" data-testid="tab-revenue">Revenue</TabsTrigger>
+              <TabsTrigger value="invoices" data-testid="tab-invoices">Invoices</TabsTrigger>
               <TabsTrigger value="pricing" data-testid="tab-pricing">Pricing</TabsTrigger>
             </TabsList>
 
@@ -804,6 +812,110 @@ export default function CompanyDetailPage() {
                     <div className="text-center py-8 text-muted-foreground">
                       <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-50" />
                       <p className="text-sm">No orders yet</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* INVOICES TAB */}
+            <TabsContent value="invoices" className="mt-4 space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <Card>
+                  <CardContent className="p-3">
+                    <p className="text-xs text-muted-foreground">Total Invoices</p>
+                    <p className="text-xl font-bold" data-testid="text-invoice-count">{companyInvoices?.length || 0}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3">
+                    <p className="text-xs text-muted-foreground">Paid</p>
+                    <p className="text-xl font-bold text-green-600" data-testid="text-paid-count">
+                      {companyInvoices?.filter(i => i.status === "paid").length || 0}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3">
+                    <p className="text-xs text-muted-foreground">Outstanding</p>
+                    <p className="text-xl font-bold text-amber-600" data-testid="text-outstanding-amount">
+                      {formatCurrency(
+                        companyInvoices
+                          ?.filter(i => i.status !== "paid" && i.status !== "void")
+                          .reduce((sum, i) => sum + Number(i.balanceDue || 0), 0) || 0
+                      )}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between gap-2">
+                  <CardTitle className="text-base">All Invoices</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-0">
+                  {companyInvoices && companyInvoices.length > 0 ? (
+                    <div className="space-y-2">
+                      {companyInvoices.map((inv) => {
+                        const invoiceStatusColor = (s: string) => {
+                          switch (s) {
+                            case "paid": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+                            case "sent": case "authorised": return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+                            case "overdue": return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+                            case "void": return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200";
+                            default: return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+                          }
+                        };
+                        return (
+                          <div
+                            key={inv.id}
+                            className="flex items-center justify-between p-3 rounded-lg border hover-elevate"
+                            data-testid={`row-invoice-${inv.id}`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-medium text-sm" data-testid={`text-invoice-number-${inv.id}`}>{inv.invoiceNumber}</p>
+                                <Badge className={invoiceStatusColor(inv.status)}>
+                                  {inv.status}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                                <span>Issued: {format(new Date(inv.issueDate), "MMM d, yyyy")}</span>
+                                {inv.dueDate && (
+                                  <span>Due: {format(new Date(inv.dueDate), "MMM d, yyyy")}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="text-right">
+                                <p className="text-sm font-medium" data-testid={`text-invoice-total-${inv.id}`}>{formatCurrency(inv.total)}</p>
+                                {inv.status !== "paid" && inv.status !== "void" && Number(inv.balanceDue) > 0 && (
+                                  <p className="text-xs text-muted-foreground">Due: {formatCurrency(inv.balanceDue)}</p>
+                                )}
+                              </div>
+                              {inv.xeroOnlineUrl && (
+                                <a
+                                  href={inv.xeroOnlineUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  data-testid={`link-xero-invoice-${inv.id}`}
+                                >
+                                  <Button size="icon" variant="ghost">
+                                    <ExternalLink className="w-4 h-4" />
+                                  </Button>
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Receipt className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No invoices yet</p>
+                      <p className="text-xs mt-1">Invoices from Xero will appear here automatically</p>
                     </div>
                   )}
                 </CardContent>

@@ -7,6 +7,7 @@ import { pool } from "./db";
 import { syncProductionData } from "./data-sync";
 import { startAutoEmailSync } from "./outlook";
 import { startInactivityChecker } from "./inactivity-checker";
+import { startAutoXeroInvoiceSync } from "./xero";
 import { importPuradownPrices } from "./import-puradown-prices";
 
 const app = express();
@@ -334,6 +335,7 @@ async function runStartupTasks() {
       const redirectUri = "https://puraxfeatherholdingscrm.replit.app/api/outlook/callback";
       startAutoEmailSync(redirectUri, 5);
       startInactivityChecker(redirectUri);
+      startAutoXeroInvoiceSync(15);
 
       // Run all startup database tasks in the background after port is open
       runStartupTasks().catch(err => console.error("Startup tasks error:", err));
