@@ -3757,6 +3757,7 @@ Rules:
   });
 
   app.get("/api/portal/products", requirePortalAuth, async (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     try {
       const hiddenCategories = [
         '4 SEASONS CASE',

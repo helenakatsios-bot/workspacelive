@@ -55,7 +55,7 @@ const portalQueryClient = new QueryClient({
         }
         return res.json();
       },
-      staleTime: 30000,
+      staleTime: 0,
       retry: false,
     },
   },
