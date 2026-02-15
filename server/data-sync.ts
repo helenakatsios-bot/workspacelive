@@ -28,6 +28,58 @@ export async function syncProductionData() {
     console.log(`Cleaned up DUCK references from ${duckCleanup.rowCount} products`);
   }
 
+  // Sync base prices for 80% WINTER FILLED products (Duck=base, Goose=higher)
+  const priceUpdates = [
+    { name: 'SINGLE - 80% WINTER FILLED', price: '105.00' },
+    { name: 'DOUBLE - 80% WINTER FILLED', price: '120.00' },
+    { name: 'QUEEN - 80% WINTER FILLED', price: '140.00' },
+    { name: 'KING - 80% WINTER FILLED', price: '160.00' },
+    { name: 'SUPER KING - 80% WINTER FILLED', price: '230.00' },
+  ];
+  for (const pu of priceUpdates) {
+    await pool.query(
+      `UPDATE products SET unit_price = $1 WHERE name = $2 AND (unit_price = '0' OR unit_price = '0.00' OR unit_price IS NULL)`,
+      [pu.price, pu.name]
+    );
+  }
+
+  // Ensure default_variant_prices table exists and is seeded
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS default_variant_prices (
+      id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
+      product_id VARCHAR(36) NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      filling TEXT NOT NULL,
+      weight TEXT,
+      unit_price DECIMAL(12,2) NOT NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS default_variant_prices_product_idx ON default_variant_prices(product_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS default_variant_prices_lookup_idx ON default_variant_prices(product_id, filling, weight)`);
+
+  // Seed default variant prices for 80% WINTER FILLED if not already present
+  const dvpCount = await pool.query("SELECT COUNT(*) as cnt FROM default_variant_prices");
+  if (parseInt(dvpCount.rows[0].cnt) === 0) {
+    const winterProducts = await pool.query("SELECT id, name FROM products WHERE category = '80% WINTER FILLED'");
+    const defaultPrices: Record<string, { Duck: string; Goose: string }> = {
+      'SINGLE - 80% WINTER FILLED': { Duck: '105.00', Goose: '160.00' },
+      'DOUBLE - 80% WINTER FILLED': { Duck: '120.00', Goose: '185.00' },
+      'QUEEN - 80% WINTER FILLED': { Duck: '140.00', Goose: '215.00' },
+      'KING - 80% WINTER FILLED': { Duck: '160.00', Goose: '245.00' },
+      'SUPER KING - 80% WINTER FILLED': { Duck: '230.00', Goose: '330.00' },
+    };
+    for (const row of winterProducts.rows) {
+      const prices = defaultPrices[row.name];
+      if (prices) {
+        await pool.query(
+          `INSERT INTO default_variant_prices (product_id, filling, unit_price) VALUES ($1, 'Duck', $2), ($1, 'Goose', $3)`,
+          [row.id, prices.Duck, prices.Goose]
+        );
+      }
+    }
+    console.log("Seeded default variant prices for 80% WINTER FILLED products");
+  }
+
   const productCount = await pool.query("SELECT COUNT(*) as cnt FROM products");
   const companyCount = await pool.query("SELECT COUNT(*) as cnt FROM companies");
 

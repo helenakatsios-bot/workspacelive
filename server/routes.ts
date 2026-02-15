@@ -3795,6 +3795,17 @@ Rules:
         }
       }
 
+      // Load default variant prices as fallback for products without company-specific variant prices
+      const defaultVariantResult = await pool.query(
+        `SELECT product_id, filling, weight, unit_price FROM default_variant_prices ORDER BY filling, weight`
+      );
+      const defaultVariantMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
+      for (const dvp of defaultVariantResult.rows) {
+        const key = dvp.product_id;
+        if (!defaultVariantMap.has(key)) defaultVariantMap.set(key, []);
+        defaultVariantMap.get(key)!.push({ filling: dvp.filling, weight: dvp.weight, unitPrice: dvp.unit_price });
+      }
+
       res.json(result.rows.map((r: any) => ({
         id: r.id,
         sku: r.sku,
@@ -3803,7 +3814,7 @@ Rules:
         category: r.category,
         unitPrice: priceMap.get(r.id) || r.unit_price,
         hasCustomPrice: priceMap.has(r.id),
-        variantPrices: variantPriceMap.get(r.id) || [],
+        variantPrices: variantPriceMap.get(r.id) || defaultVariantMap.get(r.id) || [],
       })));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch products" });
@@ -3829,6 +3840,11 @@ Rules:
         [companyId]
       );
       const variantPrices = variantResult.rows;
+      // Load default variant prices as fallback
+      const defaultVarResult = await pool.query(
+        `SELECT product_id, filling, weight, unit_price FROM default_variant_prices`
+      );
+      const defaultVariantPrices = defaultVarResult.rows;
       const orderLines: Array<{ productId: string | null; quantity: number; unitPrice: number; lineTotal: number; descriptionOverride: string }> = [];
       if (hasItems) {
         for (const item of items) {
@@ -3840,7 +3856,11 @@ Rules:
           if (item.filling) {
             const f = (item.filling || "").trim();
             const w = (item.weight || "").trim() || null;
-            const prodVariants = variantPrices.filter((vp: any) => vp.product_id === prod.id && (vp.filling || "").trim() === f);
+            // Try company-specific variant prices first, then fall back to default variant prices
+            let prodVariants = variantPrices.filter((vp: any) => vp.product_id === prod.id && (vp.filling || "").trim() === f);
+            if (prodVariants.length === 0) {
+              prodVariants = defaultVariantPrices.filter((vp: any) => vp.product_id === prod.id && (vp.filling || "").trim() === f);
+            }
             let variantMatch = null;
             if (w) {
               variantMatch = prodVariants.find((vp: any) => (vp.weight || "").trim() === w);
