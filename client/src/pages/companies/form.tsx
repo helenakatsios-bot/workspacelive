@@ -307,6 +307,7 @@ export default function CompanyFormPage() {
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="COD">COD (Cash on Delivery)</SelectItem>
+                        <SelectItem value="30 Days">30 Days</SelectItem>
                         <SelectItem value="Net 7">Net 7</SelectItem>
                         <SelectItem value="Net 14">Net 14</SelectItem>
                         <SelectItem value="Net 30">Net 30</SelectItem>
