@@ -120,7 +120,7 @@ export default function ContactsPage() {
                   <TableRow
                     key={contact.id}
                     className="hover-elevate cursor-pointer"
-                    onClick={() => navigate(`/contacts/${contact.id}`)}
+                    onClick={() => navigate(contact.companyId ? `/companies/${contact.companyId}` : `/contacts`)}
                   >
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -174,19 +174,11 @@ export default function ContactsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild>
-                            <Link href={`/contacts/${contact.id}`}>
+                            <Link href={contact.companyId ? `/companies/${contact.companyId}` : `/contacts`}>
                               <Eye className="w-4 h-4 mr-2" />
-                              View
+                              View Company
                             </Link>
                           </DropdownMenuItem>
-                          {canEdit && (
-                            <DropdownMenuItem asChild>
-                              <Link href={`/contacts/${contact.id}/edit`}>
-                                <Edit className="w-4 h-4 mr-2" />
-                                Edit
-                              </Link>
-                            </DropdownMenuItem>
-                          )}
                           {canEdit && (
                             <>
                               <DropdownMenuSeparator />

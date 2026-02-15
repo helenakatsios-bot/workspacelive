@@ -117,8 +117,6 @@ function AuthenticatedApp() {
         <Route path="/companies/:id" component={CompanyDetailPage} />
         <Route path="/companies/:id/edit" component={CompanyFormPage} />
         <Route path="/contacts" component={ContactsPage} />
-        <Route path="/contacts/new" component={CompanyFormPage} />
-        <Route path="/contacts/:id" component={CompanyDetailPage} />
         <Route path="/deals" component={DealsPage} />
         <Route path="/deals/new" component={DealsPage} />
         <Route path="/deals/:id" component={DealsPage} />
