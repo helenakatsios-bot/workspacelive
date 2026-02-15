@@ -2018,6 +2018,17 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/emails/:id/converted", requireEdit, async (req, res) => {
+    try {
+      const { converted } = req.body;
+      await db.update(emailsTable).set({ isConverted: !!converted }).where(eq(emailsTable.id, req.params.id));
+      res.json({ message: "Email updated" });
+    } catch (error) {
+      console.error("Toggle email converted error:", error);
+      res.status(500).json({ message: "Failed to update email" });
+    }
+  });
+
   app.post("/api/emails/:id/convert-to-order", requireEdit, async (req, res) => {
     try {
       const emailId = req.params.id;
@@ -2407,6 +2418,8 @@ export async function registerRoutes(
         content: `Order created from email (${subject})`,
         createdBy: req.session.userId,
       });
+
+      await db.update(emailsTable).set({ isConverted: true }).where(eq(emailsTable.id, emailId));
 
       res.status(201).json(order);
     } catch (error) {

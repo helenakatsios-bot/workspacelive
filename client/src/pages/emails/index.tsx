@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, Mail, Inbox, Send, FileEdit, Clock, User, ShoppingCart, Reply, ReplyAll, X, Search } from "lucide-react";
+import { Loader2, Mail, Inbox, Send, FileEdit, Clock, User, ShoppingCart, Reply, ReplyAll, X, Search, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -79,6 +79,22 @@ export default function EmailsPage() {
     },
     onError: (error: any) => {
       toast({ title: "Failed to send reply", description: error?.message || "Could not send reply. Make sure Outlook is connected.", variant: "destructive" });
+    },
+  });
+
+  const toggleConvertedMutation = useMutation({
+    mutationFn: async ({ emailId, converted }: { emailId: string; converted: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/emails/${emailId}/converted`, { converted });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
+      if (selectedEmail) {
+        setSelectedEmail({ ...selectedEmail, isConverted: !selectedEmail.isConverted });
+      }
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update email status", variant: "destructive" });
     },
   });
 
@@ -194,7 +210,7 @@ export default function EmailsPage() {
                       <TableHead className="w-[200px]">{folder === "sent" ? "To" : "From"}</TableHead>
                       <TableHead>Subject</TableHead>
                       <TableHead className="w-[150px]">Date</TableHead>
-                      <TableHead className="w-[80px]">Status</TableHead>
+                      <TableHead className="w-[140px]">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -243,12 +259,20 @@ export default function EmailsPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {!email.isRead && (
-                            <Badge variant="secondary" className="text-xs">Unread</Badge>
-                          )}
-                          {email.isDraft && (
-                            <Badge variant="outline" className="text-xs">Draft</Badge>
-                          )}
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {!email.isRead && (
+                              <Badge variant="secondary" className="text-xs">Unread</Badge>
+                            )}
+                            {email.isDraft && (
+                              <Badge variant="outline" className="text-xs">Draft</Badge>
+                            )}
+                            {email.isConverted && (
+                              <Badge className="text-xs bg-green-600 text-white">
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Converted
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -326,6 +350,20 @@ export default function EmailsPage() {
                 >
                   <ShoppingCart className="w-4 h-4 mr-1" />
                   {convertToOrderMutation.isPending ? "Creating..." : "Create Order from Email"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={selectedEmail.isConverted ? "default" : "outline"}
+                  className={selectedEmail.isConverted ? "bg-green-600 text-white" : ""}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleConvertedMutation.mutate({ emailId: selectedEmail.id, converted: !selectedEmail.isConverted });
+                  }}
+                  disabled={toggleConvertedMutation.isPending}
+                  data-testid="button-toggle-converted"
+                >
+                  <CheckCircle className="w-4 h-4 mr-1" />
+                  {selectedEmail.isConverted ? "Converted" : "Mark Converted"}
                 </Button>
               </div>
 
