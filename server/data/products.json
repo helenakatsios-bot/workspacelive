@@ -135,91 +135,91 @@
     "active": true
   },
   {
-    "name": "SINGLE - 80% DUCK WINTER FILLED",
+    "name": "SINGLE - 80% WINTER FILLED",
     "sku": "DUCK-045",
-    "category": "80% DUCK WINTER FILLED",
-    "description": "80% DUCK WINTER FILLED",
+    "category": "80% WINTER FILLED",
+    "description": "80% WINTER FILLED",
     "unit_price": "0.00",
     "cost_price": null,
     "active": true
   },
   {
-    "name": "DOUBLE - 80% DUCK WINTER FILLED",
+    "name": "DOUBLE - 80% WINTER FILLED",
     "sku": "DUCK-046",
-    "category": "80% DUCK WINTER FILLED",
-    "description": "80% DUCK WINTER FILLED",
+    "category": "80% WINTER FILLED",
+    "description": "80% WINTER FILLED",
     "unit_price": "0.00",
     "cost_price": null,
     "active": true
   },
   {
-    "name": "QUEEN - 80% DUCK WINTER FILLED",
+    "name": "QUEEN - 80% WINTER FILLED",
     "sku": "DUCK-047",
-    "category": "80% DUCK WINTER FILLED",
-    "description": "80% DUCK WINTER FILLED",
+    "category": "80% WINTER FILLED",
+    "description": "80% WINTER FILLED",
     "unit_price": "0.00",
     "cost_price": null,
     "active": true
   },
   {
-    "name": "KING - 80% DUCK WINTER FILLED",
+    "name": "KING - 80% WINTER FILLED",
     "sku": "DUCK-048",
-    "category": "80% DUCK WINTER FILLED",
-    "description": "80% DUCK WINTER FILLED",
+    "category": "80% WINTER FILLED",
+    "description": "80% WINTER FILLED",
     "unit_price": "0.00",
     "cost_price": null,
     "active": true
   },
   {
-    "name": "SUPER KING - 80% DUCK WINTER FILLED",
+    "name": "SUPER KING - 80% WINTER FILLED",
     "sku": "DUCK-049",
-    "category": "80% DUCK WINTER FILLED",
-    "description": "80% DUCK WINTER FILLED",
+    "category": "80% WINTER FILLED",
+    "description": "80% WINTER FILLED",
     "unit_price": "0.00",
     "cost_price": null,
     "active": true
   },
   {
-    "name": "SINGLE - 50% DUCK WINTER FILLED",
+    "name": "SINGLE - 50% WINTER FILLED",
     "sku": "DUCK-055",
-    "category": "50% DUCK WINTER FILLED",
-    "description": "50% DUCK WINTER FILLED",
+    "category": "50% WINTER FILLED",
+    "description": "50% WINTER FILLED",
     "unit_price": "0.00",
     "cost_price": null,
     "active": true
   },
   {
-    "name": "DOUBLE - 50% DUCK WINTER FILLED",
+    "name": "DOUBLE - 50% WINTER FILLED",
     "sku": "DUCK-056",
-    "category": "50% DUCK WINTER FILLED",
-    "description": "50% DUCK WINTER FILLED",
+    "category": "50% WINTER FILLED",
+    "description": "50% WINTER FILLED",
     "unit_price": "0.00",
     "cost_price": null,
     "active": true
   },
   {
-    "name": "QUEEN - 50% DUCK WINTER FILLED",
+    "name": "QUEEN - 50% WINTER FILLED",
     "sku": "DUCK-057",
-    "category": "50% DUCK WINTER FILLED",
-    "description": "50% DUCK WINTER FILLED",
+    "category": "50% WINTER FILLED",
+    "description": "50% WINTER FILLED",
     "unit_price": "0.00",
     "cost_price": null,
     "active": true
   },
   {
-    "name": "KING - 50% DUCK WINTER FILLED",
+    "name": "KING - 50% WINTER FILLED",
     "sku": "DUCK-058",
-    "category": "50% DUCK WINTER FILLED",
-    "description": "50% DUCK WINTER FILLED",
+    "category": "50% WINTER FILLED",
+    "description": "50% WINTER FILLED",
     "unit_price": "0.00",
     "cost_price": null,
     "active": true
   },
   {
-    "name": "SUPER KING - 50% DUCK WINTER FILLED",
+    "name": "SUPER KING - 50% WINTER FILLED",
     "sku": "DUCK-059",
-    "category": "50% DUCK WINTER FILLED",
-    "description": "50% DUCK WINTER FILLED",
+    "category": "50% WINTER FILLED",
+    "description": "50% WINTER FILLED",
     "unit_price": "0.00",
     "cost_price": null,
     "active": true
@@ -288,7 +288,7 @@
     "active": true
   },
   {
-    "name": "30X55CM - (34X58CM)",
+    "name": "30X55CM",
     "sku": "INSE-001",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -297,7 +297,7 @@
     "active": true
   },
   {
-    "name": "40X40CM - (43X43CM)",
+    "name": "40X40CM",
     "sku": "INSE-002",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -306,7 +306,7 @@
     "active": true
   },
   {
-    "name": "45X45CM - (48X48CM)",
+    "name": "45X45CM",
     "sku": "INSE-003",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -315,7 +315,7 @@
     "active": true
   },
   {
-    "name": "40X80CM - (43X83CM)",
+    "name": "40X80CM",
     "sku": "INSE-004",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -324,7 +324,7 @@
     "active": true
   },
   {
-    "name": "45X70CM - (48X73CM)",
+    "name": "45X70CM",
     "sku": "INSE-005",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -333,7 +333,7 @@
     "active": true
   },
   {
-    "name": "50X110CM - (53X113CM)",
+    "name": "50X110CM",
     "sku": "INSE-006",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -342,7 +342,7 @@
     "active": true
   },
   {
-    "name": "50X30CM - (53X33CM)",
+    "name": "50X30CM",
     "sku": "INSE-007",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -351,7 +351,7 @@
     "active": true
   },
   {
-    "name": "50X50CM - (53X53CM)",
+    "name": "50X50CM",
     "sku": "INSE-008",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -360,7 +360,7 @@
     "active": true
   },
   {
-    "name": "50X80CM - (53X83CM)",
+    "name": "50X80CM",
     "sku": "INSE-009",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -369,7 +369,7 @@
     "active": true
   },
   {
-    "name": "50X90CM - (53X93CM)",
+    "name": "50X90CM",
     "sku": "INSE-010",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -378,7 +378,7 @@
     "active": true
   },
   {
-    "name": "55X55CM - (58X58CM)",
+    "name": "55X55CM",
     "sku": "INSE-011",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -387,7 +387,7 @@
     "active": true
   },
   {
-    "name": "60X40CM - (63X43CM)",
+    "name": "60X40CM",
     "sku": "INSE-012",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -396,7 +396,7 @@
     "active": true
   },
   {
-    "name": "60X60CM - (63X63CM)",
+    "name": "60X60CM",
     "sku": "INSE-013",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -405,7 +405,7 @@
     "active": true
   },
   {
-    "name": "65X40CM - (68X43CM)",
+    "name": "65X40CM",
     "sku": "INSE-014",
     "category": "INSERTS",
     "description": "INSERTS",
@@ -414,7 +414,7 @@
     "active": true
   },
   {
-    "name": "65X65CM - (68X68CM)",
+    "name": "65X65CM",
     "sku": "INSE-015",
     "category": "INSERTS",
     "description": "INSERTS",
