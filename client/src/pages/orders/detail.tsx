@@ -454,7 +454,7 @@ export default function OrderDetailPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold" data-testid="text-edit-order-title">
-                Edit Order {order.orderNumber.replace(/^PD-/, '')}
+                Edit Order
               </h1>
               <p className="text-sm text-muted-foreground">
                 Modify order details and line items
@@ -747,10 +747,7 @@ export default function OrderDetailPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2 flex-wrap" data-testid="text-order-number">
-              {order.customerName && (
-                <span className="text-destructive" data-testid="text-header-customer-name">{order.customerName}</span>
-              )}
-              {order.orderNumber.replace(/^PD-/, '')}
+              {order.customerName || order.orderNumber}
             </h1>
             <p className="text-sm text-muted-foreground">
               {format(new Date(order.orderDate), "MMMM d, yyyy")}
