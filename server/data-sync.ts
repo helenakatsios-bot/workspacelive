@@ -16,6 +16,18 @@ function loadJsonData(filename: string): any[] | null {
 }
 
 export async function syncProductionData() {
+  // Clean up legacy "DUCK" references in product names/categories/descriptions
+  const duckCleanup = await pool.query(
+    `UPDATE products SET
+      name = REPLACE(name, 'DUCK ', ''),
+      category = REPLACE(category, 'DUCK ', ''),
+      description = REPLACE(description, 'DUCK ', '')
+    WHERE name LIKE '%DUCK %' OR category LIKE '%DUCK %' OR description LIKE '%DUCK %'`
+  );
+  if (duckCleanup.rowCount && duckCleanup.rowCount > 0) {
+    console.log(`Cleaned up DUCK references from ${duckCleanup.rowCount} products`);
+  }
+
   const productCount = await pool.query("SELECT COUNT(*) as cnt FROM products");
   const companyCount = await pool.query("SELECT COUNT(*) as cnt FROM companies");
 
