@@ -782,33 +782,7 @@ export default function AdminPage() {
               <CardDescription>Export your data for backup or analysis</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {[
-                  { name: "Companies", description: "All customer accounts", icon: FileText },
-                  { name: "Contacts", description: "All customer contacts", icon: Users },
-                  { name: "Orders", description: "All orders with line items", icon: FileText },
-                  { name: "Invoices", description: "All invoices", icon: FileText },
-                  { name: "Products", description: "Product catalogue", icon: FileText },
-                  { name: "Audit Log", description: "Complete audit trail", icon: Clock },
-                ].map((item) => (
-                  <Card key={item.name} className="hover-elevate cursor-pointer">
-                    <CardContent className="pt-6">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <item.icon className="w-5 h-5 text-primary" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium">{item.name}</p>
-                          <p className="text-sm text-muted-foreground">{item.description}</p>
-                        </div>
-                        <Button variant="ghost" size="icon">
-                          <Download className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              <ExportGrid />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1572,6 +1546,65 @@ function PortalUsersManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+function ExportGrid() {
+  const { toast } = useToast();
+  const [exporting, setExporting] = useState<string | null>(null);
+
+  const handleExport = async (type: string, label: string) => {
+    setExporting(type);
+    try {
+      const response = await fetch(`/api/admin/export/${type}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Export failed");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${type}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: `${label} exported successfully` });
+    } catch {
+      toast({ title: "Export failed", description: `Could not export ${label}`, variant: "destructive" });
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const items = [
+    { type: "companies", name: "Companies", description: "All customer accounts", icon: FileText },
+    { type: "contacts", name: "Contacts", description: "All customer contacts", icon: Users },
+    { type: "orders", name: "Orders", description: "All orders with line items", icon: FileText },
+    { type: "invoices", name: "Invoices", description: "All invoices", icon: FileText },
+    { type: "products", name: "Products", description: "Product catalogue", icon: FileText },
+    { type: "audit-log", name: "Audit Log", description: "Complete audit trail", icon: Clock },
+  ];
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {items.map((item) => (
+        <Card key={item.type} className="hover-elevate cursor-pointer" onClick={() => handleExport(item.type, item.name)}>
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <item.icon className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium">{item.name}</p>
+                <p className="text-sm text-muted-foreground">{item.description}</p>
+              </div>
+              <Button variant="ghost" size="icon" disabled={exporting === item.type} data-testid={`button-export-${item.type}`}>
+                {exporting === item.type ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }

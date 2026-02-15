@@ -4074,6 +4074,82 @@ Rules:
     }
   });
 
+  // ============ DATA EXPORTS ============
+
+  app.get("/api/admin/export/:type", requireAdmin, async (req, res) => {
+    try {
+      const { type } = req.params;
+      let rows: any[] = [];
+      let filename = "";
+      let headers: string[] = [];
+
+      switch (type) {
+        case "companies": {
+          const result = await pool.query(`SELECT legal_name, trading_name, abn, billing_address, shipping_address, payment_terms, credit_status, phone, email_addresses, total_revenue, client_grade, created_at FROM companies ORDER BY legal_name`);
+          rows = result.rows;
+          headers = ["Legal Name", "Trading Name", "ABN", "Billing Address", "Shipping Address", "Payment Terms", "Credit Status", "Phone", "Email", "Total Revenue", "Client Grade", "Created"];
+          filename = "companies.csv";
+          break;
+        }
+        case "contacts": {
+          const result = await pool.query(`SELECT c.first_name, c.last_name, c.email, c.phone, c.position, co.legal_name as company_name, c.created_at FROM contacts c LEFT JOIN companies co ON co.id = c.company_id ORDER BY c.first_name, c.last_name`);
+          rows = result.rows;
+          headers = ["First Name", "Last Name", "Email", "Phone", "Position", "Company", "Created"];
+          filename = "contacts.csv";
+          break;
+        }
+        case "orders": {
+          const result = await pool.query(`SELECT o.order_number, co.legal_name as company_name, o.status, o.payment_status, o.total_amount, o.shipping_address, o.notes, o.created_at FROM orders o LEFT JOIN companies co ON co.id = o.company_id ORDER BY o.created_at DESC`);
+          rows = result.rows;
+          headers = ["Order Number", "Company", "Status", "Payment Status", "Total Amount", "Shipping Address", "Notes", "Created"];
+          filename = "orders.csv";
+          break;
+        }
+        case "invoices": {
+          const result = await pool.query(`SELECT i.invoice_number, co.legal_name as company_name, i.status, i.total_amount, i.due_date, i.paid_date, i.created_at FROM invoices i LEFT JOIN companies co ON co.id = i.company_id ORDER BY i.created_at DESC`);
+          rows = result.rows;
+          headers = ["Invoice Number", "Company", "Status", "Total Amount", "Due Date", "Paid Date", "Created"];
+          filename = "invoices.csv";
+          break;
+        }
+        case "products": {
+          const result = await pool.query(`SELECT name, category, base_price, unit, active, created_at FROM products ORDER BY name`);
+          rows = result.rows;
+          headers = ["Name", "Category", "Base Price", "Unit", "Active", "Created"];
+          filename = "products.csv";
+          break;
+        }
+        case "audit-log": {
+          const result = await pool.query(`SELECT al.action, al.entity_type, al.entity_id, u.name as user_name, al.created_at FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id ORDER BY al.created_at DESC LIMIT 5000`);
+          rows = result.rows;
+          headers = ["Action", "Entity Type", "Entity ID", "User", "Created"];
+          filename = "audit-log.csv";
+          break;
+        }
+        default:
+          return res.status(400).json({ message: "Invalid export type" });
+      }
+
+      const escapeCsv = (val: any) => {
+        if (val === null || val === undefined) return "";
+        const str = String(val).replace(/"/g, '""');
+        return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str}"` : str;
+      };
+
+      const csvLines = [headers.join(",")];
+      for (const row of rows) {
+        csvLines.push(Object.values(row).map(escapeCsv).join(","));
+      }
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(csvLines.join("\n"));
+    } catch (error) {
+      console.error("Export error:", error);
+      res.status(500).json({ message: "Failed to export data" });
+    }
+  });
+
   registerChatRoutes(app);
 
   return httpServer;
