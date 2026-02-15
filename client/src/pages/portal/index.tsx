@@ -1313,6 +1313,13 @@ function PortalLayout() {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const { data: company } = useQuery<any>({
+    queryKey: ["/api/portal/company"],
+    enabled: !!user,
+  });
+
+  const portalTitle = company?.tradingName || company?.legalName || "Customer Portal";
+
   const navigate = (page: string) => {
     setCurrentPage(page);
     setMobileMenuOpen(false);
@@ -1356,7 +1363,7 @@ function PortalLayout() {
           <div className="flex items-center justify-between h-14 gap-4">
             <div className="flex items-center gap-3">
               <Building2 className="w-6 h-6 text-primary" />
-              <span className="font-semibold text-lg hidden sm:inline" data-testid="text-portal-brand">Customer Portal</span>
+              <span className="font-semibold text-lg hidden sm:inline" data-testid="text-portal-brand">{portalTitle}</span>
             </div>
 
             <nav className="hidden md:flex items-center gap-1">
