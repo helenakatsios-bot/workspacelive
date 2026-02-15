@@ -445,9 +445,7 @@ export async function importInvoicesFromXero(accessToken: string, tenantId: stri
       }
 
       try {
-        const orderNumber = `XERO-${invNumber}`;
-
-        const existingOrder = await db.select().from(orders).where(eq(orders.orderNumber, orderNumber)).limit(1);
+        const existingOrder = await db.select().from(orders).where(sql`internal_notes LIKE ${'%Xero invoice ' + invNumber + '%'}`).limit(1);
         if (existingOrder.length > 0) {
           await saveXeroSyncMapping("order", existingOrder[0].id, xInv.InvoiceID);
           // Also ensure invoice record exists for portal visibility
@@ -470,6 +468,9 @@ export async function importInvoicesFromXero(accessToken: string, tenantId: stri
         const total = String(xInv.Total || 0);
 
         const orderDate = xInv.Date ? new Date(xInv.Date) : new Date();
+
+        const maxResultXero = await db.execute(sql`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
+        const orderNumber = String((parseInt(String((maxResultXero as any).rows?.[0]?.max_num || (maxResultXero as any)[0]?.max_num)) || 0) + 1);
 
         const [newOrder] = await db.insert(orders).values({
           orderNumber,
