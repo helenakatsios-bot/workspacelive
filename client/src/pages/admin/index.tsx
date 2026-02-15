@@ -1305,6 +1305,19 @@ function PortalUsersManagement() {
     },
   });
 
+  const updatePaymentTermsMutation = useMutation({
+    mutationFn: async ({ companyId, paymentTerms }: { companyId: string; paymentTerms: string }) => {
+      return apiRequest("PATCH", `/api/companies/${companyId}`, { paymentTerms });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-users"] });
+      toast({ title: "Payment terms updated" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update payment terms", variant: "destructive" });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       return apiRequest("DELETE", `/api/admin/portal-users/${id}`);
@@ -1376,6 +1389,7 @@ function PortalUsersManagement() {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Company</TableHead>
+                  <TableHead>Payment Days</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Last Login</TableHead>
                   <TableHead>Created</TableHead>
@@ -1392,6 +1406,23 @@ function PortalUsersManagement() {
                         <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
                         <span className="text-sm">{pu.companyName || "Unknown"}</span>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        defaultValue={pu.paymentTerms || ""}
+                        className="h-8 w-24"
+                        placeholder="e.g. 30"
+                        onBlur={(e) => {
+                          const val = e.target.value.trim();
+                          if (val !== (pu.paymentTerms || "")) {
+                            updatePaymentTermsMutation.mutate({ companyId: pu.companyId, paymentTerms: val });
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
+                        data-testid={`input-payment-days-${pu.id}`}
+                      />
                     </TableCell>
                     <TableCell>
                       <Switch

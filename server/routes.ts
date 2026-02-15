@@ -3999,7 +3999,7 @@ Rules:
     try {
       const result = await pool.query(`
         SELECT pu.id, pu.company_id, pu.contact_id, pu.name, pu.email, pu.active, pu.created_at, pu.last_login,
-          c.legal_name as company_name
+          c.legal_name as company_name, c.payment_terms
         FROM portal_users pu
         LEFT JOIN companies c ON c.id = pu.company_id
         ORDER BY pu.created_at DESC
@@ -4014,6 +4014,7 @@ Rules:
         createdAt: r.created_at,
         lastLogin: r.last_login,
         companyName: r.company_name,
+        paymentTerms: r.payment_terms,
       })));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch portal users" });
