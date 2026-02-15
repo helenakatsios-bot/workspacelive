@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, Mail, Inbox, Send, FileEdit, Clock, User, ShoppingCart, Reply, ReplyAll, X, Search, CheckCircle } from "lucide-react";
+import { Loader2, Mail, Inbox, Send, FileEdit, Clock, User, ShoppingCart, Reply, ReplyAll, X, Search, CheckCircle, Check, Square } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -95,6 +95,19 @@ export default function EmailsPage() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to update email status", variant: "destructive" });
+    },
+  });
+
+  const toggleReviewedMutation = useMutation({
+    mutationFn: async ({ emailId, reviewed }: { emailId: string; reviewed: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/emails/${emailId}/reviewed`, { reviewed });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update email", variant: "destructive" });
     },
   });
 
@@ -211,13 +224,16 @@ export default function EmailsPage() {
                       <TableHead>Subject</TableHead>
                       <TableHead className="w-[150px]">Date</TableHead>
                       <TableHead className="w-[140px]">Status</TableHead>
+                      <TableHead className="w-[50px] text-center">
+                        <Check className="w-4 h-4 mx-auto text-muted-foreground" />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filtered.map((email: any) => (
                       <TableRow
                         key={email.id}
-                        className="cursor-pointer hover-elevate"
+                        className={`cursor-pointer hover-elevate ${email.isReviewed ? "bg-green-50 dark:bg-green-950/30" : ""}`}
                         onClick={() => {
                           setSelectedEmail(email);
                           setShowReply(false);
@@ -273,6 +289,22 @@ export default function EmailsPage() {
                               </Badge>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleReviewedMutation.mutate({ emailId: email.id, reviewed: !email.isReviewed });
+                            }}
+                            className={`inline-flex items-center justify-center w-7 h-7 rounded-md border-2 transition-colors ${
+                              email.isReviewed
+                                ? "bg-green-600 border-green-600 text-white"
+                                : "border-muted-foreground/40 text-transparent hover:border-green-500"
+                            }`}
+                            data-testid={`button-review-email-${email.id}`}
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
                         </TableCell>
                       </TableRow>
                     ))}

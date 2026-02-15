@@ -2029,6 +2029,17 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/emails/:id/reviewed", requireAuth, async (req, res) => {
+    try {
+      const { reviewed } = req.body;
+      await db.update(emailsTable).set({ isReviewed: !!reviewed }).where(eq(emailsTable.id, req.params.id));
+      res.json({ message: "Email updated" });
+    } catch (error) {
+      console.error("Toggle email reviewed error:", error);
+      res.status(500).json({ message: "Failed to update email" });
+    }
+  });
+
   app.post("/api/emails/:id/convert-to-order", requireEdit, async (req, res) => {
     try {
       const emailId = req.params.id;

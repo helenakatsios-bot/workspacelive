@@ -366,6 +366,7 @@ export const emails = pgTable("emails", {
   isRead: boolean("is_read").notNull().default(false),
   isDraft: boolean("is_draft").notNull().default(false),
   isConverted: boolean("is_converted").notNull().default(false),
+  isReviewed: boolean("is_reviewed").notNull().default(false),
   sentAt: timestamp("sent_at"),
   receivedAt: timestamp("received_at"),
   folder: text("folder").default("inbox"), // inbox, sent, drafts
