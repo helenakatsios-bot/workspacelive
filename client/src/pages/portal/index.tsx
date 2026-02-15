@@ -674,6 +674,20 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   };
   const FILLING_CATEGORIES = Object.keys(FILLING_OPTIONS);
 
+  const WEIGHT_OPTIONS: Record<string, string[]> = {
+    '4 SEASONS FILLED': ['Normal'],
+    'MATTRESS TOPPER FILLED': ['Normal'],
+    '50% WINTER FILLED': ['Normal'],
+    '80% WINTER FILLED': ['Normal'],
+    '80% MID WARM FILLED': ['Normal'],
+    'PIPED PILLOWS': ['Normal'],
+    'STRIP PILLOW': ['Normal'],
+    'CHAMBER PILLOW': ['Normal'],
+    'STRIPPED QUILT': ['Normal'],
+    'INSERTS': ['Normal', 'Firm Fill', 'Extra Firm Fill'],
+  };
+  const WEIGHT_CATEGORIES = Object.keys(WEIGHT_OPTIONS);
+
   const filteredProducts = useMemo(() => {
     if (!products) return [];
     if (!search) return products;
@@ -761,7 +775,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       }
       const missingWeight = cartItems.filter((item) => {
         const cat = (item as any).category || "";
-        return cat === "INSERTS" && !weights[item.id];
+        return WEIGHT_CATEGORIES.includes(cat) && !weights[item.id];
       });
       if (missingWeight.length > 0) {
         toast({ title: "Weight required", description: `Please select a weight for: ${missingWeight.map((i) => i.name).join(", ")}`, variant: "destructive" });
@@ -884,9 +898,9 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                   <TableHeader>
                     <TableRow>
                       <TableHead>Product</TableHead>
-                      {hasFillingOption && <TableHead>Filling</TableHead>}
-                      {category === 'INSERTS' && <TableHead>Weight</TableHead>}
-                      <TableHead className="text-center w-[140px]">Quantity</TableHead>
+                      {hasFillingOption && <TableHead>Filling *</TableHead>}
+                      {WEIGHT_CATEGORIES.includes(category) && <TableHead>Weight *</TableHead>}
+                      <TableHead className="text-center w-[140px]">Quantity *</TableHead>
                       <TableHead className="text-right">Price</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -914,7 +928,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                             </Select>
                           </TableCell>
                         )}
-                        {category === 'INSERTS' && (
+                        {WEIGHT_CATEGORIES.includes(category) && (
                           <TableCell>
                             <Select
                               value={weights[product.id] || ""}
@@ -924,9 +938,9 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                                 <SelectValue placeholder="Select..." />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="Normal">Normal</SelectItem>
-                                <SelectItem value="Firm Fill">Firm Fill</SelectItem>
-                                <SelectItem value="Extra Firm Fill">Extra Firm Fill</SelectItem>
+                                {(WEIGHT_OPTIONS[category] || ['Normal']).map((opt) => (
+                                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </TableCell>
