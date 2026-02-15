@@ -464,6 +464,7 @@ export async function registerRoutes(
         await db.delete(contacts).where(eq(contacts.companyId, req.params.id));
       }
       await db.delete(portalUsers).where(eq(portalUsers.companyId, req.params.id));
+      await db.update(emailsTable).set({ companyId: null }).where(eq(emailsTable.companyId, req.params.id));
       const deleted = await storage.deleteCompany(req.params.id);
       if (deleted) {
         await storage.createAuditLog({
