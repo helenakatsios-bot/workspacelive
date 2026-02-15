@@ -758,10 +758,23 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
         toast({ title: "Filling required", description: `Please select a filling for: ${missingFilling.map((i) => i.name).join(", ")}`, variant: "destructive" });
         return;
       }
+      const missingWeight = cartItems.filter((item) => {
+        const cat = (item as any).category || "";
+        return cat === "INSERTS" && !weights[item.id];
+      });
+      if (missingWeight.length > 0) {
+        toast({ title: "Weight required", description: `Please select a weight for: ${missingWeight.map((i) => i.name).join(", ")}`, variant: "destructive" });
+        return;
+      }
     }
     const missingCustomFilling = customLines.filter((l) => l.size && l.qty > 0 && !l.filling);
     if (missingCustomFilling.length > 0) {
       toast({ title: "Filling required", description: "Please select a filling for all custom inserts", variant: "destructive" });
+      return;
+    }
+    const missingCustomWeight = customLines.filter((l) => l.size && l.qty > 0 && !l.weight);
+    if (missingCustomWeight.length > 0) {
+      toast({ title: "Weight required", description: "Please select a weight for all custom inserts", variant: "destructive" });
       return;
     }
     setSubmitting(true);
