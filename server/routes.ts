@@ -2669,7 +2669,8 @@ Rules:
         }
       }
 
-      const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}`;
+      const maxResult = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
+      const orderNumber = String((parseInt(maxResult.rows[0].max_num) || 0) + 1);
       const calcTotal = parseFloat(total) || lines.reduce((s: number, l: any) => s + (parseFloat(l.lineTotal) || 0), 0);
 
       const order = await storage.createOrder({
@@ -3288,7 +3289,8 @@ Rules:
       const tax = Math.round(subtotal * 0.1 * 100) / 100;
       const total = Math.round((subtotal + tax) * 100) / 100;
 
-      const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}`;
+      const maxResult2 = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
+      const orderNumber = String((parseInt(maxResult2.rows[0].max_num) || 0) + 1);
 
       const order = await storage.createOrder({
         orderNumber,
@@ -3878,13 +3880,9 @@ Rules:
       const tax = Math.round(subtotal * 10) / 100;
       const total = subtotal + tax;
 
-      const countResult = await pool.query(
-        `SELECT COUNT(*) as cnt FROM orders WHERE company_id = $1 AND customer_name = $2`,
-        [companyId, portalUser?.name || ""]
-      );
-      const nextNum = parseInt(countResult.rows[0].cnt || "0") + 1;
+      const maxResult3 = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
+      const orderNumber = String((parseInt(maxResult3.rows[0].max_num) || 0) + 1);
       const customerName = portalUser?.name || "Portal Order";
-      const orderNumber = `${customerName} - ${nextNum}`;
 
       const orderResult = await pool.query(`
         INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, customer_notes, customer_name, customer_email, customer_address)
