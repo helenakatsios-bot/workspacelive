@@ -1123,18 +1123,6 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="order-notes">Notes</Label>
-                <Textarea
-                  id="order-notes"
-                  placeholder="Any special instructions..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={3}
-                  data-testid="input-order-notes"
-                />
-              </div>
-
               <div className="border-t pt-4 space-y-2">
                 <div className="flex items-center gap-2">
                   <Truck className="w-4 h-4 text-muted-foreground" />
