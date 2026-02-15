@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mail, Plus, Send, Inbox, FileEdit, RefreshCw, FileText, Loader2, ShoppingCart, Check, X, Search } from "lucide-react";
+import { Mail, Plus, Send, Inbox, FileEdit, RefreshCw, FileText, Loader2, ShoppingCart, Check, X, Search, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -152,6 +152,19 @@ export default function MarketingEmailPage() {
     },
     onError: (error: any) => {
       toast({ title: "Failed to convert", description: error?.message || "Could not create order from this email", variant: "destructive" });
+    },
+  });
+
+  const toggleReviewedMutation = useMutation({
+    mutationFn: async ({ emailId, reviewed }: { emailId: string; reviewed: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/emails/${emailId}/reviewed`, { reviewed });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/emails"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update email", variant: "destructive" });
     },
   });
 
@@ -327,7 +340,7 @@ export default function MarketingEmailPage() {
               {filteredEmails.map((email: any) => (
                 <div
                   key={email.id}
-                  className="flex items-start gap-3 p-3 rounded-md border cursor-pointer hover-elevate"
+                  className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer hover-elevate ${email.isReviewed ? "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-900/50" : ""}`}
                   data-testid={`email-item-${email.id}`}
                   onClick={() => setSelectedEmail(email)}
                 >
@@ -345,6 +358,12 @@ export default function MarketingEmailPage() {
                       <p className={`text-sm truncate ${email.isRead ? "font-normal" : "font-semibold"}`}>
                         {email.subject || "(No subject)"}
                       </p>
+                      {email.isConverted && (
+                        <Badge className="text-[10px] bg-green-600 text-white">
+                          <CheckCircle className="w-3 h-3 mr-0.5" />
+                          Converted
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-xs text-muted-foreground truncate">
@@ -369,10 +388,24 @@ export default function MarketingEmailPage() {
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     <Badge variant="secondary" className="text-[10px]">
                       {email.folder === "sentItems" ? "Sent" : email.folder === "drafts" ? "Draft" : "Inbox"}
                     </Badge>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleReviewedMutation.mutate({ emailId: email.id, reviewed: !email.isReviewed });
+                      }}
+                      className={`inline-flex items-center justify-center w-7 h-7 rounded-md border-2 transition-colors ${
+                        email.isReviewed
+                          ? "bg-green-600 border-green-600 text-white"
+                          : "border-muted-foreground/40 text-transparent hover:border-green-500"
+                      }`}
+                      data-testid={`button-review-email-${email.id}`}
+                    >
+                      <Check className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}
