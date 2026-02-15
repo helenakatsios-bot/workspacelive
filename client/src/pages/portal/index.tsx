@@ -657,6 +657,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const [weights, setWeights] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [paymentTerms, setPaymentTerms] = useState("");
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -764,6 +765,10 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       toast({ title: "Empty cart", description: "Add at least one product to your order", variant: "destructive" });
       return;
     }
+    if (!paymentTerms) {
+      toast({ title: "Payment required", description: "Please select a payment method", variant: "destructive" });
+      return;
+    }
     if (products) {
       const missingFilling = cartItems.filter((item) => {
         const cat = (item as any).category || "";
@@ -817,6 +822,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
           items: cartItems.map((item) => ({ productId: item.id, quantity: item.qty, filling: fillings[item.id] || undefined, weight: weights[item.id] || undefined })),
           customItems: activeCustomLines.map((l) => ({ size: l.size, filling: l.filling, weight: l.weight, quantity: l.qty })),
           customerNotes: fullNotes,
+          paymentTerms,
           shippingAddress: deliveryAddress || undefined,
         }),
         credentials: "include",
@@ -1122,6 +1128,22 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                   </div>
                 </div>
               )}
+
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-muted-foreground" />
+                  <Label className="font-semibold">Payment *</Label>
+                </div>
+                <Select value={paymentTerms} onValueChange={setPaymentTerms}>
+                  <SelectTrigger data-testid="select-payment-terms">
+                    <SelectValue placeholder="Select payment method..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="30 Days">30 Days</SelectItem>
+                    <SelectItem value="COD">COD (Cash on Delivery)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
               <div className="border-t pt-4 space-y-2">
                 <div className="flex items-center gap-2">
