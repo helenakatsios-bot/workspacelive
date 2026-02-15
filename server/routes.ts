@@ -453,13 +453,17 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Company not found" });
       }
       const counts = await storage.getCompanyRelatedCounts(req.params.id);
-      const totalRelated = counts.contacts + counts.deals + counts.orders + counts.quotes + counts.invoices;
-      if (totalRelated > 0) {
+      const nonContactRelated = counts.deals + counts.orders + counts.quotes + counts.invoices;
+      if (nonContactRelated > 0) {
         return res.status(400).json({
-          message: "Cannot delete company with related records. Remove all contacts, deals, orders, quotes, and invoices first.",
+          message: "Cannot delete company with related records. Remove all deals, orders, quotes, and invoices first.",
           counts,
         });
       }
+      if (counts.contacts > 0) {
+        await db.delete(contacts).where(eq(contacts.companyId, req.params.id));
+      }
+      await db.delete(portalUsers).where(eq(portalUsers.companyId, req.params.id));
       const deleted = await storage.deleteCompany(req.params.id);
       if (deleted) {
         await storage.createAuditLog({
