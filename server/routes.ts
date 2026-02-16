@@ -1236,9 +1236,24 @@ export async function registerRoutes(
         });
       }
 
-      const orderDetailsText = linesWithProducts.map(line =>
+      let orderDetailsText = linesWithProducts.map(line =>
         `${line.quantity}x ${line.productName} @ $${line.unitPrice} = $${line.lineTotal}`
       ).join("\n");
+
+      if (!orderDetailsText && originalEmailHtml) {
+        const emailPlainText = originalEmailHtml
+          .replace(/<[^>]+>/g, "\n")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+          .replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+          .replace(/[ \t]+/g, " ").replace(/\n\s*\n/g, "\n").trim();
+        const summaryStart = emailPlainText.indexOf("Order summary");
+        const subtotalStart = emailPlainText.indexOf("Subtotal");
+        if (summaryStart !== -1 && subtotalStart !== -1) {
+          orderDetailsText = emailPlainText.substring(summaryStart, subtotalStart + 100)
+            .split("\n").filter((l: string) => l.trim()).join("\n");
+        }
+      }
 
       const customerName = order.customerName
         || (contact ? `${contact.firstName} ${contact.lastName}`.trim() : "")
