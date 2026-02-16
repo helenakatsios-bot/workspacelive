@@ -762,6 +762,48 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/contacts/bulk-delete", requireAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "ids array is required" });
+      }
+
+      const results: { deleted: string[]; skipped: { id: string; name: string; reason: string }[] } = { deleted: [], skipped: [] };
+
+      for (const id of ids) {
+        try {
+          const contact = await storage.getContact(id);
+          if (!contact) {
+            results.skipped.push({ id, name: "Unknown", reason: "Not found" });
+            continue;
+          }
+          const deleted = await storage.deleteContact(id);
+          if (deleted) {
+            await storage.createAuditLog({
+              userId: req.session.userId,
+              action: "delete",
+              entityType: "contact",
+              entityId: id,
+              beforeJson: contact,
+              afterJson: null,
+            });
+            results.deleted.push(id);
+          } else {
+            results.skipped.push({ id, name: `${contact.firstName} ${contact.lastName}`, reason: "Delete failed" });
+          }
+        } catch (err: any) {
+          results.skipped.push({ id, name: "Unknown", reason: err?.message || "Error" });
+        }
+      }
+
+      res.json(results);
+    } catch (error) {
+      console.error("Bulk delete contacts error:", error);
+      res.status(500).json({ message: "Failed to bulk delete contacts" });
+    }
+  });
+
   // ==================== DEALS ROUTES ====================
   app.get("/api/deals", requireAuth, async (req, res) => {
     try {

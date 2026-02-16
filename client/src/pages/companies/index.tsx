@@ -246,28 +246,53 @@ export default function CompaniesPage() {
           </SelectContent>
         </Select>
         {isAdmin && (
-          <>
+          <Button
+            variant="outline"
+            onClick={() => recalcMutation.mutate()}
+            disabled={recalcMutation.isPending}
+            data-testid="button-recalculate-revenue"
+          >
+            <RefreshCw className={`w-4 h-4 mr-1 ${recalcMutation.isPending ? "animate-spin" : ""}`} />
+            {recalcMutation.isPending ? "Calculating..." : "Recalculate"}
+          </Button>
+        )}
+      </PageHeader>
+
+      {isAdmin && (
+        <div className="flex items-center gap-3 flex-wrap">
+          {!selectMode ? (
             <Button
               variant="outline"
-              size="sm"
-              onClick={() => recalcMutation.mutate()}
-              disabled={recalcMutation.isPending}
-              data-testid="button-recalculate-revenue"
+              onClick={() => setSelectMode(true)}
+              data-testid="button-select-mode"
             >
-              <RefreshCw className={`w-4 h-4 mr-1 ${recalcMutation.isPending ? "animate-spin" : ""}`} />
-              {recalcMutation.isPending ? "Calculating..." : "Recalculate"}
+              <CheckSquare className="w-4 h-4 mr-2" />
+              Select Multiple Companies
             </Button>
-            {!selectMode ? (
+          ) : (
+            <div className="flex items-center gap-3 p-3 rounded-md bg-muted w-full flex-wrap">
+              <span className="text-sm font-medium" data-testid="text-selected-count">
+                {selectedIds.size} company{selectedIds.size !== 1 ? "ies" : "y"} selected
+              </span>
+              {selectedIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                  data-testid="button-bulk-delete"
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Delete Selected
+                </Button>
+              )}
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                onClick={() => setSelectMode(true)}
-                data-testid="button-select-mode"
+                onClick={() => setSelectedIds(new Set())}
+                data-testid="button-clear-selection"
               >
-                <CheckSquare className="w-4 h-4 mr-1" />
-                Select
+                Clear Selection
               </Button>
-            ) : (
               <Button
                 variant="outline"
                 size="sm"
@@ -275,35 +300,10 @@ export default function CompaniesPage() {
                 data-testid="button-exit-select-mode"
               >
                 <X className="w-4 h-4 mr-1" />
-                Cancel
+                Exit Selection Mode
               </Button>
-            )}
-          </>
-        )}
-      </PageHeader>
-
-      {selectMode && selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 p-3 rounded-md bg-muted">
-          <span className="text-sm font-medium" data-testid="text-selected-count">
-            {selectedIds.size} company{selectedIds.size !== 1 ? "s" : ""} selected
-          </span>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setBulkDeleteOpen(true)}
-            data-testid="button-bulk-delete"
-          >
-            <Trash2 className="w-4 h-4 mr-1" />
-            Delete Selected
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSelectedIds(new Set())}
-            data-testid="button-clear-selection"
-          >
-            Clear
-          </Button>
+            </div>
+          )}
         </div>
       )}
 

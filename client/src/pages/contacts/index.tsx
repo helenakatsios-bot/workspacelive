@@ -2,15 +2,19 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { format } from "date-fns";
-import { Users, MoreHorizontal, Eye, Edit, Mail, Phone, Building2, Trash2 } from "lucide-react";
+import { Users, MoreHorizontal, Eye, Edit, Mail, Phone, Building2, Trash2, CheckSquare, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -22,10 +26,14 @@ interface ContactWithCompany extends Contact {
 
 export default function ContactsPage() {
   const [, navigate] = useLocation();
-  const { canEdit } = useAuth();
+  const { canEdit, isAdmin } = useAuth();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [contactToDelete, setContactToDelete] = useState<ContactWithCompany | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteResults, setBulkDeleteResults] = useState<{ deleted: string[]; skipped: { id: string; name: string; reason: string }[] } | null>(null);
 
   const { data: contacts, isLoading } = useQuery<ContactWithCompany[]>({
     queryKey: ["/api/contacts"],
@@ -58,6 +66,49 @@ export default function ContactsPage() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await apiRequest("POST", "/api/contacts/bulk-delete", { ids });
+      return res.json();
+    },
+    onSuccess: (data: { deleted: string[]; skipped: { id: string; name: string; reason: string }[] }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      setBulkDeleteResults(data);
+      setSelectedIds(new Set());
+      if (data.deleted.length > 0 && data.skipped.length === 0) {
+        toast({ title: "Contacts deleted", description: `${data.deleted.length} contact(s) successfully deleted.` });
+        setBulkDeleteOpen(false);
+        setBulkDeleteResults(null);
+        setSelectMode(false);
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Bulk delete failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredContacts.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredContacts.map((c) => c.id)));
+    }
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -76,6 +127,55 @@ export default function ContactsPage() {
             : undefined
         }
       />
+
+      {isAdmin && (
+        <div className="flex items-center gap-3 flex-wrap">
+          {!selectMode ? (
+            <Button
+              variant="outline"
+              onClick={() => setSelectMode(true)}
+              data-testid="button-select-mode"
+            >
+              <CheckSquare className="w-4 h-4 mr-2" />
+              Select Multiple Contacts
+            </Button>
+          ) : (
+            <div className="flex items-center gap-3 p-3 rounded-md bg-muted w-full flex-wrap">
+              <span className="text-sm font-medium" data-testid="text-selected-count">
+                {selectedIds.size} contact{selectedIds.size !== 1 ? "s" : ""} selected
+              </span>
+              {selectedIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                  data-testid="button-bulk-delete"
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Delete Selected
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedIds(new Set())}
+                data-testid="button-clear-selection"
+              >
+                Clear Selection
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exitSelectMode}
+                data-testid="button-exit-select-mode"
+              >
+                <X className="w-4 h-4 mr-1" />
+                Exit Selection Mode
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -108,6 +208,16 @@ export default function ContactsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {selectMode && (
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedIds.size === filteredContacts.length && filteredContacts.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Select all"
+                        data-testid="checkbox-select-all"
+                      />
+                    </TableHead>
+                  )}
                   <TableHead>Contact</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead className="hidden md:table-cell">Email</TableHead>
@@ -119,9 +229,25 @@ export default function ContactsPage() {
                 {filteredContacts.map((contact) => (
                   <TableRow
                     key={contact.id}
-                    className="hover-elevate cursor-pointer"
-                    onClick={() => navigate(contact.companyId ? `/companies/${contact.companyId}` : `/contacts`)}
+                    className={`hover-elevate cursor-pointer ${selectedIds.has(contact.id) ? "bg-muted/50" : ""}`}
+                    onClick={() => {
+                      if (selectMode) {
+                        toggleSelect(contact.id);
+                      } else {
+                        navigate(contact.companyId ? `/companies/${contact.companyId}` : `/contacts`);
+                      }
+                    }}
                   >
+                    {selectMode && (
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.has(contact.id)}
+                          onCheckedChange={() => toggleSelect(contact.id)}
+                          aria-label={`Select ${contact.firstName} ${contact.lastName}`}
+                          data-testid={`checkbox-contact-${contact.id}`}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -166,37 +292,39 @@ export default function ContactsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link href={contact.companyId ? `/companies/${contact.companyId}` : `/contacts`}>
-                              <Eye className="w-4 h-4 mr-2" />
-                              View Company
-                            </Link>
-                          </DropdownMenuItem>
-                          {canEdit && (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setContactToDelete(contact);
-                                }}
-                                data-testid={`button-delete-contact-${contact.id}`}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {!selectMode && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link href={contact.companyId ? `/companies/${contact.companyId}` : `/contacts`}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                View Company
+                              </Link>
+                            </DropdownMenuItem>
+                            {canEdit && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setContactToDelete(contact);
+                                  }}
+                                  data-testid={`button-delete-contact-${contact.id}`}
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -220,11 +348,66 @@ export default function ContactsPage() {
             <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => contactToDelete && deleteContactMutation.mutate(contactToDelete.id)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground border-destructive-border"
               data-testid="button-confirm-delete"
             >
               {deleteContactMutation.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!open) { setBulkDeleteOpen(false); setBulkDeleteResults(null); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkDeleteResults ? "Bulk Delete Results" : `Delete ${selectedIds.size} contacts?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                {bulkDeleteResults ? (
+                  <div className="space-y-3">
+                    {bulkDeleteResults.deleted.length > 0 && (
+                      <p className="text-sm">{bulkDeleteResults.deleted.length} contact(s) successfully deleted.</p>
+                    )}
+                    {bulkDeleteResults.skipped.length > 0 && (
+                      <div>
+                        <p className="font-medium text-destructive mb-2">{bulkDeleteResults.skipped.length} contact(s) could not be deleted:</p>
+                        <ul className="list-disc pl-5 space-y-1 text-sm">
+                          {bulkDeleteResults.skipped.map((s) => (
+                            <li key={s.id}><span className="font-medium">{s.name}</span>: {s.reason}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p>This action cannot be undone. This will permanently delete the selected contacts.</p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            {bulkDeleteResults ? (
+              <AlertDialogAction
+                onClick={() => { setBulkDeleteOpen(false); setBulkDeleteResults(null); setSelectMode(false); }}
+                data-testid="button-close-results"
+              >
+                Close
+              </AlertDialogAction>
+            ) : (
+              <>
+                <AlertDialogCancel data-testid="button-cancel-bulk-delete">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
+                  className="bg-destructive text-destructive-foreground border-destructive-border"
+                  disabled={bulkDeleteMutation.isPending}
+                  data-testid="button-confirm-bulk-delete"
+                >
+                  {bulkDeleteMutation.isPending ? "Deleting..." : `Delete ${selectedIds.size} Contacts`}
+                </AlertDialogAction>
+              </>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
