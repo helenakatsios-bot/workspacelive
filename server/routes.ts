@@ -1261,10 +1261,9 @@ export async function registerRoutes(
 
       const customerAddress = order.customerAddress || company?.shippingAddress || company?.billingAddress || "";
 
-      const orderNumOnly = order.orderNumber.replace(/^PD-/, "");
       const customerDetails = customerName
-        ? `${orderNumOnly} ${customerName}`
-        : orderNumOnly;
+        ? `${order.orderNumber} ${customerName}`
+        : order.orderNumber;
 
       const webhookPayload = {
         orderNumber: order.orderNumber,
@@ -2422,7 +2421,7 @@ export async function registerRoutes(
         if (duplicate) {
           return res.status(400).json({ message: `Order with Shopify # ${shopifyOrderNum} already exists`, orderId: duplicate.id });
         }
-        orderNumber = `PD-${shopifyOrderNum}`;
+        orderNumber = shopifyOrderNum;
       } else {
         const maxResultPD = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
         orderNumber = String((parseInt(maxResultPD.rows[0].max_num) || 0) + 1);
