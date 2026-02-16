@@ -317,6 +317,67 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/companies/bulk-delete", requireAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "ids array is required" });
+      }
+
+      const results: { deleted: string[]; skipped: { id: string; name: string; reason: string }[] } = { deleted: [], skipped: [] };
+
+      for (const id of ids) {
+        try {
+          const company = await storage.getCompany(id);
+          if (!company) {
+            results.skipped.push({ id, name: "Unknown", reason: "Not found" });
+            continue;
+          }
+          const counts = await storage.getCompanyRelatedCounts(id);
+          const nonContactRelated = counts.deals + counts.orders + counts.quotes + counts.invoices;
+          if (nonContactRelated > 0) {
+            results.skipped.push({
+              id,
+              name: company.tradingName || company.legalName,
+              reason: `Has ${[
+                counts.deals > 0 ? `${counts.deals} deal(s)` : "",
+                counts.orders > 0 ? `${counts.orders} order(s)` : "",
+                counts.quotes > 0 ? `${counts.quotes} quote(s)` : "",
+                counts.invoices > 0 ? `${counts.invoices} invoice(s)` : "",
+              ].filter(Boolean).join(", ")}`,
+            });
+            continue;
+          }
+          if (counts.contacts > 0) {
+            await db.delete(contacts).where(eq(contacts.companyId, id));
+          }
+          await db.delete(portalUsers).where(eq(portalUsers.companyId, id));
+          await db.update(emailsTable).set({ companyId: null }).where(eq(emailsTable.companyId, id));
+          const deleted = await storage.deleteCompany(id);
+          if (deleted) {
+            await storage.createAuditLog({
+              userId: req.session.userId,
+              action: "delete",
+              entityType: "company",
+              entityId: id,
+              beforeJson: company,
+            });
+            results.deleted.push(id);
+          } else {
+            results.skipped.push({ id, name: company.tradingName || company.legalName, reason: "Delete failed" });
+          }
+        } catch (err) {
+          results.skipped.push({ id, name: "Unknown", reason: "Error during deletion" });
+        }
+      }
+
+      res.json(results);
+    } catch (error) {
+      console.error("Bulk delete companies error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/companies/deduplicate", requireAdmin, async (req, res) => {
     try {
       const result = await pool.query(`

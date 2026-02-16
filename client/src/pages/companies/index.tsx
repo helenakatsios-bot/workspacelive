@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { format } from "date-fns";
-import { Building2, MoreHorizontal, Eye, Edit, AlertCircle, Trash2, ArrowUpDown, DollarSign, RefreshCw } from "lucide-react";
+import { Building2, MoreHorizontal, Eye, Edit, AlertCircle, Trash2, ArrowUpDown, DollarSign, RefreshCw, CheckSquare, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -52,6 +53,10 @@ export default function CompaniesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
   const [relatedCounts, setRelatedCounts] = useState<{ contacts: number; deals: number; orders: number; quotes: number; invoices: number } | null>(null);
   const [loadingCounts, setLoadingCounts] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteResults, setBulkDeleteResults] = useState<{ deleted: string[]; skipped: { id: string; name: string; reason: string }[] } | null>(null);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
 
@@ -87,6 +92,27 @@ export default function CompaniesPage() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await apiRequest("POST", "/api/companies/bulk-delete", { ids });
+      return res.json();
+    },
+    onSuccess: (data: { deleted: string[]; skipped: { id: string; name: string; reason: string }[] }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      setBulkDeleteResults(data);
+      setSelectedIds(new Set());
+      if (data.deleted.length > 0 && data.skipped.length === 0) {
+        toast({ title: "Companies deleted", description: `${data.deleted.length} company(s) successfully deleted.` });
+        setBulkDeleteOpen(false);
+        setBulkDeleteResults(null);
+        setSelectMode(false);
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Bulk delete failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handleDeleteClick = async (company: Company, e: React.MouseEvent) => {
     e.stopPropagation();
     setDeleteTarget(company);
@@ -109,6 +135,28 @@ export default function CompaniesPage() {
       setSortField(field);
       setSortDir(field === "revenue" ? "desc" : "asc");
     }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredCompanies.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredCompanies.map((c) => c.id)));
+    }
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
   };
 
   const filteredCompanies = useMemo(() => {
@@ -198,18 +246,66 @@ export default function CompaniesPage() {
           </SelectContent>
         </Select>
         {isAdmin && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => recalcMutation.mutate()}
-            disabled={recalcMutation.isPending}
-            data-testid="button-recalculate-revenue"
-          >
-            <RefreshCw className={`w-4 h-4 mr-1 ${recalcMutation.isPending ? "animate-spin" : ""}`} />
-            {recalcMutation.isPending ? "Calculating..." : "Recalculate"}
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => recalcMutation.mutate()}
+              disabled={recalcMutation.isPending}
+              data-testid="button-recalculate-revenue"
+            >
+              <RefreshCw className={`w-4 h-4 mr-1 ${recalcMutation.isPending ? "animate-spin" : ""}`} />
+              {recalcMutation.isPending ? "Calculating..." : "Recalculate"}
+            </Button>
+            {!selectMode ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectMode(true)}
+                data-testid="button-select-mode"
+              >
+                <CheckSquare className="w-4 h-4 mr-1" />
+                Select
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exitSelectMode}
+                data-testid="button-exit-select-mode"
+              >
+                <X className="w-4 h-4 mr-1" />
+                Cancel
+              </Button>
+            )}
+          </>
         )}
       </PageHeader>
+
+      {selectMode && selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 p-3 rounded-md bg-muted">
+          <span className="text-sm font-medium" data-testid="text-selected-count">
+            {selectedIds.size} company{selectedIds.size !== 1 ? "s" : ""} selected
+          </span>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setBulkDeleteOpen(true)}
+            data-testid="button-bulk-delete"
+          >
+            <Trash2 className="w-4 h-4 mr-1" />
+            Delete Selected
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSelectedIds(new Set())}
+            data-testid="button-clear-selection"
+          >
+            Clear
+          </Button>
+        </div>
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -245,6 +341,16 @@ export default function CompaniesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {selectMode && (
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedIds.size === filteredCompanies.length && filteredCompanies.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Select all"
+                        data-testid="checkbox-select-all"
+                      />
+                    </TableHead>
+                  )}
                   <SortableHead field="name">Company</SortableHead>
                   <TableHead className="hidden md:table-cell">Grade</TableHead>
                   <SortableHead field="revenue" className="hidden md:table-cell">Revenue</SortableHead>
@@ -256,7 +362,27 @@ export default function CompaniesPage() {
               </TableHeader>
               <TableBody>
                 {filteredCompanies.map((company) => (
-                  <TableRow key={company.id} className="hover-elevate cursor-pointer" onClick={() => navigate(`/companies/${company.id}`)}>
+                  <TableRow
+                    key={company.id}
+                    className={`hover-elevate cursor-pointer ${selectedIds.has(company.id) ? "bg-muted/50" : ""}`}
+                    onClick={() => {
+                      if (selectMode) {
+                        toggleSelect(company.id);
+                      } else {
+                        navigate(`/companies/${company.id}`);
+                      }
+                    }}
+                  >
+                    {selectMode && (
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.has(company.id)}
+                          onCheckedChange={() => toggleSelect(company.id)}
+                          aria-label={`Select ${company.tradingName || company.legalName}`}
+                          data-testid={`checkbox-company-${company.id}`}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -301,40 +427,42 @@ export default function CompaniesPage() {
                       {company.paymentTerms || "Net 30"}
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="icon" data-testid={`button-company-menu-${company.id}`}>
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link href={`/companies/${company.id}`}>
-                              <Eye className="w-4 h-4 mr-2" />
-                              View Details
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link href={`/companies/${company.id}/edit`}>
-                              <Edit className="w-4 h-4 mr-2" />
-                              Edit
-                            </Link>
-                          </DropdownMenuItem>
-                          {isAdmin && (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={(e) => handleDeleteClick(company, e)}
-                                data-testid={`button-delete-company-${company.id}`}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {!selectMode && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" data-testid={`button-company-menu-${company.id}`}>
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link href={`/companies/${company.id}`}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                View Details
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/companies/${company.id}/edit`}>
+                                <Edit className="w-4 h-4 mr-2" />
+                                Edit
+                              </Link>
+                            </DropdownMenuItem>
+                            {isAdmin && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={(e) => handleDeleteClick(company, e)}
+                                  data-testid={`button-delete-company-${company.id}`}
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -381,6 +509,61 @@ export default function CompaniesPage() {
               >
                 {deleteMutation.isPending ? "Deleting..." : "Delete"}
               </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!open) { setBulkDeleteOpen(false); setBulkDeleteResults(null); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkDeleteResults ? "Bulk Delete Results" : `Delete ${selectedIds.size} companies?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                {bulkDeleteResults ? (
+                  <div className="space-y-3">
+                    {bulkDeleteResults.deleted.length > 0 && (
+                      <p className="text-sm">{bulkDeleteResults.deleted.length} company(s) successfully deleted.</p>
+                    )}
+                    {bulkDeleteResults.skipped.length > 0 && (
+                      <div>
+                        <p className="font-medium text-destructive mb-2">{bulkDeleteResults.skipped.length} company(s) could not be deleted:</p>
+                        <ul className="list-disc pl-5 space-y-1 text-sm max-h-48 overflow-y-auto">
+                          {bulkDeleteResults.skipped.map((s) => (
+                            <li key={s.id}><span className="font-medium">{s.name}</span>: {s.reason}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p>This action cannot be undone. Companies with related orders, deals, quotes, or invoices will be skipped.</p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            {bulkDeleteResults ? (
+              <AlertDialogAction
+                onClick={() => { setBulkDeleteOpen(false); setBulkDeleteResults(null); setSelectMode(false); }}
+                data-testid="button-bulk-delete-done"
+              >
+                Done
+              </AlertDialogAction>
+            ) : (
+              <>
+                <AlertDialogCancel data-testid="button-cancel-bulk-delete">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
+                  className="bg-destructive text-destructive-foreground border-destructive-border"
+                  disabled={bulkDeleteMutation.isPending}
+                  data-testid="button-confirm-bulk-delete"
+                >
+                  {bulkDeleteMutation.isPending ? "Deleting..." : `Delete ${selectedIds.size} Companies`}
+                </AlertDialogAction>
+              </>
             )}
           </AlertDialogFooter>
         </AlertDialogContent>
