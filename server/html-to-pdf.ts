@@ -39,55 +39,86 @@ function parseShopifyEmail(html: string): ParsedOrder {
     phone: "",
   };
 
-  const orderMatch = bodyText.match(/([\w\s.]+?)\s+placed order\s+#?(\d+)\s+on\s+([^.]+)/i);
+  const orderMatch = bodyText.match(/([\w\s.\-']+?)\s+placed order\s+#?(\d+)\s+on\s+([^.]+)/i);
   if (orderMatch) {
     result.header = `${orderMatch[1].trim()} placed order #${orderMatch[2]} on ${orderMatch[3].trim()}.`;
   }
 
-  const itemTableTexts: string[] = [];
-  $("table").each((_, table) => {
-    const text = $(table).text().replace(/\s+/g, " ").trim();
-    if (text.length > 30 && text.length < 150 && text.includes("$") && text.includes("×")) {
-      if (!itemTableTexts.some(t => text.includes(t) || t.includes(text))) {
-        itemTableTexts.push(text);
-      }
-    }
-  });
+  // Method 1: Parse using Shopify CSS classes (direct emails)
+  const titleEls = $(".order-list__item-title, [class*='order-list__item-title']");
+  const variantEls = $(".order-list__item-variant, [class*='order-list__item-variant']");
+  const priceEls = $(".order-list__item-price, [class*='order-list__item-price']");
 
-  for (const text of itemTableTexts) {
-    const nameMatch = text.match(/^(.+?)\s+\$([\d,.]+)\s*×\s*(\d+)/);
-    if (nameMatch) {
-      const name = nameMatch[1].trim();
-      const price = `$${nameMatch[2]}`;
-      const qty = nameMatch[3];
-
-      let variant = "";
-      const afterQty = text.substring(text.indexOf(`× ${qty}`) + `× ${qty}`.length).trim();
-      const variantMatch = afterQty.match(/^([A-Za-z\s/]+(?:\s*\/\s*[A-Za-z\s]+)+)/);
-      if (variantMatch) {
-        variant = variantMatch[1].trim();
-      }
-
-      const totalMatch = afterQty.match(/\$([\d,.]+)/);
+  if (titleEls.length > 0) {
+    titleEls.each((i, el) => {
+      const name = $(el).text().trim();
+      const variant = variantEls.eq(i).text().trim() || "";
+      const priceText = priceEls.eq(i).text().trim() || "";
+      const totalMatch = priceText.match(/\$\s*([\d,.]+)/);
       const total = totalMatch ? `$${totalMatch[1]}` : "";
 
-      result.items.push({ name, variant, price, qty, total });
-    }
+      const parentRow = $(el).closest("tr, td").parent().closest("tr, td");
+      const rowText = parentRow.text().replace(/\s+/g, " ");
+      const pqMatch = rowText.match(/\$\s*([\d,.]+)\s*[×x]\s*(\d+)/);
+      const price = pqMatch ? `$${pqMatch[1]}` : total;
+      const qty = pqMatch ? pqMatch[2] : "1";
+
+      if (name.length > 2) {
+        result.items.push({ name, variant, price, qty, total });
+      }
+    });
   }
 
+  // Method 2: Parse from inline-styled HTML (forwarded Shopify emails - no CSS classes)
   if (result.items.length === 0) {
-    const bigText = bodyText;
-    const allItems = [...bigText.matchAll(/([A-Z][A-Za-z\s%']+?)\s+\$([\d,.]+)\s*×\s*(\d+)\s*([\w\s/]*?)\s*\$([\d,.]+)/g)];
+    const allItems = [...bodyText.matchAll(/([A-Z][A-Za-z\s%'0-9()]+?)\s+\$\s*([\d,.]+)\s*[×x]\s*(\d+)\s*([\w\s/]*?)(?:\s*[•·]\s*SKU:[^\$]*)?\s*\$\s*([\d,.]+)/g)];
     for (const m of allItems) {
       const name = m[1].trim();
       if (name.length < 4 || /subtotal|shipping|total/i.test(name)) continue;
+      let variant = m[4]?.trim() || "";
+      variant = variant.replace(/\s*[•·]\s*SKU:.*$/i, "").trim();
       result.items.push({
         name,
-        variant: m[4]?.trim() || "",
+        variant,
         price: `$${m[2]}`,
         qty: m[3],
         total: `$${m[5]}`,
       });
+    }
+  }
+
+  // Method 3: Try table-based extraction as last resort
+  if (result.items.length === 0) {
+    const itemTableTexts: string[] = [];
+    $("table").each((_, table) => {
+      const text = $(table).text().replace(/\s+/g, " ").trim();
+      if (text.length > 30 && text.length < 200 && text.includes("$") && (text.includes("×") || text.includes(" x "))) {
+        if (!itemTableTexts.some(t => text.includes(t) || t.includes(text))) {
+          itemTableTexts.push(text);
+        }
+      }
+    });
+
+    for (const text of itemTableTexts) {
+      const nameMatch = text.match(/^(.+?)\s+\$\s*([\d,.]+)\s*[×x]\s*(\d+)/);
+      if (nameMatch) {
+        const name = nameMatch[1].trim();
+        if (name.length < 4 || /subtotal|shipping|total/i.test(name)) continue;
+        const price = `$${nameMatch[2]}`;
+        const qty = nameMatch[3];
+
+        let variant = "";
+        const afterQty = text.substring(text.indexOf(nameMatch[0]) + nameMatch[0].length).trim();
+        const variantMatch = afterQty.match(/^([A-Za-z\s/]+(?:\s*\/\s*[A-Za-z\s]+)*)/);
+        if (variantMatch && variantMatch[1].trim().length > 0) {
+          variant = variantMatch[1].trim().replace(/\s*[•·]\s*SKU:.*$/i, "").trim();
+        }
+
+        const totalMatch = afterQty.match(/\$\s*([\d,.]+)/);
+        const total = totalMatch ? `$${totalMatch[1]}` : "";
+
+        result.items.push({ name, variant, price, qty, total });
+      }
     }
   }
 

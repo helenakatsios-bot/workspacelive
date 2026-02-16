@@ -1219,40 +1219,14 @@ export async function registerRoutes(
         })
       );
 
-      let pdfBuffer: Buffer;
-      if (originalEmailHtml) {
-        try {
-          const { convertHtmlToPdf } = await import("./html-to-pdf");
-          console.log(`[PURAX-SYNC] Converting original email HTML to PDF for order ${order.orderNumber}`);
-          const customerAddress = order.customerAddress || company?.shippingAddress || company?.billingAddress || "";
-          const customerName = order.customerName
-            || (contact ? `${contact.firstName} ${contact.lastName}`.trim() : "")
-            || order.customerNotes?.match(/Customer:\s*([^.]+)/)?.[1]?.trim() || "";
-          pdfBuffer = await convertHtmlToPdf(originalEmailHtml, {
-            customerName,
-            customerAddress,
-            customerPhone: order.customerPhone || contact?.phone || "",
-            customerEmail: order.customerEmail || contact?.email || "",
-          });
-        } catch (emailPdfError) {
-          console.error(`[PURAX-SYNC] Failed to convert email HTML to PDF, falling back to generated PDF:`, emailPdfError);
-          const { generateOrderPdf } = await import("./pdf");
-          pdfBuffer = await generateOrderPdf({
-            order,
-            company,
-            contact,
-            lines: linesWithProducts,
-          });
-        }
-      } else {
-        const { generateOrderPdf } = await import("./pdf");
-        pdfBuffer = await generateOrderPdf({
-          order,
-          company,
-          contact,
-          lines: linesWithProducts,
-        });
-      }
+      // Always generate a clean, professional PDF from order data for Purax
+      const { generateOrderPdf } = await import("./pdf");
+      const pdfBuffer = await generateOrderPdf({
+        order,
+        company,
+        contact,
+        lines: linesWithProducts,
+      });
 
       let orderDetailsText = linesWithProducts.map(line =>
         `${line.quantity}x ${line.productName} @ $${line.unitPrice} = $${line.lineTotal}`
@@ -2314,7 +2288,42 @@ CRITICAL RULES:
       const allCompanies = await storage.getAllCompanies();
       let company: any = null;
 
-      if (isShopifyEmail) {
+      // For forwarded Shopify emails (e.g. "[Big Bedding Australia] Order #21696 placed by...")
+      // Extract the reseller company name from brackets in the subject
+      if (isForwardedShopify) {
+        const bracketMatch = subject.match(/\[([^\]]+)\]/);
+        if (bracketMatch) {
+          const reseller = bracketMatch[1].trim().toLowerCase();
+          company = allCompanies.find(
+            (c) => c.legalName.toLowerCase() === reseller ||
+                   (c.tradingName && c.tradingName.toLowerCase() === reseller)
+          );
+          if (!company) {
+            company = allCompanies.find(
+              (c) => c.legalName.toLowerCase().includes(reseller) ||
+                     (c.tradingName && c.tradingName.toLowerCase().includes(reseller)) ||
+                     reseller.includes(c.legalName.toLowerCase()) ||
+                     (c.tradingName && reseller.includes(c.tradingName.toLowerCase()))
+            );
+          }
+        }
+        // Also try matching by sender email domain for forwarded orders
+        if (!company) {
+          const senderDomain = (email.fromAddress || "").split("@")[1]?.toLowerCase() || "";
+          if (senderDomain && senderDomain !== "gmail.com" && senderDomain !== "yahoo.com" && senderDomain !== "hotmail.com" && senderDomain !== "outlook.com") {
+            const domainName = senderDomain.replace(/\.(com|com\.au|net|org|co).*$/, "");
+            if (domainName.length >= 3) {
+              company = allCompanies.find(c =>
+                c.legalName.toLowerCase().replace(/[^a-z0-9]/g, "").includes(domainName) ||
+                (c.tradingName && c.tradingName.toLowerCase().replace(/[^a-z0-9]/g, "").includes(domainName))
+              );
+            }
+          }
+        }
+      }
+
+      // Only direct Puradown Shopify emails (NOT forwarded) go to Puradown Website Sales
+      if (!company && isShopifyEmail && !isForwardedShopify) {
         company = allCompanies.find(
           (c) => c.legalName.toLowerCase() === "puradown website sales" ||
                  (c.tradingName && c.tradingName.toLowerCase() === "puradown website sales")
