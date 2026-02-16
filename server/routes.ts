@@ -2414,16 +2414,18 @@ export async function registerRoutes(
         }
       }
 
-      // Generate sequential order number
-      const maxResultPD = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
-      const orderNumber = String((parseInt(maxResultPD.rows[0].max_num) || 0) + 1);
-
+      // Use email order number if available, otherwise generate sequential
+      let orderNumber: string;
       if (shopifyOrderNum) {
         const existingOrders = await storage.getAllOrders();
-        const duplicate = existingOrders.find((o) => o.customerNotes?.includes(shopifyOrderNum));
+        const duplicate = existingOrders.find((o) => o.orderNumber === `PD-${shopifyOrderNum}` || o.orderNumber === shopifyOrderNum || o.customerNotes?.includes(shopifyOrderNum));
         if (duplicate) {
           return res.status(400).json({ message: `Order with Shopify # ${shopifyOrderNum} already exists`, orderId: duplicate.id });
         }
+        orderNumber = `PD-${shopifyOrderNum}`;
+      } else {
+        const maxResultPD = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
+        orderNumber = String((parseInt(maxResultPD.rows[0].max_num) || 0) + 1);
       }
 
       const order = await storage.createOrder({
