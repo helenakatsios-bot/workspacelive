@@ -2118,19 +2118,35 @@ export async function registerRoutes(
           customerAddress = addrBlock;
         }
 
-        const summaryStart = preview.indexOf("Order summary");
-        const subtotalStart = preview.indexOf("Subtotal");
+        const fullText = plainText;
+        const summaryStart = fullText.indexOf("Order summary");
+        const subtotalStart = fullText.indexOf("Subtotal");
         if (summaryStart !== -1 && subtotalStart !== -1) {
-          const summaryText = preview.substring(summaryStart + "Order summary".length, subtotalStart).trim();
+          const summaryText = fullText.substring(summaryStart + "Order summary".length, subtotalStart).trim();
           const allLines = summaryText.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
           let currentProduct = "";
           let currentVariant = "";
           let currentPrice = 0;
           let currentQty = 1;
+
+          const flushProduct = () => {
+            if (currentProduct && currentPrice > 0) {
+              const fullDescription = currentVariant ? `${currentProduct} - ${currentVariant}` : currentProduct;
+              const lineTotal = currentPrice * currentQty;
+              lines.push({ description: fullDescription, quantity: currentQty, unitPrice: currentPrice, lineTotal });
+              currentProduct = "";
+              currentVariant = "";
+              currentPrice = 0;
+              currentQty = 1;
+            }
+          };
+
           for (const line of allLines) {
             if (line === "View order") continue;
             if (/^[A-Z]+\d+\s*\(/.test(line)) continue;
-            const priceQtyMatch = line.match(/\$([0-9,.]+)(?:\s+\$([0-9,.]+))?\s*×\s*(\d+)/);
+            if (/^\(\-?\$/.test(line)) continue;
+
+            const priceQtyMatch = line.match(/\$([0-9,.]+)(?:\s+\$([0-9,.]+))?\s*[×x]\s*(\d+)/);
             if (priceQtyMatch) {
               const originalPrice = parseFloat(priceQtyMatch[1].replace(",", ""));
               const discountedPrice = priceQtyMatch[2] ? parseFloat(priceQtyMatch[2].replace(",", "")) : originalPrice;
@@ -2138,6 +2154,7 @@ export async function registerRoutes(
               currentQty = parseInt(priceQtyMatch[3]);
               continue;
             }
+
             const lineTotalMatch = line.match(/^\$([0-9,.]+)$/);
             if (lineTotalMatch && currentProduct && currentPrice > 0) {
               const fullDescription = currentVariant ? `${currentProduct} - ${currentVariant}` : currentProduct;
@@ -2149,27 +2166,27 @@ export async function registerRoutes(
               currentQty = 1;
               continue;
             }
-            if (/^(King|Queen|Standard|Single|Double|Super)\b/i.test(line) || /^\d+\s*g\s*\//i.test(line) || /\/\s*(Cotton|Polyester|Silk|Satin|Bamboo|Microfibre)/i.test(line)) {
+
+            if (/^(King|Queen|Standard|Single|Double|Super|Cot|Baby|Toddler)\b/i.test(line) || /^\d+\s*g\s*\//i.test(line) || /\/\s*(Cotton|Polyester|Silk|Satin|Bamboo|Microfibre|Standard)/i.test(line)) {
               currentVariant = line;
               continue;
             }
+
             if (!line.startsWith("$") && line.length > 2 &&
                 !line.includes("View order") &&
-                !line.match(/^[A-Z]+\d+/) && !line.match(/^\(\-?\$/) &&
+                !line.match(/^[A-Z]+\d+/) &&
                 !line.match(/^Shipping/) && !line.match(/^Total/)) {
+              flushProduct();
               currentProduct = line;
               currentVariant = "";
             }
           }
-          if (currentProduct && currentPrice > 0 && lines.length === 0) {
-            const fullDescription = currentVariant ? `${currentProduct} - ${currentVariant}` : currentProduct;
-            lines.push({ description: fullDescription, quantity: currentQty, unitPrice: currentPrice, lineTotal: currentPrice * currentQty });
-          }
+          flushProduct();
         }
 
-        const subtotalMatch = preview.match(/Subtotal\s*\$([0-9,.]+)/);
-        const shippingMatch = preview.match(/Shipping\s*\([^)]*\)\s*\$([0-9,.]+)/);
-        const totalMatch = preview.match(/Total\s*\$([0-9,.]+)/);
+        const subtotalMatch = fullText.match(/Subtotal\s*\$([0-9,.]+)/);
+        const shippingMatch = fullText.match(/Shipping\s*\([^)]*\)\s*\$([0-9,.]+)/);
+        const totalMatch = fullText.match(/Total\s*\$([0-9,.]+)/);
         subtotal = subtotalMatch ? parseFloat(subtotalMatch[1].replace(",", "")) : lines.reduce((s, l) => s + l.lineTotal, 0);
         shipping = shippingMatch ? parseFloat(shippingMatch[1].replace(",", "")) : 0;
         total = totalMatch ? parseFloat(totalMatch[1].replace(",", "")) : subtotal + shipping;
