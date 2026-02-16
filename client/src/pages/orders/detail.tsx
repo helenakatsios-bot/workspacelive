@@ -1243,7 +1243,7 @@ export default function OrderDetailPage() {
                               </p>
                             </div>
                             <Button variant="ghost" size="icon" asChild>
-                              <a href={file.storagePath} download>
+                              <a href={`/api/attachments/${file.id}/download`} download>
                                 <Download className="w-4 h-4" />
                               </a>
                             </Button>

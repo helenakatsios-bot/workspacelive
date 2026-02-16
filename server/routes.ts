@@ -7,7 +7,7 @@ import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { eq, ilike, and } from "drizzle-orm";
-import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts, outlookTokens as outlookTokensTable, crmSettings, portalUsers } from "@shared/schema";
+import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts, outlookTokens as outlookTokensTable, crmSettings, portalUsers, attachments } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero, autoSyncXeroInvoices } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks, fetchEmailAttachments, downloadAttachment } from "./outlook";
@@ -947,6 +947,24 @@ export async function registerRoutes(
       res.json(attachments);
     } catch (error) {
       console.error("Get order attachments error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/attachments/:id/download", requireAuth, async (req, res) => {
+    try {
+      const [attachment] = await db.select().from(attachments).where(eq(attachments.id, req.params.id));
+      if (!attachment) return res.status(404).json({ message: "Attachment not found" });
+      const fs = await import("fs");
+      if (!fs.existsSync(attachment.storagePath)) {
+        return res.status(404).json({ message: "File not found on disk" });
+      }
+      res.setHeader("Content-Type", attachment.fileType);
+      res.setHeader("Content-Disposition", `attachment; filename="${attachment.fileName}"`);
+      const fileStream = fs.createReadStream(attachment.storagePath);
+      fileStream.pipe(res);
+    } catch (error) {
+      console.error("Download attachment error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -2132,70 +2150,113 @@ export async function registerRoutes(
           customerAddress = addrBlock;
         }
 
-        const fullText = plainText;
-        const summaryStart = fullText.indexOf("Order summary");
-        const subtotalStart = fullText.indexOf("Subtotal");
-        if (summaryStart !== -1 && subtotalStart !== -1) {
-          const summaryText = fullText.substring(summaryStart + "Order summary".length, subtotalStart).trim();
-          const allLines = summaryText.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
-          let currentProduct = "";
-          let currentVariant = "";
-          let currentPrice = 0;
-          let currentQty = 1;
+        // Parse products directly from HTML for best accuracy
+        const itemTitleRegex = /order-list__item-title[^>]*>([^<]+)</g;
+        const itemVariantRegex = /order-list__item-variant[^>]*>([^<]+)</g;
+        const itemPriceRegex = /order-list__item-price[^>]*>\s*\$([0-9,.]+)/g;
+        const priceQtyRegex = /\$([0-9,.]+)\s*[×x]\s*(\d+)/g;
 
-          const flushProduct = () => {
-            if (currentProduct && currentPrice > 0) {
-              const fullDescription = currentVariant ? `${currentProduct} - ${currentVariant}` : currentProduct;
-              const lineTotal = currentPrice * currentQty;
-              lines.push({ description: fullDescription, quantity: currentQty, unitPrice: currentPrice, lineTotal });
-              currentProduct = "";
-              currentVariant = "";
-              currentPrice = 0;
-              currentQty = 1;
+        const productNames: string[] = [];
+        const productVariants: string[] = [];
+        const productPrices: number[] = [];
+        const productQtys: number[] = [];
+        const productUnitPrices: number[] = [];
+
+        let titleMatch;
+        while ((titleMatch = itemTitleRegex.exec(bodyHtml)) !== null) {
+          productNames.push(titleMatch[1].trim());
+        }
+        let variantMatch;
+        while ((variantMatch = itemVariantRegex.exec(bodyHtml)) !== null) {
+          productVariants.push(variantMatch[1].trim());
+        }
+        let priceMatch;
+        while ((priceMatch = itemPriceRegex.exec(bodyHtml)) !== null) {
+          productPrices.push(parseFloat(priceMatch[1].replace(",", "")));
+        }
+        let pqMatch;
+        while ((pqMatch = priceQtyRegex.exec(bodyHtml)) !== null) {
+          productUnitPrices.push(parseFloat(pqMatch[1].replace(",", "")));
+          productQtys.push(parseInt(pqMatch[2]));
+        }
+
+        for (let i = 0; i < productNames.length; i++) {
+          const name = productNames[i];
+          const variant = productVariants[i] || "";
+          const lineTotal = productPrices[i] || 0;
+          const qty = productQtys[i] || 1;
+          const unitPrice = productUnitPrices[i] || (qty > 0 ? lineTotal / qty : lineTotal);
+          const fullDescription = variant ? `${name} - ${variant}` : name;
+          lines.push({ description: fullDescription, quantity: qty, unitPrice, lineTotal });
+        }
+
+        // Fallback: parse from plain text if HTML parsing found nothing
+        if (lines.length === 0) {
+          const fullText = plainText;
+          const summaryStart = fullText.indexOf("Order summary");
+          const subtotalStart = fullText.indexOf("Subtotal");
+          if (summaryStart !== -1 && subtotalStart !== -1) {
+            const summaryText = fullText.substring(summaryStart + "Order summary".length, subtotalStart).trim();
+            const allLines = summaryText.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+            let currentProduct = "";
+            let currentVariant = "";
+            let currentPrice = 0;
+            let currentQty = 1;
+
+            const flushProduct = () => {
+              if (currentProduct && currentPrice > 0) {
+                const fullDesc = currentVariant ? `${currentProduct} - ${currentVariant}` : currentProduct;
+                const lt = currentPrice * currentQty;
+                lines.push({ description: fullDesc, quantity: currentQty, unitPrice: currentPrice, lineTotal: lt });
+                currentProduct = "";
+                currentVariant = "";
+                currentPrice = 0;
+                currentQty = 1;
+              }
+            };
+
+            for (const line of allLines) {
+              if (line === "View order") continue;
+              if (/^[A-Z]+\d+\s*\(/.test(line)) continue;
+              if (/^\(\-?\$/.test(line)) continue;
+
+              const pqm = line.match(/\$([0-9,.]+)(?:\s+\$([0-9,.]+))?\s*[×x]\s*(\d+)/);
+              if (pqm) {
+                const origPrice = parseFloat(pqm[1].replace(",", ""));
+                const discPrice = pqm[2] ? parseFloat(pqm[2].replace(",", "")) : origPrice;
+                currentPrice = discPrice;
+                currentQty = parseInt(pqm[3]);
+                continue;
+              }
+
+              const ltm = line.match(/^\$([0-9,.]+)$/);
+              if (ltm && currentProduct && currentPrice > 0) {
+                const fullDesc = currentVariant ? `${currentProduct} - ${currentVariant}` : currentProduct;
+                const lt = parseFloat(ltm[1].replace(",", ""));
+                lines.push({ description: fullDesc, quantity: currentQty, unitPrice: currentPrice, lineTotal: lt });
+                currentProduct = "";
+                currentVariant = "";
+                currentPrice = 0;
+                currentQty = 1;
+                continue;
+              }
+
+              if (/^(King|Queen|Standard|Single|Double|Super|Cot|Baby|Toddler)\b/i.test(line) || /^\d+\s*g\s*\//i.test(line) || /\/\s*(Cotton|Polyester|Silk|Satin|Bamboo|Microfibre|Standard)/i.test(line)) {
+                currentVariant = line.replace(/\s+[A-Z]+\d+\s*\(-?\$[0-9,.]+\)\s*$/, "").trim();
+                continue;
+              }
+
+              if (!line.startsWith("$") && line.length > 2 &&
+                  !line.includes("View order") &&
+                  !line.match(/^[A-Z]+\d+/) &&
+                  !line.match(/^Shipping/) && !line.match(/^Total/)) {
+                flushProduct();
+                currentProduct = line;
+                currentVariant = "";
+              }
             }
-          };
-
-          for (const line of allLines) {
-            if (line === "View order") continue;
-            if (/^[A-Z]+\d+\s*\(/.test(line)) continue;
-            if (/^\(\-?\$/.test(line)) continue;
-
-            const priceQtyMatch = line.match(/\$([0-9,.]+)(?:\s+\$([0-9,.]+))?\s*[×x]\s*(\d+)/);
-            if (priceQtyMatch) {
-              const originalPrice = parseFloat(priceQtyMatch[1].replace(",", ""));
-              const discountedPrice = priceQtyMatch[2] ? parseFloat(priceQtyMatch[2].replace(",", "")) : originalPrice;
-              currentPrice = discountedPrice;
-              currentQty = parseInt(priceQtyMatch[3]);
-              continue;
-            }
-
-            const lineTotalMatch = line.match(/^\$([0-9,.]+)$/);
-            if (lineTotalMatch && currentProduct && currentPrice > 0) {
-              const fullDescription = currentVariant ? `${currentProduct} - ${currentVariant}` : currentProduct;
-              const lineTotal = parseFloat(lineTotalMatch[1].replace(",", ""));
-              lines.push({ description: fullDescription, quantity: currentQty, unitPrice: currentPrice, lineTotal });
-              currentProduct = "";
-              currentVariant = "";
-              currentPrice = 0;
-              currentQty = 1;
-              continue;
-            }
-
-            if (/^(King|Queen|Standard|Single|Double|Super|Cot|Baby|Toddler)\b/i.test(line) || /^\d+\s*g\s*\//i.test(line) || /\/\s*(Cotton|Polyester|Silk|Satin|Bamboo|Microfibre|Standard)/i.test(line)) {
-              currentVariant = line;
-              continue;
-            }
-
-            if (!line.startsWith("$") && line.length > 2 &&
-                !line.includes("View order") &&
-                !line.match(/^[A-Z]+\d+/) &&
-                !line.match(/^Shipping/) && !line.match(/^Total/)) {
-              flushProduct();
-              currentProduct = line;
-              currentVariant = "";
-            }
+            flushProduct();
           }
-          flushProduct();
         }
 
         const subtotalMatch = fullText.match(/Subtotal\s*\$([0-9,.]+)/);
@@ -2474,6 +2535,40 @@ export async function registerRoutes(
       });
 
       await db.update(emailsTable).set({ isConverted: true }).where(eq(emailsTable.id, emailId));
+
+      // Auto-attach the original email as a PDF to the order Files
+      try {
+        if (bodyHtml) {
+          const { convertHtmlToPdf } = await import("./html-to-pdf");
+          const pdfBuffer = await convertHtmlToPdf(bodyHtml, {
+            customerName: customerName || "",
+            customerAddress: customerAddress || "",
+            customerPhone: customerPhone || "",
+            customerEmail: customerEmail || "",
+          });
+          const fs = await import("fs");
+          const path = await import("path");
+          const uploadsDir = path.default.join(process.cwd(), "uploads", "orders", order.id);
+          await fs.promises.mkdir(uploadsDir, { recursive: true });
+          const safeSubject = subject.replace(/[^a-zA-Z0-9_\-\s#]/g, "").trim().replace(/\s+/g, "_");
+          const fileName = `Email_${safeSubject}.pdf`;
+          const filePath = path.default.join(uploadsDir, fileName);
+          await fs.promises.writeFile(filePath, pdfBuffer);
+          await storage.createAttachment({
+            entityType: "order",
+            entityId: order.id,
+            fileName,
+            fileType: "application/pdf",
+            fileSize: pdfBuffer.length,
+            storagePath: filePath,
+            uploadedBy: req.session.userId,
+            description: `Original email: ${subject}`,
+          });
+          console.log(`[EMAIL-TO-ORDER] Auto-attached email PDF to order ${order.orderNumber}`);
+        }
+      } catch (attachError) {
+        console.error("[EMAIL-TO-ORDER] Failed to auto-attach email PDF:", attachError);
+      }
 
       res.status(201).json(order);
     } catch (error) {
