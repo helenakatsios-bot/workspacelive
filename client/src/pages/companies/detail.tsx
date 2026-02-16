@@ -87,6 +87,10 @@ export default function CompanyDetailPage() {
   const [activityContent, setActivityContent] = useState("");
   const [isSubmittingActivity, setIsSubmittingActivity] = useState(false);
 
+  const [addContactOpen, setAddContactOpen] = useState(false);
+  const [newContact, setNewContact] = useState({ firstName: "", lastName: "", email: "", phone: "", position: "" });
+  const [isSubmittingContact, setIsSubmittingContact] = useState(false);
+
   const { data: company, isLoading } = useQuery<Company>({
     queryKey: ["/api/companies", params?.id],
     enabled: !!params?.id,
@@ -272,6 +276,32 @@ export default function CompanyDetailPage() {
       });
     },
   });
+
+  const handleAddContact = async () => {
+    if (!newContact.firstName.trim()) {
+      toast({ title: "First name required", description: "Please enter at least a first name.", variant: "destructive" });
+      return;
+    }
+    setIsSubmittingContact(true);
+    try {
+      await apiRequest("POST", "/api/contacts", {
+        companyId: params?.id,
+        firstName: newContact.firstName.trim(),
+        lastName: newContact.lastName.trim(),
+        email: newContact.email.trim() || null,
+        phone: newContact.phone.trim() || null,
+        position: newContact.position.trim() || null,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id, "contacts"] });
+      toast({ title: "Contact added" });
+      setAddContactOpen(false);
+      setNewContact({ firstName: "", lastName: "", email: "", phone: "", position: "" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to add contact", variant: "destructive" });
+    } finally {
+      setIsSubmittingContact(false);
+    }
+  };
 
   const handleAddNote = async () => {
     if (!newNote.trim()) return;
@@ -513,7 +543,7 @@ export default function CompanyDetailPage() {
                       <ShoppingCart className="w-4 h-4 mr-2" />
                       New order
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate(`/contacts/new?companyId=${params?.id}`)}>
+                    <DropdownMenuItem onClick={() => setAddContactOpen(true)}>
                       <Users className="w-4 h-4 mr-2" />
                       Add contact
                     </DropdownMenuItem>
@@ -1182,7 +1212,7 @@ export default function CompanyDetailPage() {
                       variant="ghost"
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigate(`/contacts/new?companyId=${params?.id}`);
+                        setAddContactOpen(true);
                       }}
                       data-testid="button-add-contact"
                     >
@@ -1465,6 +1495,77 @@ export default function CompanyDetailPage() {
               data-testid="button-save-activity"
             >
               {isSubmittingActivity && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addContactOpen} onOpenChange={(open) => { if (!open) { setAddContactOpen(false); setNewContact({ firstName: "", lastName: "", email: "", phone: "", position: "" }); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Contact</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm text-muted-foreground">First Name *</label>
+                <Input
+                  value={newContact.firstName}
+                  onChange={(e) => setNewContact({ ...newContact, firstName: e.target.value })}
+                  placeholder="First name"
+                  data-testid="input-contact-firstname"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground">Last Name</label>
+                <Input
+                  value={newContact.lastName}
+                  onChange={(e) => setNewContact({ ...newContact, lastName: e.target.value })}
+                  placeholder="Last name"
+                  data-testid="input-contact-lastname"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Email</label>
+              <Input
+                type="email"
+                value={newContact.email}
+                onChange={(e) => setNewContact({ ...newContact, email: e.target.value })}
+                placeholder="email@example.com"
+                data-testid="input-contact-email"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Phone</label>
+              <Input
+                value={newContact.phone}
+                onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
+                placeholder="Phone number"
+                data-testid="input-contact-phone"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Position</label>
+              <Input
+                value={newContact.position}
+                onChange={(e) => setNewContact({ ...newContact, position: e.target.value })}
+                placeholder="Job title"
+                data-testid="input-contact-position"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAddContactOpen(false); setNewContact({ firstName: "", lastName: "", email: "", phone: "", position: "" }); }} data-testid="button-cancel-contact">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddContact}
+              disabled={isSubmittingContact || !newContact.firstName.trim()}
+              data-testid="button-save-contact"
+            >
+              {isSubmittingContact && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Save
             </Button>
           </DialogFooter>
