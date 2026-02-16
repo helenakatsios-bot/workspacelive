@@ -131,7 +131,7 @@ export default function MarketingEmailPage() {
       toast({ title: "Order created", description: `Order ${order.orderNumber} has been created from the PDF` });
       setSelectedEmail(null);
       setShowOrderReview(false);
-      navigate(`/orders`);
+      navigate(`/orders/${order.id}`);
     },
     onError: (error: any) => {
       toast({ title: "Failed to create order", description: error?.message || "Something went wrong", variant: "destructive" });
@@ -148,7 +148,7 @@ export default function MarketingEmailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({ title: "Order created", description: `Order ${data.orderNumber || ""} has been created from this email` });
       setSelectedEmail(null);
-      navigate("/orders");
+      navigate(`/orders/${data.id}`);
     },
     onError: (error: any) => {
       toast({ title: "Failed to convert", description: error?.message || "Could not create order from this email", variant: "destructive" });
