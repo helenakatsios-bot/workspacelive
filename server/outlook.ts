@@ -441,38 +441,33 @@ async function matchEmailToCompany(fromAddress: string, toAddresses: string[]): 
   return { companyId: null, contactId: null };
 }
 
-export async function getEmailsForCompany(companyId: string, limit: number = 50, userId?: string) {
-  const conditions = [eq(emails.companyId, companyId)];
-  if (userId) conditions.push(eq(emails.userId, userId));
+export async function getEmailsForCompany(companyId: string, limit: number = 200, userId?: string) {
   return await db.select()
     .from(emails)
-    .where(and(...conditions))
+    .where(eq(emails.companyId, companyId))
     .orderBy(desc(emails.receivedAt))
     .limit(limit);
 }
 
-export async function getEmailsForContact(contactId: string, limit: number = 50, userId?: string) {
-  const conditions = [eq(emails.contactId, contactId)];
-  if (userId) conditions.push(eq(emails.userId, userId));
+export async function getEmailsForContact(contactId: string, limit: number = 200, userId?: string) {
   return await db.select()
     .from(emails)
-    .where(and(...conditions))
+    .where(eq(emails.contactId, contactId))
     .orderBy(desc(emails.receivedAt))
     .limit(limit);
 }
 
-export async function getAllEmails(userId: string, folder?: string, limit: number = 50) {
+export async function getAllEmails(userId: string, folder?: string, limit: number = 200) {
   if (folder) {
     return await db.select()
       .from(emails)
-      .where(and(eq(emails.userId, userId), eq(emails.folder, folder)))
+      .where(eq(emails.folder, folder))
       .orderBy(desc(emails.receivedAt))
       .limit(limit);
   }
   
   return await db.select()
     .from(emails)
-    .where(eq(emails.userId, userId))
     .orderBy(desc(emails.receivedAt))
     .limit(limit);
 }

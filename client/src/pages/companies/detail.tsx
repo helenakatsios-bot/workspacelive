@@ -120,7 +120,7 @@ export default function CompanyDetailPage() {
   const { data: companyEmails } = useQuery<any[]>({
     queryKey: ["/api/emails", { companyId: params?.id }],
     queryFn: async () => {
-      const res = await fetch(`/api/emails?companyId=${params?.id}&limit=50`);
+      const res = await fetch(`/api/emails?companyId=${params?.id}&limit=200`);
       if (!res.ok) throw new Error("Failed to fetch emails");
       return res.json();
     },

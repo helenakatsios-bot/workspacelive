@@ -114,7 +114,7 @@ export default function EmailsPage() {
   const { data: emails, isLoading } = useQuery<any[]>({
     queryKey: ["/api/emails", folder],
     queryFn: async () => {
-      const res = await fetch(`/api/emails?folder=${folder}&limit=100`);
+      const res = await fetch(`/api/emails?folder=${folder}&limit=200`);
       if (!res.ok) throw new Error("Failed to fetch emails");
       return res.json();
     },

@@ -49,7 +49,7 @@ interface ExtractedOrder {
 }
 
 export default function MarketingEmailPage() {
-  const { data: emails, isLoading } = useQuery<any[]>({ queryKey: ["/api/emails"] });
+  const { data: emails, isLoading } = useQuery<any[]>({ queryKey: ["/api/emails"], queryFn: async () => { const res = await fetch("/api/emails?limit=200"); if (!res.ok) throw new Error("Failed to fetch emails"); return res.json(); } });
   const [selectedEmail, setSelectedEmail] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState<FolderTab>("all");
   const { toast } = useToast();
