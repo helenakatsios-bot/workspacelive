@@ -1345,6 +1345,12 @@ export async function registerRoutes(
       }
 
       console.log(`[PURAX-SYNC] Sending order ${order.orderNumber} to ${puraxApiUrl}/api/webhook/orders`);
+      console.log(`[PURAX-SYNC] Order lines: ${linesWithProducts.length}`);
+      for (const l of linesWithProducts) {
+        console.log(`[PURAX-SYNC]   - ${l.quantity}x "${l.productName}" @ $${l.unitPrice} = $${l.lineTotal}`);
+      }
+      console.log(`[PURAX-SYNC] Customer: ${webhookPayload.customerName}, Company: ${webhookPayload.companyName}`);
+      console.log(`[PURAX-SYNC] PDF size: ${pdfBuffer.length} bytes, orderDetails length: ${orderDetailsText.length}`);
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
@@ -2165,7 +2171,7 @@ export async function registerRoutes(
       let total = 0;
 
       // Use AI to parse order details from ANY email type
-      const parseOrderWithAI = async (emailText: string, emailSubject: string): Promise<{
+      const parseOrderWithAI = async (emailText: string, emailSubject: string, rawHtml?: string): Promise<{
         customerName?: string; customerPhone?: string; customerAddress?: string; customerEmail?: string;
         orderNumber?: string; lines: Array<{ description: string; quantity: number; unitPrice: number; lineTotal: number }>;
         subtotal?: number; shipping?: number; total?: number;
@@ -2176,6 +2182,20 @@ export async function registerRoutes(
             apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
             baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
           });
+
+          let contentToAnalyze = `Subject: ${emailSubject}\n\nEmail body (plain text):\n${emailText.substring(0, 6000)}`;
+          if (rawHtml) {
+            const cleanHtml = rawHtml
+              .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+              .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "")
+              .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+              .replace(/\s+/g, " ")
+              .substring(0, 6000);
+            contentToAnalyze += `\n\nEmail body (HTML structure for reference):\n${cleanHtml}`;
+          }
+
+          console.log("[EMAIL-TO-ORDER] AI input length:", contentToAnalyze.length, "chars");
+
           const aiResponse = await openai.chat.completions.create({
             model: "gpt-4o-mini",
             messages: [
@@ -2184,38 +2204,49 @@ export async function registerRoutes(
                 content: `You are an order extraction assistant for a wholesale bedding/feather product company (Purax/Puradown). Extract ALL order line items from emails.
 
 CRITICAL RULES:
-- Extract EVERY product with its FULL name including brand, material, and type (e.g., "80% Goose Down Pillow" not just "Pillow")
+- You MUST extract EVERY product line item. This is the most important task.
+- Extract the FULL product name including brand, material, and type (e.g., "80% Goose Down Pillow" not just "Pillow")
 - Include size/variant info as part of the description using " - " separator (e.g., "80% Goose Down Pillow - Queen / Standard / Cotton Japara")
+- Look for product info in table structures, "Order summary" sections, product lists, or any mention of items with quantities
+- For forwarded Shopify emails: products are often in HTML tables with "$price x quantity" format. Look carefully at the HTML structure.
 - Do NOT include SKU numbers in descriptions
 - Do NOT include discount codes or discount amounts in descriptions
 - Extract the actual/discounted unit price (not the original price before discount)
 - If no price is available, use 0
 - For Shopify/Puradown order emails: extract from the "Order summary" section
 - For B2B order emails: extract product names and quantities from the email body
+- Also extract: customerName, customerPhone, customerAddress, customerEmail, subtotal, shipping, total
+- Return valid JSON with this structure: { "lines": [{"description": "...", "quantity": 1, "unitPrice": 0, "lineTotal": 0}], "customerName": "", "customerPhone": "", "customerAddress": "", "customerEmail": "", "subtotal": 0, "shipping": 0, "total": 0 }
 - Return valid JSON only, no markdown`
               },
               {
                 role: "user",
-                content: `Subject: ${emailSubject}\n\nEmail body:\n${emailText.substring(0, 8000)}`
+                content: contentToAnalyze
               }
             ],
             response_format: { type: "json_object" },
             temperature: 0,
           });
           const content = aiResponse.choices[0]?.message?.content || "{}";
+          console.log("[EMAIL-TO-ORDER] AI raw response:", content.substring(0, 1000));
           const parsed = JSON.parse(content);
+          const extractedLines = (parsed.lines || parsed.items || parsed.orderLines || parsed.order_lines || []).map((l: any) => ({
+            description: l.description || l.product || l.name || l.productName || "",
+            quantity: parseInt(l.quantity || l.qty || 1) || 1,
+            unitPrice: parseFloat(l.unitPrice || l.unit_price || l.price || 0) || 0,
+            lineTotal: parseFloat(l.lineTotal || l.line_total || l.total || 0) || 0,
+          })).filter((l: any) => l.description);
+          console.log(`[EMAIL-TO-ORDER] AI extracted ${extractedLines.length} line items`);
+          for (const l of extractedLines) {
+            console.log(`[EMAIL-TO-ORDER]   - ${l.quantity}x "${l.description}" @ $${l.unitPrice} = $${l.lineTotal}`);
+          }
           return {
             customerName: parsed.customerName || parsed.customer_name || "",
             customerPhone: parsed.customerPhone || parsed.customer_phone || "",
             customerAddress: parsed.customerAddress || parsed.customer_address || parsed.shippingAddress || parsed.shipping_address || parsed.deliveryAddress || "",
             customerEmail: parsed.customerEmail || parsed.customer_email || "",
             orderNumber: parsed.orderNumber || parsed.order_number || "",
-            lines: (parsed.lines || parsed.items || parsed.orderLines || parsed.order_lines || []).map((l: any) => ({
-              description: l.description || l.product || l.name || l.productName || "",
-              quantity: parseInt(l.quantity || l.qty || 1) || 1,
-              unitPrice: parseFloat(l.unitPrice || l.unit_price || l.price || 0) || 0,
-              lineTotal: parseFloat(l.lineTotal || l.line_total || l.total || 0) || 0,
-            })).filter((l: any) => l.description),
+            lines: extractedLines,
             subtotal: parseFloat(parsed.subtotal || 0) || 0,
             shipping: parseFloat(parsed.shipping || 0) || 0,
             total: parseFloat(parsed.total || 0) || 0,
@@ -2291,9 +2322,11 @@ CRITICAL RULES:
 
         // Fallback to AI if HTML regex found nothing
         if (lines.length === 0) {
-          console.log("[EMAIL-TO-ORDER] Shopify HTML regex found no products, falling back to AI");
-          const aiResult = await parseOrderWithAI(plainText, subject);
+          console.log("[EMAIL-TO-ORDER] Shopify HTML regex found no products, falling back to AI with HTML");
+          const aiResult = await parseOrderWithAI(plainText, subject, bodyHtml);
           lines.push(...aiResult.lines);
+        } else {
+          console.log(`[EMAIL-TO-ORDER] Shopify HTML regex found ${lines.length} products`);
         }
 
         const fullText = plainText;
@@ -2316,9 +2349,12 @@ CRITICAL RULES:
           if (nameMatch) customerName = nameMatch[1].trim();
         }
 
-        // Use AI to extract order details
+        // Use AI to extract order details - pass both plain text AND HTML for better parsing
         console.log("[EMAIL-TO-ORDER] Using AI to parse email order details");
-        const aiResult = await parseOrderWithAI(plainText, subject);
+        console.log("[EMAIL-TO-ORDER] Email type:", isForwardedShopify ? "Forwarded Shopify" : "B2B/Other");
+        console.log("[EMAIL-TO-ORDER] Subject:", subject);
+        console.log("[EMAIL-TO-ORDER] Plain text length:", plainText.length, "HTML length:", bodyHtml.length);
+        const aiResult = await parseOrderWithAI(plainText, subject, bodyHtml);
         lines.push(...aiResult.lines);
         if (aiResult.customerName && !customerName) customerName = aiResult.customerName;
         if (aiResult.customerPhone) customerPhone = aiResult.customerPhone;
@@ -2340,10 +2376,15 @@ CRITICAL RULES:
         }
       }
 
-      // Validate: non-Shopify emails must have at least one parsed order line
-      if (!isShopifyEmail && lines.length === 0) {
-        return res.status(400).json({ error: "No order lines could be parsed from this email. This doesn't appear to be an order email." });
+      // Validate: ALL emails must have at least one parsed order line
+      // (forwarded Shopify emails also need items - they go through AI parsing)
+      if (lines.length === 0) {
+        console.error("[EMAIL-TO-ORDER] No order lines extracted. Subject:", subject, "isShopify:", isShopifyEmail, "isForwarded:", isForwardedShopify);
+        return res.status(400).json({ 
+          error: "No order lines could be parsed from this email. The AI could not extract any products. Please check the email content or create the order manually." 
+        });
       }
+      console.log(`[EMAIL-TO-ORDER] Successfully extracted ${lines.length} order lines`);
 
       // Match company: try subject/body name first (most reliable), then sender email, then domain
       const allCompanies = await storage.getAllCompanies();
@@ -2582,6 +2623,7 @@ CRITICAL RULES:
       // Auto-attach the original email as a PDF to the order Files
       try {
         if (bodyHtml) {
+          console.log(`[EMAIL-TO-ORDER] Generating email PDF for order ${order.orderNumber}, HTML length: ${bodyHtml.length}`);
           const { convertHtmlToPdf } = await import("./html-to-pdf");
           const pdfBuffer = await convertHtmlToPdf(bodyHtml, {
             customerName: customerName || "",
@@ -2589,14 +2631,16 @@ CRITICAL RULES:
             customerPhone: customerPhone || "",
             customerEmail: customerEmail || "",
           });
+          console.log(`[EMAIL-TO-ORDER] PDF generated, size: ${pdfBuffer.length} bytes`);
           const fs = await import("fs");
           const path = await import("path");
           const uploadsDir = path.default.join(process.cwd(), "uploads", "orders", order.id);
           await fs.promises.mkdir(uploadsDir, { recursive: true });
-          const safeSubject = subject.replace(/[^a-zA-Z0-9_\-\s#]/g, "").trim().replace(/\s+/g, "_");
-          const fileName = `Email_${safeSubject}.pdf`;
+          const safeSubject = subject.replace(/[^a-zA-Z0-9_\-\s#]/g, "").trim().replace(/\s+/g, "_").substring(0, 80);
+          const fileName = `Email_${safeSubject || "order"}.pdf`;
           const filePath = path.default.join(uploadsDir, fileName);
           await fs.promises.writeFile(filePath, pdfBuffer);
+          console.log(`[EMAIL-TO-ORDER] PDF saved to: ${filePath}`);
           await storage.createAttachment({
             entityType: "order",
             entityId: order.id,
@@ -2608,9 +2652,12 @@ CRITICAL RULES:
             description: `Original email: ${subject}`,
           });
           console.log(`[EMAIL-TO-ORDER] Auto-attached email PDF to order ${order.orderNumber}`);
+        } else {
+          console.warn(`[EMAIL-TO-ORDER] No HTML body found for email, skipping PDF attachment`);
         }
-      } catch (attachError) {
-        console.error("[EMAIL-TO-ORDER] Failed to auto-attach email PDF:", attachError);
+      } catch (attachError: any) {
+        console.error("[EMAIL-TO-ORDER] Failed to auto-attach email PDF:", attachError?.message || attachError);
+        console.error("[EMAIL-TO-ORDER] PDF attachment stack:", attachError?.stack);
       }
 
       res.status(201).json(order);
