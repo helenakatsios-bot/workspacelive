@@ -2103,7 +2103,8 @@ export async function registerRoutes(
         .replace(/\n\s*\n/g, "\n")
         .trim();
 
-      const isShopifyEmail = /Order\s*#\d+/i.test(subject) && /placed by/i.test(subject);
+      const isShopifyEmail = /Order\s*#\d+/i.test(subject) && (/placed by/i.test(subject) || /placed\s+(a new\s+)?order/i.test(subject));
+      const isForwardedShopify = /^(fw|fwd):/i.test(subject) && /Order\s*#\d+/i.test(subject);
 
       // Detect forwarded emails and extract real sender
       const isForwarded = /^(fw|fwd):/i.test(subject) || plainText.match(/From:\s*[^<\n]+<[^>]+>/m);
@@ -2128,7 +2129,70 @@ export async function registerRoutes(
       let shipping = 0;
       let total = 0;
 
-      if (isShopifyEmail) {
+      // Use AI to parse order details from ANY email type
+      const parseOrderWithAI = async (emailText: string, emailSubject: string): Promise<{
+        customerName?: string; customerPhone?: string; customerAddress?: string; customerEmail?: string;
+        orderNumber?: string; lines: Array<{ description: string; quantity: number; unitPrice: number; lineTotal: number }>;
+        subtotal?: number; shipping?: number; total?: number;
+      }> => {
+        try {
+          const OpenAI = (await import("openai")).default;
+          const openai = new OpenAI({
+            apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+            baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+          });
+          const aiResponse = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content: `You are an order extraction assistant for a wholesale bedding/feather product company (Purax/Puradown). Extract ALL order line items from emails.
+
+CRITICAL RULES:
+- Extract EVERY product with its FULL name including brand, material, and type (e.g., "80% Goose Down Pillow" not just "Pillow")
+- Include size/variant info as part of the description using " - " separator (e.g., "80% Goose Down Pillow - Queen / Standard / Cotton Japara")
+- Do NOT include SKU numbers in descriptions
+- Do NOT include discount codes or discount amounts in descriptions
+- Extract the actual/discounted unit price (not the original price before discount)
+- If no price is available, use 0
+- For Shopify/Puradown order emails: extract from the "Order summary" section
+- For B2B order emails: extract product names and quantities from the email body
+- Return valid JSON only, no markdown`
+              },
+              {
+                role: "user",
+                content: `Subject: ${emailSubject}\n\nEmail body:\n${emailText.substring(0, 8000)}`
+              }
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0,
+          });
+          const content = aiResponse.choices[0]?.message?.content || "{}";
+          const parsed = JSON.parse(content);
+          return {
+            customerName: parsed.customerName || parsed.customer_name || "",
+            customerPhone: parsed.customerPhone || parsed.customer_phone || "",
+            customerAddress: parsed.customerAddress || parsed.customer_address || parsed.shippingAddress || parsed.shipping_address || parsed.deliveryAddress || "",
+            customerEmail: parsed.customerEmail || parsed.customer_email || "",
+            orderNumber: parsed.orderNumber || parsed.order_number || "",
+            lines: (parsed.lines || parsed.items || parsed.orderLines || parsed.order_lines || []).map((l: any) => ({
+              description: l.description || l.product || l.name || l.productName || "",
+              quantity: parseInt(l.quantity || l.qty || 1) || 1,
+              unitPrice: parseFloat(l.unitPrice || l.unit_price || l.price || 0) || 0,
+              lineTotal: parseFloat(l.lineTotal || l.line_total || l.total || 0) || 0,
+            })).filter((l: any) => l.description),
+            subtotal: parseFloat(parsed.subtotal || 0) || 0,
+            shipping: parseFloat(parsed.shipping || 0) || 0,
+            total: parseFloat(parsed.total || 0) || 0,
+          };
+        } catch (aiError) {
+          console.error("[EMAIL-TO-ORDER] AI parsing failed:", aiError);
+          return { lines: [] };
+        }
+      };
+
+      // --- SHOPIFY DIRECT EMAIL (has order-list CSS classes) ---
+      if (isShopifyEmail && !isForwardedShopify) {
         const orderNumMatch = subject.match(/Order\s*#(\d+)/i);
         shopifyOrderNum = orderNumMatch ? orderNumMatch[1] : null;
 
@@ -2150,11 +2214,11 @@ export async function registerRoutes(
           customerAddress = addrBlock;
         }
 
-        // Parse products directly from HTML for best accuracy
+        // Parse products directly from HTML using Shopify CSS classes
         const itemTitleRegex = /order-list__item-title[^>]*>([^<]+)</g;
         const itemVariantRegex = /order-list__item-variant[^>]*>([^<]+)</g;
         const itemPriceRegex = /order-list__item-price[^>]*>\s*\$([0-9,.]+)/g;
-        const priceQtyRegex = /\$([0-9,.]+)\s*[×x]\s*(\d+)/g;
+        const priceQtyRegex = /\$\s*([0-9,.]+)\s*[×x]\s*(\d+)/g;
 
         const productNames: string[] = [];
         const productVariants: string[] = [];
@@ -2190,145 +2254,54 @@ export async function registerRoutes(
           lines.push({ description: fullDescription, quantity: qty, unitPrice, lineTotal });
         }
 
-        // Fallback: parse from plain text if HTML parsing found nothing
+        // Fallback to AI if HTML regex found nothing
         if (lines.length === 0) {
-          const fullText = plainText;
-          const summaryStart = fullText.indexOf("Order summary");
-          const subtotalStart = fullText.indexOf("Subtotal");
-          if (summaryStart !== -1 && subtotalStart !== -1) {
-            const summaryText = fullText.substring(summaryStart + "Order summary".length, subtotalStart).trim();
-            const allLines = summaryText.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
-            let currentProduct = "";
-            let currentVariant = "";
-            let currentPrice = 0;
-            let currentQty = 1;
-
-            const flushProduct = () => {
-              if (currentProduct && currentPrice > 0) {
-                const fullDesc = currentVariant ? `${currentProduct} - ${currentVariant}` : currentProduct;
-                const lt = currentPrice * currentQty;
-                lines.push({ description: fullDesc, quantity: currentQty, unitPrice: currentPrice, lineTotal: lt });
-                currentProduct = "";
-                currentVariant = "";
-                currentPrice = 0;
-                currentQty = 1;
-              }
-            };
-
-            for (const line of allLines) {
-              if (line === "View order") continue;
-              if (/^[A-Z]+\d+\s*\(/.test(line)) continue;
-              if (/^\(\-?\$/.test(line)) continue;
-
-              const pqm = line.match(/\$([0-9,.]+)(?:\s+\$([0-9,.]+))?\s*[×x]\s*(\d+)/);
-              if (pqm) {
-                const origPrice = parseFloat(pqm[1].replace(",", ""));
-                const discPrice = pqm[2] ? parseFloat(pqm[2].replace(",", "")) : origPrice;
-                currentPrice = discPrice;
-                currentQty = parseInt(pqm[3]);
-                continue;
-              }
-
-              const ltm = line.match(/^\$([0-9,.]+)$/);
-              if (ltm && currentProduct && currentPrice > 0) {
-                const fullDesc = currentVariant ? `${currentProduct} - ${currentVariant}` : currentProduct;
-                const lt = parseFloat(ltm[1].replace(",", ""));
-                lines.push({ description: fullDesc, quantity: currentQty, unitPrice: currentPrice, lineTotal: lt });
-                currentProduct = "";
-                currentVariant = "";
-                currentPrice = 0;
-                currentQty = 1;
-                continue;
-              }
-
-              if (/^(King|Queen|Standard|Single|Double|Super|Cot|Baby|Toddler)\b/i.test(line) || /^\d+\s*g\s*\//i.test(line) || /\/\s*(Cotton|Polyester|Silk|Satin|Bamboo|Microfibre|Standard)/i.test(line)) {
-                currentVariant = line.replace(/\s+[A-Z]+\d+\s*\(-?\$[0-9,.]+\)\s*$/, "").trim();
-                continue;
-              }
-
-              if (!line.startsWith("$") && line.length > 2 &&
-                  !line.includes("View order") &&
-                  !line.match(/^[A-Z]+\d+/) &&
-                  !line.match(/^Shipping/) && !line.match(/^Total/)) {
-                flushProduct();
-                currentProduct = line;
-                currentVariant = "";
-              }
-            }
-            flushProduct();
-          }
+          console.log("[EMAIL-TO-ORDER] Shopify HTML regex found no products, falling back to AI");
+          const aiResult = await parseOrderWithAI(plainText, subject);
+          lines.push(...aiResult.lines);
         }
 
-        const subtotalMatch = fullText.match(/Subtotal\s*\$([0-9,.]+)/);
-        const shippingMatch = fullText.match(/Shipping\s*\([^)]*\)\s*\$([0-9,.]+)/);
-        const totalMatch = fullText.match(/Total\s*\$([0-9,.]+)/);
+        const fullText = plainText;
+        const subtotalMatch = fullText.match(/Subtotal\s*\$\s*([0-9,.]+)/);
+        const shippingMatch = fullText.match(/Shipping\s*(?:\([^)]*\))?\s*\$\s*([0-9,.]+)/);
+        const totalMatch = fullText.match(/Total\s*\$\s*([0-9,.]+)/);
         subtotal = subtotalMatch ? parseFloat(subtotalMatch[1].replace(",", "")) : lines.reduce((s, l) => s + l.lineTotal, 0);
         shipping = shippingMatch ? parseFloat(shippingMatch[1].replace(",", "")) : 0;
         total = totalMatch ? parseFloat(totalMatch[1].replace(",", "")) : subtotal + shipping;
       } else {
-        // Generic B2B order email parsing
+        // --- ALL OTHER EMAILS (B2B, forwarded Shopify, etc.) - use AI ---
         customerEmail = realSenderEmail || email.fromAddress || "";
         customerName = realSenderName || "";
 
-        // Parse order lines from email body - handles formats like:
-        // "14x 40x80cm", "40x80cm x14", "40x80 cm qty 14", "14 x 40x80cm", "40x80cm - 14"
-        const bodyLines = plainText.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+        // Check if this is a forwarded Shopify email
+        if (isForwardedShopify) {
+          const orderNumMatch = subject.match(/Order\s*#(\d+)/i);
+          shopifyOrderNum = orderNumMatch ? orderNumMatch[1] : null;
+          const nameMatch = subject.match(/placed by\s+(.+)/i);
+          if (nameMatch) customerName = nameMatch[1].trim();
+        }
 
-        for (const line of bodyLines) {
-          // Pattern: qty first - "14x 40x80cm" or "14 x 40x80cm"
-          const qtyFirstMatch = line.match(/^(\d+)\s*x\s+(.+)/i);
-          if (qtyFirstMatch) {
-            const qty = parseInt(qtyFirstMatch[1]);
-            const desc = qtyFirstMatch[2].trim();
-            if (qty > 0 && desc.length > 1) {
-              lines.push({ description: desc, quantity: qty, unitPrice: 0, lineTotal: 0 });
-              continue;
-            }
-          }
+        // Use AI to extract order details
+        console.log("[EMAIL-TO-ORDER] Using AI to parse email order details");
+        const aiResult = await parseOrderWithAI(plainText, subject);
+        lines.push(...aiResult.lines);
+        if (aiResult.customerName && !customerName) customerName = aiResult.customerName;
+        if (aiResult.customerPhone) customerPhone = aiResult.customerPhone;
+        if (aiResult.customerAddress) customerAddress = aiResult.customerAddress;
+        if (aiResult.customerEmail && !customerEmail) customerEmail = aiResult.customerEmail;
+        subtotal = aiResult.subtotal || lines.reduce((s, l) => s + l.lineTotal, 0);
+        shipping = aiResult.shipping || 0;
+        total = aiResult.total || subtotal + shipping;
 
-          // Pattern: qty at end - "40x80cm x14" or "40x80cm x 14"
-          const qtyEndMatch = line.match(/^(.+?)\s+x\s*(\d+)\s*$/i);
-          if (qtyEndMatch) {
-            const desc = qtyEndMatch[1].trim();
-            const qty = parseInt(qtyEndMatch[2]);
-            if (qty > 0 && desc.length > 1 && !/^\d+$/.test(desc)) {
-              lines.push({ description: desc, quantity: qty, unitPrice: 0, lineTotal: 0 });
-              continue;
-            }
-          }
-
-          // Pattern: qty with dash - "40x80cm - 14" or "40x80cm — 14"
-          const dashMatch = line.match(/^(.+?)\s*[-–—]\s*(\d+)\s*$/);
-          if (dashMatch) {
-            const desc = dashMatch[1].trim();
-            const qty = parseInt(dashMatch[2]);
-            if (qty > 0 && desc.length > 1 && !/^\d+$/.test(desc)) {
-              lines.push({ description: desc, quantity: qty, unitPrice: 0, lineTotal: 0 });
-              continue;
-            }
-          }
-
-          // Pattern: qty with "qty" keyword - "40x80cm qty 14" or "40x80cm QTY: 14"
-          const qtyKeywordMatch = line.match(/^(.+?)\s+qty[:\s]*(\d+)\s*$/i);
-          if (qtyKeywordMatch) {
-            const desc = qtyKeywordMatch[1].trim();
-            const qty = parseInt(qtyKeywordMatch[2]);
-            if (qty > 0 && desc.length > 1) {
-              lines.push({ description: desc, quantity: qty, unitPrice: 0, lineTotal: 0 });
-              continue;
-            }
-          }
-
-          // Pattern: "qty" keyword first - "qty 14 40x80cm" or "QTY: 14 40x80cm"
-          const qtyKeywordFirstMatch = line.match(/^qty[:\s]*(\d+)\s+(.+)/i);
-          if (qtyKeywordFirstMatch) {
-            const qty = parseInt(qtyKeywordFirstMatch[1]);
-            const desc = qtyKeywordFirstMatch[2].trim();
-            if (qty > 0 && desc.length > 1) {
-              lines.push({ description: desc, quantity: qty, unitPrice: 0, lineTotal: 0 });
-              continue;
-            }
-          }
+        // Also extract totals from forwarded Shopify emails via regex
+        if (isForwardedShopify) {
+          const fullText = plainText;
+          const subtotalMatch = fullText.match(/Subtotal\s*\$\s*([0-9,.]+)/);
+          const shippingMatch = fullText.match(/Shipping\s*(?:\([^)]*\))?\s*\$\s*([0-9,.]+)/);
+          const totalMatch = fullText.match(/Total\s*\$\s*([0-9,.]+)/);
+          if (subtotalMatch) subtotal = parseFloat(subtotalMatch[1].replace(",", ""));
+          if (shippingMatch) shipping = parseFloat(shippingMatch[1].replace(",", ""));
+          if (totalMatch) total = parseFloat(totalMatch[1].replace(",", ""));
         }
       }
 
