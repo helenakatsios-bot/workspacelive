@@ -303,6 +303,27 @@ export default function CompanyDetailPage() {
     }
   };
 
+  const deleteContactMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      await apiRequest("DELETE", `/api/contacts/${contactId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id, "contacts"] });
+      toast({ title: "Contact removed" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to remove contact", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleDeleteContact = (contactId: string, contactName: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.confirm(`Remove ${contactName} from this company?`)) {
+      deleteContactMutation.mutate(contactId);
+    }
+  };
+
   const handleAddNote = async () => {
     if (!newNote.trim()) return;
     setIsSubmittingNote(true);
@@ -1227,19 +1248,32 @@ export default function CompanyDetailPage() {
                   {contacts && contacts.length > 0 ? (
                     <div className="space-y-2">
                       {contacts.map((contact) => (
-                        <Link key={contact.id} href={`/contacts/${contact.id}`}>
-                          <div className="flex items-center gap-2 p-2 rounded-md hover-elevate cursor-pointer" data-testid={`row-contact-${contact.id}`}>
-                            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                              <span className="text-xs font-medium text-primary">
-                                {contact.firstName.charAt(0)}{contact.lastName.charAt(0)}
-                              </span>
+                        <div key={contact.id} className="flex items-center gap-1 group">
+                          <Link href={`/contacts/${contact.id}`} className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 p-2 rounded-md hover-elevate cursor-pointer" data-testid={`row-contact-${contact.id}`}>
+                              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                <span className="text-xs font-medium text-primary">
+                                  {contact.firstName.charAt(0)}{contact.lastName.charAt(0)}
+                                </span>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-medium text-sm truncate">{contact.firstName} {contact.lastName}</p>
+                                <p className="text-xs text-muted-foreground truncate">{contact.position || contact.email || "Contact"}</p>
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <p className="font-medium text-sm truncate">{contact.firstName} {contact.lastName}</p>
-                              <p className="text-xs text-muted-foreground truncate">{contact.position || contact.email || "Contact"}</p>
-                            </div>
-                          </div>
-                        </Link>
+                          </Link>
+                          {canEdit && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="invisible group-hover:visible flex-shrink-0 text-muted-foreground hover:text-destructive"
+                              onClick={(e) => handleDeleteContact(contact.id, `${contact.firstName} ${contact.lastName}`, e)}
+                              data-testid={`button-delete-contact-${contact.id}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       ))}
                     </div>
                   ) : (
