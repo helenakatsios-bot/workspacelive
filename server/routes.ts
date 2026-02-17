@@ -2798,7 +2798,12 @@ CRITICAL RULES:
       let orderNumber: string;
       if (shopifyOrderNum) {
         const existingOrders = await storage.getAllOrders();
-        const duplicate = existingOrders.find((o) => o.orderNumber === `PD-${shopifyOrderNum}` || o.orderNumber === shopifyOrderNum || o.customerNotes?.includes(shopifyOrderNum));
+        const shopifyNotePattern = new RegExp(`(^|\\W)#?${shopifyOrderNum}(\\W|$)`);
+        const duplicate = existingOrders.find((o) => 
+          o.orderNumber === `PD-${shopifyOrderNum}` || 
+          o.orderNumber === shopifyOrderNum ||
+          o.sourceEmailId === emailId
+        );
         if (duplicate) {
           if (isForwardedShopify && company && duplicate.companyId !== company.id) {
             const existingForSameCompany = existingOrders.find((o) => 
