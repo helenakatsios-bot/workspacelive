@@ -106,6 +106,19 @@ export async function saveXeroSyncMapping(entityType: string, localId: string, x
   }
 }
 
+function parseXeroDate(dateValue: any): Date | null {
+  if (!dateValue) return null;
+  if (dateValue instanceof Date) return dateValue;
+  const str = String(dateValue);
+  const msMatch = str.match(/\/Date\((\d+)([+-]\d+)?\)\//);
+  if (msMatch) {
+    return new Date(parseInt(msMatch[1]));
+  }
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) return parsed;
+  return null;
+}
+
 export async function refreshTokenIfNeeded(xero: XeroClient, token: typeof xeroTokens.$inferSelect) {
   const now = new Date();
   const expiresAt = new Date(token.expiresAt);
@@ -362,8 +375,8 @@ async function createInvoiceFromXero(
     orderId,
     companyId,
     status: invoiceStatus,
-    issueDate: xInv.Date ? new Date(xInv.Date) : new Date(),
-    dueDate: xInv.DueDate ? new Date(xInv.DueDate) : null,
+    issueDate: parseXeroDate(xInv.Date) || new Date(),
+    dueDate: parseXeroDate(xInv.DueDate) || null,
     subtotal: String(xInv.SubTotal || 0),
     tax: String(xInv.TotalTax || 0),
     total: String(xInv.Total || 0),
@@ -467,7 +480,7 @@ export async function importInvoicesFromXero(accessToken: string, tenantId: stri
         const tax = String(xInv.TotalTax || 0);
         const total = String(xInv.Total || 0);
 
-        const orderDate = xInv.Date ? new Date(xInv.Date) : new Date();
+        const orderDate = parseXeroDate(xInv.Date) || new Date();
 
         const maxResultXero = await db.execute(sql`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
         const orderNumber = String((parseInt(String((maxResultXero as any).rows?.[0]?.max_num || (maxResultXero as any)[0]?.max_num)) || 0) + 1);
@@ -597,7 +610,7 @@ export async function autoSyncXeroInvoices(accessToken: string, tenantId: string
           subtotal: String(xInv.SubTotal || 0),
           tax: String(xInv.TotalTax || 0),
           total: String(xInv.Total || 0),
-          dueDate: xInv.DueDate ? new Date(xInv.DueDate) : null,
+          dueDate: parseXeroDate(xInv.DueDate) || null,
         }).where(eq(invoices.id, existingInvoice[0].id));
         updated++;
       } else {
