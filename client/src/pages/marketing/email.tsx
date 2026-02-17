@@ -151,6 +151,19 @@ export default function MarketingEmailPage() {
       navigate(`/orders/${data.id}`);
     },
     onError: (error: any) => {
+      try {
+        if (error?.message) {
+          const parsed = JSON.parse(error.message.replace(/^\d+:\s*/, ""));
+          if (parsed.orderId) {
+            setSelectedEmail(null);
+            toast({ title: "Order Already Exists", description: "This email was already converted to an order. Opening it now." });
+            navigate(`/orders/${parsed.orderId}`);
+            return;
+          }
+          toast({ title: "Failed to convert", description: parsed.message || error.message, variant: "destructive" });
+          return;
+        }
+      } catch {}
       toast({ title: "Failed to convert", description: error?.message || "Could not create order from this email", variant: "destructive" });
     },
   });
