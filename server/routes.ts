@@ -1521,6 +1521,170 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/invoices", requireEdit, async (req, res) => {
+    try {
+      const schema = z.object({
+        orderId: z.string().optional(),
+        companyId: z.string().min(1, "Company is required"),
+        status: z.enum(["draft", "sent", "paid", "overdue", "void"]).default("draft"),
+        issueDate: z.string().optional(),
+        dueDate: z.string().optional(),
+        subtotal: z.string().or(z.number()).transform(String).default("0"),
+        tax: z.string().or(z.number()).transform(String).default("0"),
+        total: z.string().or(z.number()).transform(String).default("0"),
+        balanceDue: z.string().or(z.number()).transform(String).optional(),
+      });
+
+      const data = schema.parse(req.body);
+
+      const existingInvoices = await storage.getAllInvoices();
+      let maxNum = 0;
+      for (const inv of existingInvoices) {
+        const match = inv.invoiceNumber.match(/INV-(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+      const invoiceNumber = `INV-${String(maxNum + 1).padStart(4, "0")}`;
+
+      const invoice = await storage.createInvoice({
+        invoiceNumber,
+        orderId: data.orderId || null,
+        companyId: data.companyId,
+        status: data.status,
+        issueDate: data.issueDate ? new Date(data.issueDate) : new Date(),
+        dueDate: data.dueDate ? new Date(data.dueDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        subtotal: data.subtotal,
+        tax: data.tax,
+        total: data.total,
+        balanceDue: data.balanceDue || data.total,
+      });
+
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "create",
+        entityType: "invoice",
+        entityId: invoice.id,
+        details: { invoiceNumber: invoice.invoiceNumber, companyId: invoice.companyId, total: invoice.total },
+      });
+
+      res.status(201).json(invoice);
+    } catch (error: any) {
+      console.error("Create invoice error:", error);
+      if (error?.name === "ZodError") {
+        return res.status(400).json({ message: error.errors[0]?.message || "Validation error" });
+      }
+      res.status(500).json({ message: "Failed to create invoice" });
+    }
+  });
+
+  app.patch("/api/invoices/:id", requireEdit, async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+
+      const schema = z.object({
+        status: z.enum(["draft", "sent", "paid", "overdue", "void"]).optional(),
+        issueDate: z.string().optional(),
+        dueDate: z.string().optional(),
+        subtotal: z.string().or(z.number()).transform(String).optional(),
+        tax: z.string().or(z.number()).transform(String).optional(),
+        total: z.string().or(z.number()).transform(String).optional(),
+        balanceDue: z.string().or(z.number()).transform(String).optional(),
+      });
+
+      const data = schema.parse(req.body);
+      const updateData: any = {};
+      if (data.status) updateData.status = data.status;
+      if (data.issueDate) updateData.issueDate = new Date(data.issueDate);
+      if (data.dueDate) updateData.dueDate = new Date(data.dueDate);
+      if (data.subtotal) updateData.subtotal = data.subtotal;
+      if (data.tax) updateData.tax = data.tax;
+      if (data.total) updateData.total = data.total;
+      if (data.balanceDue) updateData.balanceDue = data.balanceDue;
+
+      const updated = await storage.updateInvoice(req.params.id, updateData);
+
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "update",
+        entityType: "invoice",
+        entityId: req.params.id,
+        beforeJson: invoice,
+        afterJson: updated,
+      });
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Update invoice error:", error);
+      res.status(500).json({ message: "Failed to update invoice" });
+    }
+  });
+
+  // Generate invoice from order
+  app.post("/api/orders/:orderId/generate-invoice", requireEdit, async (req, res) => {
+    try {
+      const order = await storage.getOrder(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      if (!order.companyId) {
+        return res.status(400).json({ message: "Order has no company assigned" });
+      }
+
+      const existingInvoices = await storage.getAllInvoices();
+      const alreadyHasInvoice = existingInvoices.find(inv => inv.orderId === order.id);
+      if (alreadyHasInvoice) {
+        return res.status(400).json({ message: `This order already has invoice ${alreadyHasInvoice.invoiceNumber}` });
+      }
+
+      let maxNum = 0;
+      for (const inv of existingInvoices) {
+        const match = inv.invoiceNumber.match(/INV-(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+      const invoiceNumber = `INV-${String(maxNum + 1).padStart(4, "0")}`;
+
+      const orderLinesList = await storage.getOrderLines(order.id);
+      const subtotal = orderLinesList.reduce((sum, l) => sum + parseFloat(l.lineTotal || "0"), 0);
+      const tax = subtotal * 0.1;
+      const total = subtotal + tax;
+
+      const invoice = await storage.createInvoice({
+        invoiceNumber,
+        orderId: order.id,
+        companyId: order.companyId,
+        status: "draft",
+        issueDate: new Date(),
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        subtotal: subtotal.toFixed(2),
+        tax: tax.toFixed(2),
+        total: total.toFixed(2),
+        balanceDue: total.toFixed(2),
+      });
+
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "create",
+        entityType: "invoice",
+        entityId: invoice.id,
+        details: { invoiceNumber, orderId: order.id, companyId: order.companyId, total: total.toFixed(2) },
+      });
+
+      const company = await storage.getCompany(invoice.companyId);
+      res.status(201).json({ ...invoice, company, order });
+    } catch (error) {
+      console.error("Generate invoice from order error:", error);
+      res.status(500).json({ message: "Failed to generate invoice" });
+    }
+  });
+
   // ==================== ADMIN ROUTES ====================
   app.get("/api/admin/users", requireAdmin, async (req, res) => {
     try {

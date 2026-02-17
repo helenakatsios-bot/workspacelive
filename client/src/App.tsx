@@ -24,6 +24,7 @@ import OrdersPage from "@/pages/orders/index";
 import OrderFormPage from "@/pages/orders/form";
 import OrderDetailPage from "@/pages/orders/detail";
 import InvoicesPage from "@/pages/invoices/index";
+import NewInvoicePage from "@/pages/invoices/new";
 import AdminPage from "@/pages/admin/index";
 import ClientsSinceJuly2021Page from "@/pages/reports/clients-since-july-2021";
 import ReportingDashboardsPage from "@/pages/reporting/dashboards";
@@ -136,7 +137,7 @@ function AuthenticatedApp() {
         <Route path="/orders/:id" component={OrderDetailPage} />
         <Route path="/orders/:id/edit" component={OrderDetailPage} />
         <Route path="/invoices" component={InvoicesPage} />
-        <Route path="/invoices/new" component={InvoicesPage} />
+        <Route path="/invoices/new" component={NewInvoicePage} />
         <Route path="/invoices/:id" component={InvoicesPage} />
         <Route path="/crm/tickets" component={TicketsPage} />
         <Route path="/crm/projects" component={ProjectsPage} />

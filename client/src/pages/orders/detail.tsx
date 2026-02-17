@@ -33,6 +33,7 @@ import {
   Save,
   X,
   Search,
+  Receipt,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -777,6 +778,18 @@ export default function OrderDetailPage() {
             <Download className="w-4 h-4 mr-2" />
             Download PDF
           </Button>
+          {canEdit && (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => navigate(`/invoices/new?orderId=${params?.id}`)}
+                data-testid="button-generate-invoice"
+              >
+                <Receipt className="w-4 h-4 mr-2" />
+                Generate Invoice
+              </Button>
+            </>
+          )}
           {canEdit && (
             <>
               <Select value={order.status} onValueChange={(v) => updateStatusMutation.mutate(v)}>
