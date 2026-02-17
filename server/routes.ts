@@ -2045,8 +2045,20 @@ export async function registerRoutes(
     }
   });
 
+  let xeroImportStatus: { running: boolean; progress: string; result: any | null; error: string | null } = {
+    running: false, progress: "", result: null, error: null,
+  };
+
+  app.get("/api/xero/import-invoices/status", requireAdmin, async (_req, res) => {
+    res.json(xeroImportStatus);
+  });
+
   app.post("/api/xero/import-invoices", requireAdmin, async (req, res) => {
     try {
+      if (xeroImportStatus.running) {
+        return res.json({ message: "Import already in progress", status: "running", progress: xeroImportStatus.progress });
+      }
+
       const token = await getStoredToken();
       if (!token) {
         return res.status(400).json({ message: "Xero not connected" });
@@ -2067,25 +2079,37 @@ export async function registerRoutes(
       if (!freshToken) {
         return res.status(400).json({ message: "Xero token not found after refresh" });
       }
-      
-      const result = await importInvoicesFromXero(freshToken.accessToken, freshToken.tenantId);
-      
-      const newCount = result.imported.filter(i => i.isNew).length;
-      const existingCount = result.imported.filter(i => !i.isNew).length;
-      
-      await storage.createAuditLog({
-        userId: req.session.userId,
-        action: "create",
-        entityType: "xero_import_invoices",
-        afterJson: { newOrders: newCount, skipped: existingCount, errors: result.errors.length },
-      });
-      
-      res.json({
-        imported: newCount,
-        skipped: existingCount,
-        errors: result.errors,
-        details: result.imported,
-      });
+
+      xeroImportStatus = { running: true, progress: "Starting import...", result: null, error: null };
+      res.json({ message: "Import started in background", status: "running" });
+
+      (async () => {
+        try {
+          xeroImportStatus.progress = "Fetching invoices from Xero...";
+          const result = await importInvoicesFromXero(freshToken.accessToken, freshToken.tenantId);
+          
+          const newCount = result.imported.filter(i => i.isNew).length;
+          const existingCount = result.imported.filter(i => !i.isNew).length;
+          
+          await storage.createAuditLog({
+            userId: req.session.userId,
+            action: "create",
+            entityType: "xero_import_invoices",
+            afterJson: { newOrders: newCount, skipped: existingCount, errors: result.errors.length },
+          });
+          
+          xeroImportStatus = {
+            running: false,
+            progress: "Complete",
+            result: { imported: newCount, skipped: existingCount, errors: result.errors, details: result.imported },
+            error: null,
+          };
+          console.log(`[XERO-IMPORT] Complete: ${newCount} imported, ${existingCount} skipped, ${result.errors.length} errors`);
+        } catch (error: any) {
+          console.error("Xero import invoices error:", error?.message || error);
+          xeroImportStatus = { running: false, progress: "Failed", result: null, error: error.message || "Failed to import invoices" };
+        }
+      })();
     } catch (error: any) {
       console.error("Xero import invoices error:", error?.message || error);
       if (error?.response?.statusCode === 401 || error?.statusCode === 401) {

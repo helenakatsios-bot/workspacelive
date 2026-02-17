@@ -242,19 +242,54 @@ export default function AdminPage() {
     },
   });
 
+  const [xeroImportRunning, setXeroImportRunning] = useState(false);
+  const [xeroImportProgress, setXeroImportProgress] = useState("");
+
   const importInvoicesMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/xero/import-invoices");
       return response.json();
     },
-    onSuccess: (data: { imported: number; skipped: number; errors: Array<{ invoiceNumber: string; error: string }> }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
-      const errorMsg = data.errors.length > 0 ? ` (${data.errors.length} errors)` : "";
-      toast({
-        title: "Orders imported from Xero",
-        description: `${data.imported} new orders created, ${data.skipped} already synced${errorMsg}`,
-      });
+    onSuccess: (data: any) => {
+      if (data.status === "running") {
+        setXeroImportRunning(true);
+        setXeroImportProgress(data.progress || "Starting import...");
+        toast({ title: "Import started", description: "Importing invoices from Xero in the background..." });
+        const pollInterval = setInterval(async () => {
+          try {
+            const res = await fetch("/api/xero/import-invoices/status", { credentials: "include" });
+            const status = await res.json();
+            setXeroImportProgress(status.progress || "");
+            if (!status.running) {
+              clearInterval(pollInterval);
+              setXeroImportRunning(false);
+              if (status.result) {
+                queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+                const errorMsg = status.result.errors?.length > 0 ? ` (${status.result.errors.length} errors)` : "";
+                toast({
+                  title: "Orders imported from Xero",
+                  description: `${status.result.imported} new orders created, ${status.result.skipped} already synced${errorMsg}`,
+                });
+              } else if (status.error) {
+                toast({ title: "Import failed", description: status.error, variant: "destructive" });
+              }
+            }
+          } catch {
+            clearInterval(pollInterval);
+            setXeroImportRunning(false);
+          }
+        }, 3000);
+      } else if (data.imported !== undefined) {
+        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+        const errorMsg = data.errors?.length > 0 ? ` (${data.errors.length} errors)` : "";
+        toast({
+          title: "Orders imported from Xero",
+          description: `${data.imported} new orders created, ${data.skipped} already synced${errorMsg}`,
+        });
+      }
     },
     onError: (error: Error) => {
       toast({ title: "Failed to import orders", description: error.message, variant: "destructive" });
@@ -606,15 +641,15 @@ export default function AdminPage() {
                   <div className="flex flex-wrap items-center gap-3">
                     <Button
                       onClick={() => importInvoicesMutation.mutate()}
-                      disabled={importInvoicesMutation.isPending}
+                      disabled={importInvoicesMutation.isPending || xeroImportRunning}
                       data-testid="button-xero-import-invoices"
                     >
-                      {importInvoicesMutation.isPending ? (
+                      {(importInvoicesMutation.isPending || xeroImportRunning) ? (
                         <Loader2 className="w-4 h-4 animate-spin mr-2" />
                       ) : (
                         <Download className="w-4 h-4 mr-2" />
                       )}
-                      {importInvoicesMutation.isPending ? "Importing orders..." : "Import All Orders from Xero"}
+                      {xeroImportRunning ? xeroImportProgress || "Importing..." : importInvoicesMutation.isPending ? "Starting..." : "Import All Orders from Xero"}
                     </Button>
                     <p className="text-sm text-muted-foreground">
                       Imports all invoices from Xero as orders matched to customer profiles
