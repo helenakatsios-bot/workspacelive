@@ -2626,6 +2626,7 @@ CRITICAL RULES:
         const bracketMatch = subject.match(/\[([^\]]+)\]/);
         if (bracketMatch) {
           const reseller = bracketMatch[1].trim().toLowerCase();
+          console.log(`[EMAIL-TO-ORDER] Forwarded Shopify - extracted reseller from brackets: "${reseller}"`);
           company = allCompanies.find(
             (c) => c.legalName.toLowerCase() === reseller ||
                    (c.tradingName && c.tradingName.toLowerCase() === reseller)
@@ -2637,6 +2638,11 @@ CRITICAL RULES:
                      reseller.includes(c.legalName.toLowerCase()) ||
                      (c.tradingName && reseller.includes(c.tradingName.toLowerCase()))
             );
+          }
+          if (company) {
+            console.log(`[EMAIL-TO-ORDER] Matched reseller to company: "${company.legalName}" (${company.id})`);
+          } else {
+            console.log(`[EMAIL-TO-ORDER] No company match found for reseller: "${reseller}"`);
           }
         }
         // Also try matching by sender email domain for forwarded orders
@@ -2794,9 +2800,25 @@ CRITICAL RULES:
         const existingOrders = await storage.getAllOrders();
         const duplicate = existingOrders.find((o) => o.orderNumber === `PD-${shopifyOrderNum}` || o.orderNumber === shopifyOrderNum || o.customerNotes?.includes(shopifyOrderNum));
         if (duplicate) {
-          return res.status(400).json({ message: `Order with Shopify # ${shopifyOrderNum} already exists`, orderId: duplicate.id });
+          if (isForwardedShopify && company && duplicate.companyId !== company.id) {
+            const existingForSameCompany = existingOrders.find((o) => 
+              o.companyId === company.id && (
+                o.internalNotes?.includes(`Shopify #${shopifyOrderNum}`) ||
+                o.customerNotes?.includes(`Shopify #${shopifyOrderNum}`)
+              )
+            );
+            if (existingForSameCompany) {
+              return res.status(400).json({ message: `Order for ${company.legalName} with Shopify #${shopifyOrderNum} already exists`, orderId: existingForSameCompany.id });
+            }
+            console.log(`[EMAIL-TO-ORDER] Shopify #${shopifyOrderNum} exists for different company (${duplicate.companyId}), creating new order for ${company.legalName}`);
+            const maxResult = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
+            orderNumber = String((parseInt(maxResult.rows[0].max_num) || 0) + 1);
+          } else {
+            return res.status(400).json({ message: `Order with Shopify # ${shopifyOrderNum} already exists`, orderId: duplicate.id });
+          }
+        } else {
+          orderNumber = shopifyOrderNum;
         }
-        orderNumber = shopifyOrderNum;
       } else {
         const maxResultPD = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
         orderNumber = String((parseInt(maxResultPD.rows[0].max_num) || 0) + 1);
@@ -2815,9 +2837,14 @@ CRITICAL RULES:
         customerAddress: customerAddress || null,
         customerEmail: customerEmail || null,
         sourceEmailId: emailId,
-        customerNotes: isShopifyEmail
-          ? `Converted from Puradown email. Customer: ${customerName}. Shipping: $${shipping.toFixed(2)}`
-          : `Converted from email: ${subject}`,
+        internalNotes: isForwardedShopify && shopifyOrderNum
+          ? `Forwarded Shopify #${shopifyOrderNum} for ${company.legalName}`
+          : undefined,
+        customerNotes: isForwardedShopify
+          ? `Converted from forwarded Shopify email (${company.legalName}). Shopify #${shopifyOrderNum || "N/A"}. Customer: ${customerName}. Shipping: $${shipping.toFixed(2)}`
+          : isShopifyEmail
+            ? `Converted from Puradown email. Customer: ${customerName}. Shipping: $${shipping.toFixed(2)}`
+            : `Converted from email: ${subject}`,
         createdBy: req.session.userId,
       });
 
@@ -2851,6 +2878,11 @@ CRITICAL RULES:
       await db.update(emailsTable).set({ isConverted: true }).where(eq(emailsTable.id, emailId));
 
       // Auto-attach the original email as a PDF to the order Files
+      const fs = await import("fs");
+      const path = await import("path");
+      const uploadsDir = path.default.join(process.cwd(), "uploads", "orders", order.id);
+      await fs.promises.mkdir(uploadsDir, { recursive: true });
+
       try {
         if (bodyHtml) {
           console.log(`[EMAIL-TO-ORDER] Generating email PDF for order ${order.orderNumber}, HTML length: ${bodyHtml.length}`);
@@ -2862,10 +2894,6 @@ CRITICAL RULES:
             customerEmail: customerEmail || "",
           });
           console.log(`[EMAIL-TO-ORDER] PDF generated, size: ${pdfBuffer.length} bytes`);
-          const fs = await import("fs");
-          const path = await import("path");
-          const uploadsDir = path.default.join(process.cwd(), "uploads", "orders", order.id);
-          await fs.promises.mkdir(uploadsDir, { recursive: true });
           const safeSubject = subject.replace(/[^a-zA-Z0-9_\-\s#]/g, "").trim().replace(/\s+/g, "_").substring(0, 80);
           const fileName = `Email_${safeSubject || "order"}.pdf`;
           const filePath = path.default.join(uploadsDir, fileName);
@@ -2888,6 +2916,49 @@ CRITICAL RULES:
       } catch (attachError: any) {
         console.error("[EMAIL-TO-ORDER] Failed to auto-attach email PDF:", attachError?.message || attachError);
         console.error("[EMAIL-TO-ORDER] PDF attachment stack:", attachError?.stack);
+      }
+
+      // Also download and attach any Outlook email attachments (shipping labels, PDFs, etc.)
+      try {
+        const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+        const host = req.headers["x-forwarded-host"] || req.headers.host;
+        const redirectUri = `${protocol}://${host}/api/outlook/callback`;
+        const accessToken = await refreshOutlookTokenIfNeeded(email.userId, redirectUri);
+        if (accessToken && email.outlookMessageId) {
+          const attRes = await fetch(
+            `https://graph.microsoft.com/v1.0/me/messages/${email.outlookMessageId}/attachments`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          if (attRes.ok) {
+            const attData = await attRes.json() as any;
+            const fileAttachments = (attData.value || []).filter((a: any) => a["@odata.type"] === "#microsoft.graph.fileAttachment" && !a.isInline);
+            console.log(`[EMAIL-TO-ORDER] Found ${fileAttachments.length} email attachments to download`);
+            for (const att of fileAttachments) {
+              try {
+                const attBuffer = Buffer.from(att.contentBytes, "base64");
+                const rawName = att.name || "attachment";
+                const attFileName = path.default.basename(rawName).replace(/[^a-zA-Z0-9_\-.\s]/g, "_");
+                const attFilePath = path.default.join(uploadsDir, attFileName);
+                await fs.promises.writeFile(attFilePath, attBuffer);
+                await storage.createAttachment({
+                  entityType: "order",
+                  entityId: order.id,
+                  fileName: attFileName,
+                  fileType: att.contentType || "application/octet-stream",
+                  fileSize: attBuffer.length,
+                  storagePath: attFilePath,
+                  uploadedBy: req.session.userId,
+                  description: `Email attachment: ${attFileName}`,
+                });
+                console.log(`[EMAIL-TO-ORDER] Attached email file: ${attFileName} (${attBuffer.length} bytes)`);
+              } catch (fileErr: any) {
+                console.error(`[EMAIL-TO-ORDER] Failed to attach file ${att.name}:`, fileErr?.message);
+              }
+            }
+          }
+        }
+      } catch (outlookAttachErr: any) {
+        console.error("[EMAIL-TO-ORDER] Failed to download Outlook attachments:", outlookAttachErr?.message);
       }
 
       res.status(201).json(order);
