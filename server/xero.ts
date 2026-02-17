@@ -126,35 +126,40 @@ export async function refreshTokenIfNeeded(xero: XeroClient, token: typeof xeroT
   const expiresWithin5Min = expiresAt.getTime() - now.getTime() < 5 * 60 * 1000;
   
   if (isExpired || expiresWithin5Min) {
-    console.log(`[XERO] Token ${isExpired ? 'expired' : 'expiring soon'}, attempting refresh...`);
+    console.log(`[XERO] Token ${isExpired ? 'expired' : 'expiring soon'}, attempting refresh via direct API...`);
     try {
-      xero.setTokenSet({
-        access_token: token.accessToken,
-        refresh_token: token.refreshToken,
-        expires_at: Math.floor(expiresAt.getTime() / 1000),
-        token_type: "Bearer",
-        scope: XERO_SCOPES,
+      const basicAuth = Buffer.from(`${XERO_CLIENT_ID}:${XERO_CLIENT_SECRET}`).toString("base64");
+      const refreshResponse = await fetch("https://identity.xero.com/connect/token", {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${basicAuth}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: token.refreshToken,
+        }),
       });
-      
-      const newTokenSet = await xero.refreshToken();
+
+      if (!refreshResponse.ok) {
+        const errText = await refreshResponse.text();
+        console.error("[XERO] Token refresh API error:", refreshResponse.status, errText);
+        return false;
+      }
+
+      const newTokenSet = await refreshResponse.json() as any;
       
       if (newTokenSet.access_token && newTokenSet.refresh_token) {
+        const expiresInSec = newTokenSet.expires_in || 1800;
+        const newExpiresAt = new Date(Date.now() + expiresInSec * 1000);
         await saveXeroToken(
           token.tenantId,
           token.tenantName || undefined,
           newTokenSet.access_token,
           newTokenSet.refresh_token,
-          new Date((newTokenSet.expires_at || 0) * 1000)
+          newExpiresAt
         );
-        console.log("[XERO] Token refreshed successfully");
-        
-        xero.setTokenSet({
-          access_token: newTokenSet.access_token,
-          refresh_token: newTokenSet.refresh_token,
-          expires_at: newTokenSet.expires_at || 0,
-          token_type: "Bearer",
-          scope: XERO_SCOPES,
-        });
+        console.log("[XERO] Token refreshed successfully via direct API");
         return true;
       }
       console.error("[XERO] Refresh returned empty tokens");
@@ -386,18 +391,57 @@ async function createInvoiceFromXero(
   }).onConflictDoNothing();
 }
 
+async function getFreshXeroToken(tenantId: string): Promise<string | null> {
+  const token = await getStoredToken();
+  if (!token || token.tenantId !== tenantId) return null;
+  const now = new Date();
+  const expiresAt = new Date(token.expiresAt);
+  if (expiresAt.getTime() - now.getTime() < 2 * 60 * 1000) {
+    const basicAuth = Buffer.from(`${XERO_CLIENT_ID}:${XERO_CLIENT_SECRET}`).toString("base64");
+    try {
+      const refreshResponse = await fetch("https://identity.xero.com/connect/token", {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${basicAuth}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: token.refreshToken,
+        }),
+      });
+      if (!refreshResponse.ok) return null;
+      const newTokenSet = await refreshResponse.json() as any;
+      if (newTokenSet.access_token && newTokenSet.refresh_token) {
+        const expiresInSec = newTokenSet.expires_in || 1800;
+        await saveXeroToken(tenantId, token.tenantName || undefined, newTokenSet.access_token, newTokenSet.refresh_token, new Date(Date.now() + expiresInSec * 1000));
+        console.log("[XERO] Mid-import token refresh successful");
+        return newTokenSet.access_token;
+      }
+    } catch (e: any) {
+      console.error("[XERO] Mid-import token refresh failed:", e?.message);
+    }
+    return null;
+  }
+  return token.accessToken;
+}
+
 export async function importInvoicesFromXero(accessToken: string, tenantId: string) {
   const imported: { invoiceNumber: string; companyName: string; isNew: boolean; total: number }[] = [];
   const errors: { invoiceNumber: string; error: string }[] = [];
   let page = 1;
   let hasMore = true;
+  let currentToken = accessToken;
 
   while (hasMore) {
+    const freshToken = await getFreshXeroToken(tenantId);
+    if (freshToken) currentToken = freshToken;
+
     const response = await fetch(
       `https://api.xero.com/api.xro/2.0/Invoices?page=${page}&where=Type%3D%3D%22ACCREC%22&order=Date%20DESC`,
       {
         headers: {
-          "Authorization": `Bearer ${accessToken}`,
+          "Authorization": `Bearer ${currentToken}`,
           "Xero-Tenant-Id": tenantId,
           "Accept": "application/json",
         },
@@ -405,6 +449,14 @@ export async function importInvoicesFromXero(accessToken: string, tenantId: stri
     );
 
     if (!response.ok) {
+      if (response.status === 401) {
+        const retryToken = await getFreshXeroToken(tenantId);
+        if (retryToken && retryToken !== currentToken) {
+          currentToken = retryToken;
+          console.log(`[XERO] Token refreshed mid-import, retrying page ${page}`);
+          continue;
+        }
+      }
       const errorText = await response.text();
       console.error(`Xero invoices API error (page ${page}):`, errorText);
       throw new Error(`Failed to fetch invoices from Xero: ${response.status}`);
