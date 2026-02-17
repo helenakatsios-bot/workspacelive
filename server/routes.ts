@@ -2805,9 +2805,13 @@ CRITICAL RULES:
           o.sourceEmailId === emailId
         );
         if (duplicate) {
-          if (isForwardedShopify && company && duplicate.companyId !== company.id) {
+          if (duplicate.sourceEmailId === emailId) {
+            return res.status(400).json({ message: `This email was already converted to order ${duplicate.orderNumber}`, orderId: duplicate.id });
+          }
+          if (company && duplicate.companyId !== company.id) {
             const existingForSameCompany = existingOrders.find((o) => 
               o.companyId === company.id && (
+                o.sourceEmailId === emailId ||
                 o.internalNotes?.includes(`Shopify #${shopifyOrderNum}`) ||
                 o.customerNotes?.includes(`Shopify #${shopifyOrderNum}`)
               )
@@ -2815,9 +2819,11 @@ CRITICAL RULES:
             if (existingForSameCompany) {
               return res.status(400).json({ message: `Order for ${company.legalName} with Shopify #${shopifyOrderNum} already exists`, orderId: existingForSameCompany.id });
             }
-            console.log(`[EMAIL-TO-ORDER] Shopify #${shopifyOrderNum} exists for different company (${duplicate.companyId}), creating new order for ${company.legalName}`);
+            console.log(`[EMAIL-TO-ORDER] Order #${shopifyOrderNum} exists for different company (${duplicate.companyId} - "${duplicate.customerNotes?.substring(0,50)}"), creating new order for ${company.legalName}`);
             const maxResult = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
             orderNumber = String((parseInt(maxResult.rows[0].max_num) || 0) + 1);
+          } else if (duplicate.companyId === company?.id) {
+            return res.status(400).json({ message: `Order #${shopifyOrderNum} already exists for ${company.legalName}`, orderId: duplicate.id });
           } else {
             return res.status(400).json({ message: `Order with Shopify # ${shopifyOrderNum} already exists`, orderId: duplicate.id });
           }
@@ -2842,13 +2848,15 @@ CRITICAL RULES:
         customerAddress: customerAddress || null,
         customerEmail: customerEmail || null,
         sourceEmailId: emailId,
-        internalNotes: isForwardedShopify && shopifyOrderNum
-          ? `Forwarded Shopify #${shopifyOrderNum} for ${company.legalName}`
+        internalNotes: shopifyOrderNum
+          ? (isForwardedShopify 
+              ? `Forwarded Shopify #${shopifyOrderNum} for ${company.legalName}` 
+              : `Shopify #${shopifyOrderNum}`)
           : undefined,
         customerNotes: isForwardedShopify
           ? `Converted from forwarded Shopify email (${company.legalName}). Shopify #${shopifyOrderNum || "N/A"}. Customer: ${customerName}. Shipping: $${shipping.toFixed(2)}`
           : isShopifyEmail
-            ? `Converted from Puradown email. Customer: ${customerName}. Shipping: $${shipping.toFixed(2)}`
+            ? `Converted from Puradown email. Shopify #${shopifyOrderNum || "N/A"}. Customer: ${customerName}. Shipping: $${shipping.toFixed(2)}`
             : `Converted from email: ${subject}`,
         createdBy: req.session.userId,
       });
