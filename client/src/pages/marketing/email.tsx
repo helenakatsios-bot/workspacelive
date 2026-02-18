@@ -50,6 +50,7 @@ interface ExtractedOrder {
 
 export default function MarketingEmailPage() {
   const { data: emails, isLoading } = useQuery<any[]>({ queryKey: ["/api/emails"], queryFn: async () => { const res = await fetch("/api/emails?limit=10000"); if (!res.ok) throw new Error("Failed to fetch emails"); return res.json(); } });
+  const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState<FolderTab>("all");
   const { toast } = useToast();
@@ -58,25 +59,38 @@ export default function MarketingEmailPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [pdfAttachments, setPdfAttachments] = useState<PdfAttachment[]>([]);
   const [loadingAttachments, setLoadingAttachments] = useState(false);
+  const [loadingEmailDetail, setLoadingEmailDetail] = useState(false);
   const [extractedOrder, setExtractedOrder] = useState<ExtractedOrder | null>(null);
   const [extractingPdf, setExtractingPdf] = useState<string | null>(null);
   const [showOrderReview, setShowOrderReview] = useState(false);
   const [editableOrder, setEditableOrder] = useState<ExtractedOrder | null>(null);
 
-  useEffect(() => {
-    if (selectedEmail) {
-      setLoadingAttachments(true);
-      setPdfAttachments([]);
-      setExtractedOrder(null);
-      setShowOrderReview(false);
-      setEditableOrder(null);
-      fetch(`/api/emails/${selectedEmail.id}/attachments`, { credentials: "include" })
-        .then(r => r.ok ? r.json() : [])
-        .then(data => setPdfAttachments(data || []))
-        .catch(() => setPdfAttachments([]))
-        .finally(() => setLoadingAttachments(false));
-    }
-  }, [selectedEmail?.id]);
+  const openEmail = async (email: any) => {
+    setSelectedEmailId(email.id);
+    setSelectedEmail(email);
+    setLoadingEmailDetail(true);
+    setLoadingAttachments(true);
+    setPdfAttachments([]);
+    setExtractedOrder(null);
+    setShowOrderReview(false);
+    setEditableOrder(null);
+    try {
+      const [detailRes, attachRes] = await Promise.all([
+        fetch(`/api/emails/${email.id}/detail`, { credentials: "include" }),
+        fetch(`/api/emails/${email.id}/attachments`, { credentials: "include" }),
+      ]);
+      if (detailRes.ok) {
+        const detail = await detailRes.json();
+        setSelectedEmail(detail);
+      }
+      if (attachRes.ok) {
+        const data = await attachRes.json();
+        setPdfAttachments(data || []);
+      }
+    } catch {}
+    setLoadingEmailDetail(false);
+    setLoadingAttachments(false);
+  };
 
   const syncMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/outlook/sync"),
@@ -129,6 +143,7 @@ export default function MarketingEmailPage() {
       const order = await res.json();
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({ title: "Order created", description: `Order ${order.orderNumber} has been created from the PDF` });
+      setSelectedEmailId(null);
       setSelectedEmail(null);
       setShowOrderReview(false);
       navigate(`/orders/${order.id}`);
@@ -147,6 +162,7 @@ export default function MarketingEmailPage() {
       const data = await res.json();
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({ title: "Order created", description: `Order ${data.orderNumber || ""} has been created from this email` });
+      setSelectedEmailId(null);
       setSelectedEmail(null);
       navigate(`/orders/${data.id}`);
     },
@@ -155,6 +171,7 @@ export default function MarketingEmailPage() {
         if (error?.message) {
           const parsed = JSON.parse(error.message.replace(/^\d+:\s*/, ""));
           if (parsed.orderId) {
+            setSelectedEmailId(null);
             setSelectedEmail(null);
             toast({ title: "Order Already Exists", description: "This email was already converted to an order. Opening it now." });
             navigate(`/orders/${parsed.orderId}`);
@@ -355,7 +372,7 @@ export default function MarketingEmailPage() {
                   key={email.id}
                   className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer hover-elevate ${email.isReviewed ? "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-900/50" : ""}`}
                   data-testid={`email-item-${email.id}`}
-                  onClick={() => setSelectedEmail(email)}
+                  onClick={() => openEmail(email)}
                 >
                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                     {email.folder === "sentItems" ? (
@@ -427,7 +444,7 @@ export default function MarketingEmailPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!selectedEmail} onOpenChange={(open) => { if (!open) { setSelectedEmail(null); setShowOrderReview(false); setExtractedOrder(null); } }}>
+      <Dialog open={!!selectedEmailId} onOpenChange={(open) => { if (!open) { setSelectedEmailId(null); setSelectedEmail(null); setShowOrderReview(false); setExtractedOrder(null); } }}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           {selectedEmail && !showOrderReview && (
             <>
@@ -544,7 +561,11 @@ export default function MarketingEmailPage() {
                 )}
 
                 <div className="min-h-[200px]">
-                  {selectedEmail.bodyHtml ? (
+                  {loadingEmailDetail ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : selectedEmail.bodyHtml ? (
                     <div
                       className="prose prose-sm dark:prose-invert max-w-none"
                       dangerouslySetInnerHTML={{ __html: selectedEmail.bodyHtml }}

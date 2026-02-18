@@ -141,7 +141,7 @@ export default function OrderDetailPage() {
   });
 
   const { data: sourceEmail } = useQuery<any>({
-    queryKey: ["/api/emails", order?.sourceEmailId],
+    queryKey: ["/api/emails", order?.sourceEmailId, "detail"],
     enabled: !!order?.sourceEmailId,
   });
 

@@ -139,6 +139,26 @@ export default function CompanyDetailPage() {
 
   const [emailsOpen, setEmailsOpen] = useState(true);
   const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
+  const [expandedEmailBody, setExpandedEmailBody] = useState<string | null>(null);
+  const [loadingEmailBody, setLoadingEmailBody] = useState(false);
+  const handleExpandEmail = async (emailId: string) => {
+    if (expandedEmailId === emailId) {
+      setExpandedEmailId(null);
+      setExpandedEmailBody(null);
+      return;
+    }
+    setExpandedEmailId(emailId);
+    setExpandedEmailBody(null);
+    setLoadingEmailBody(true);
+    try {
+      const res = await fetch(`/api/emails/${emailId}/detail`, { credentials: "include" });
+      if (res.ok) {
+        const detail = await res.json();
+        setExpandedEmailBody(detail.bodyHtml || detail.bodyPreview || "");
+      }
+    } catch {}
+    setLoadingEmailBody(false);
+  };
 
   const { data: allProducts } = useQuery<Product[]>({
     queryKey: ["/api/products"],
@@ -1553,7 +1573,7 @@ export default function CompanyDetailPage() {
                         <div key={email.id} className="rounded-md border overflow-hidden">
                           <div
                             className="flex items-start gap-2 p-2 hover-elevate cursor-pointer"
-                            onClick={() => setExpandedEmailId(expandedEmailId === email.id ? null : email.id)}
+                            onClick={() => handleExpandEmail(email.id)}
                             data-testid={`row-email-${email.id}`}
                           >
                             <Mail className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
@@ -1568,10 +1588,15 @@ export default function CompanyDetailPage() {
                             </div>
                           </div>
                           {expandedEmailId === email.id && (
-                            <div
-                              className="p-3 border-t bg-muted/30 text-sm overflow-auto max-h-[300px]"
-                              dangerouslySetInnerHTML={{ __html: email.bodyHtml || email.bodyPreview || "" }}
-                            />
+                            <div className="p-3 border-t bg-muted/30 text-sm overflow-auto max-h-[300px]">
+                              {loadingEmailBody ? (
+                                <div className="flex items-center justify-center py-4">
+                                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                                </div>
+                              ) : (
+                                <div dangerouslySetInnerHTML={{ __html: expandedEmailBody || email.bodyPreview || "" }} />
+                              )}
+                            </div>
                           )}
                         </div>
                       ))}

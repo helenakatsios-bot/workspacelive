@@ -28,12 +28,30 @@ function isOrderEmail(_email: any): boolean {
 export default function EmailsPage() {
   const [folder, setFolder] = useState("inbox");
   const [selectedEmail, setSelectedEmail] = useState<any>(null);
+  const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+  const [loadingEmailDetail, setLoadingEmailDetail] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showReply, setShowReply] = useState(false);
   const [replyAll, setReplyAll] = useState(false);
   const [replyBody, setReplyBody] = useState("");
   const { toast } = useToast();
   const [, navigate] = useLocation();
+
+  const openEmail = async (email: any) => {
+    setSelectedEmailId(email.id);
+    setSelectedEmail(email);
+    setLoadingEmailDetail(true);
+    setShowReply(false);
+    setReplyBody("");
+    try {
+      const res = await fetch(`/api/emails/${email.id}/detail`, { credentials: "include" });
+      if (res.ok) {
+        const detail = await res.json();
+        setSelectedEmail(detail);
+      }
+    } catch {}
+    setLoadingEmailDetail(false);
+  };
 
   const convertToOrderMutation = useMutation({
     mutationFn: async (emailId: string) => {
@@ -42,6 +60,7 @@ export default function EmailsPage() {
     },
     onSuccess: (order: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setSelectedEmailId(null);
       setSelectedEmail(null);
       toast({ title: "Order Created", description: `Order ${order.orderNumber} created successfully.` });
       navigate(`/orders/${order.id}`);
@@ -52,6 +71,7 @@ export default function EmailsPage() {
         if (error?.message) {
           const parsed = JSON.parse(error.message.replace(/^\d+:\s*/, ""));
           if (parsed.orderId) {
+            setSelectedEmailId(null);
             setSelectedEmail(null);
             toast({ title: "Order Already Exists", description: `Order ${parsed.message?.replace("Order ", "").replace(" already exists", "") || ""} was already created from this email. Opening it now.` });
             navigate(`/orders/${parsed.orderId}`);
@@ -136,6 +156,7 @@ export default function EmailsPage() {
     if (isOrderEmail(email)) {
       convertToOrderMutation.mutate(email.id);
     } else {
+      setSelectedEmailId(null);
       setSelectedEmail(null);
       const fromAddr = email.fromAddress || "";
       navigate(`/orders/new?emailId=${email.id}&fromEmail=${encodeURIComponent(fromAddr)}&subject=${encodeURIComponent(email.subject || "")}`);
@@ -234,11 +255,7 @@ export default function EmailsPage() {
                       <TableRow
                         key={email.id}
                         className={`cursor-pointer hover-elevate ${email.isReviewed ? "bg-green-50 dark:bg-green-950/30" : ""}`}
-                        onClick={() => {
-                          setSelectedEmail(email);
-                          setShowReply(false);
-                          setReplyBody("");
-                        }}
+                        onClick={() => openEmail(email)}
                         data-testid={`row-email-${email.id}`}
                       >
                         <TableCell>
@@ -317,7 +334,7 @@ export default function EmailsPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={!!selectedEmail} onOpenChange={(open) => { if (!open) { setSelectedEmail(null); setShowReply(false); setReplyBody(""); } }}>
+      <Dialog open={!!selectedEmailId} onOpenChange={(open) => { if (!open) { setSelectedEmailId(null); setSelectedEmail(null); setShowReply(false); setReplyBody(""); } }}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle data-testid="text-email-subject">{selectedEmail?.subject || "(No subject)"}</DialogTitle>
@@ -436,7 +453,11 @@ export default function EmailsPage() {
 
               <Separator />
               <div className="prose prose-sm dark:prose-invert max-w-none">
-                {selectedEmail.bodyHtml ? (
+                {loadingEmailDetail ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : selectedEmail.bodyHtml ? (
                   <div dangerouslySetInnerHTML={{ __html: selectedEmail.bodyHtml }} />
                 ) : (
                   <p className="whitespace-pre-wrap text-sm">{selectedEmail.bodyPreview || "No content"}</p>

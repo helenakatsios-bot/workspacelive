@@ -2432,7 +2432,7 @@ export async function registerRoutes(
     }
   });
 
-  // Get emails
+  // Get emails (list - excludes bodyHtml for performance)
   app.get("/api/emails", requireAuth, async (req, res) => {
     try {
       const { folder, companyId, contactId, limit = "50" } = req.query;
@@ -2447,10 +2447,25 @@ export async function registerRoutes(
         emailList = await getAllEmails(req.session.userId!, folder as string | undefined, parseInt(limit as string));
       }
       
-      res.json(emailList);
+      const lightList = emailList.map(({ bodyHtml, ...rest }: any) => rest);
+      res.json(lightList);
     } catch (error) {
       console.error("Get emails error:", error);
       res.status(500).json({ message: "Failed to get emails" });
+    }
+  });
+
+  // Get single email detail (includes bodyHtml)
+  app.get("/api/emails/:id/detail", requireAuth, async (req, res) => {
+    try {
+      const [email] = await db.select().from(emailsTable).where(eq(emailsTable.id, req.params.id)).limit(1);
+      if (!email) {
+        return res.status(404).json({ message: "Email not found" });
+      }
+      res.json(email);
+    } catch (error) {
+      console.error("Get email detail error:", error);
+      res.status(500).json({ message: "Failed to get email detail" });
     }
   });
 
