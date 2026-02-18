@@ -2606,12 +2606,129 @@ CRITICAL RULES:
         }
       }
 
-      // Validate: ALL emails must have at least one parsed order line
-      // (forwarded Shopify emails also need items - they go through AI parsing)
+      // If no order lines from email body, try extracting from PDF attachments
       if (lines.length === 0) {
-        console.error("[EMAIL-TO-ORDER] No order lines extracted. Subject:", subject, "isShopify:", isShopifyEmail, "isForwarded:", isForwardedShopify);
+        console.log("[EMAIL-TO-ORDER] No order lines from email body, checking for PDF attachments...");
+        try {
+          const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+          const host = req.headers["x-forwarded-host"] || req.headers.host;
+          const redirectUri = `${protocol}://${host}/api/outlook/callback`;
+          const accessToken = await refreshOutlookTokenIfNeeded(email.userId, redirectUri);
+          if (accessToken && email.outlookMessageId) {
+            const attachments = await fetchEmailAttachments(accessToken, email.outlookMessageId);
+            const pdfAttachments = attachments.filter((a: any) => !a.isInline && (a.contentType === "application/pdf" || a.name?.toLowerCase().endsWith(".pdf")));
+            if (pdfAttachments.length > 0) {
+              console.log(`[EMAIL-TO-ORDER] Found ${pdfAttachments.length} PDF attachment(s), extracting from first: ${pdfAttachments[0].name}`);
+              const pdfBuffer = await downloadAttachment(accessToken, email.outlookMessageId, pdfAttachments[0].id);
+              const pdfHeader = pdfBuffer.slice(0, 5).toString();
+              if (pdfHeader === "%PDF-") {
+                let pdfText = "";
+                try {
+                  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+                  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(pdfBuffer), useSystemFonts: true });
+                  const pdfDoc = await loadingTask.promise;
+                  const textParts: string[] = [];
+                  for (let i = 1; i <= pdfDoc.numPages; i++) {
+                    const page = await pdfDoc.getPage(i);
+                    const content = await page.getTextContent();
+                    const pageText = content.items.filter((item: any) => "str" in item).map((item: any) => item.str).join(" ");
+                    textParts.push(pageText);
+                  }
+                  pdfText = textParts.join("\n");
+                } catch { pdfText = ""; }
+
+                const isScannedPdf = !pdfText || pdfText.trim().length < 10;
+                const OpenAI2 = (await import("openai")).default;
+                const openai2 = new OpenAI2({
+                  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+                  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+                });
+                const pdfSystemPrompt = `You are an order data extraction assistant. Extract order details from the provided content.
+Return a JSON object with: { "companyName": "", "contactName": "", "contactEmail": "", "contactPhone": "", "deliveryAddress": "", "poNumber": "", "notes": "", "lines": [{"description": "", "quantity": 1, "unitPrice": 0, "lineTotal": 0}], "subtotal": 0, "tax": 0, "total": 0 }
+Rules: Extract ALL line items. If prices are not present, use 0. Quantities must be integers >= 1. Return ONLY the JSON object.`;
+
+                let pdfAiResponse;
+                if (isScannedPdf) {
+                  const { execSync } = await import("child_process");
+                  const fsP = await import("fs");
+                  const osP = await import("os");
+                  const pathP = await import("path");
+                  const tmpDir = fsP.mkdtempSync(pathP.join(osP.tmpdir(), "pdf-ocr-"));
+                  const pdfPath = pathP.join(tmpDir, "input.pdf");
+                  fsP.writeFileSync(pdfPath, pdfBuffer);
+                  try {
+                    execSync(`pdftoppm -png -r 200 -l 3 "${pdfPath}" "${pathP.join(tmpDir, "page")}"`);
+                    const pageFiles = fsP.readdirSync(tmpDir).filter((f: string) => f.endsWith(".png")).sort().slice(0, 3);
+                    if (pageFiles.length > 0) {
+                      const imageContents: any[] = pageFiles.map((f: string) => {
+                        const imgBuf = fsP.readFileSync(pathP.join(tmpDir, f));
+                        return { type: "image_url" as const, image_url: { url: `data:image/png;base64,${imgBuf.toString("base64")}` } };
+                      });
+                      pdfAiResponse = await openai2.chat.completions.create({
+                        model: "gpt-4o-mini",
+                        messages: [
+                          { role: "system", content: pdfSystemPrompt },
+                          { role: "user", content: [{ type: "text" as const, text: "Extract order details from this scanned PDF:" }, ...imageContents] }
+                        ],
+                        response_format: { type: "json_object" },
+                      });
+                    }
+                  } finally {
+                    try { const files = fsP.readdirSync(tmpDir); for (const f of files) fsP.unlinkSync(pathP.join(tmpDir, f)); fsP.rmdirSync(tmpDir); } catch {}
+                  }
+                } else {
+                  pdfAiResponse = await openai2.chat.completions.create({
+                    model: "gpt-4o-mini",
+                    messages: [
+                      { role: "system", content: pdfSystemPrompt },
+                      { role: "user", content: `Extract order details from this PDF:\n\n${pdfText.substring(0, 8000)}` }
+                    ],
+                    response_format: { type: "json_object" },
+                  });
+                }
+
+                if (pdfAiResponse) {
+                  const pdfContent = pdfAiResponse.choices[0]?.message?.content || "{}";
+                  try {
+                    const pdfData = JSON.parse(pdfContent);
+                    if (pdfData.lines && Array.isArray(pdfData.lines)) {
+                      for (const l of pdfData.lines) {
+                        if (l.description) {
+                          lines.push({
+                            description: l.description,
+                            quantity: Math.max(1, parseInt(l.quantity) || 1),
+                            unitPrice: parseFloat(l.unitPrice) || 0,
+                            lineTotal: parseFloat(l.lineTotal) || 0,
+                          });
+                        }
+                      }
+                    }
+                    if (pdfData.companyName && !companyName) companyName = pdfData.companyName;
+                    if (pdfData.contactName && !customerName) customerName = pdfData.contactName;
+                    if (pdfData.contactEmail && !customerEmail) customerEmail = pdfData.contactEmail;
+                    if (pdfData.contactPhone && !customerPhone) customerPhone = pdfData.contactPhone;
+                    if (pdfData.deliveryAddress && !customerAddress) customerAddress = pdfData.deliveryAddress;
+                    if (pdfData.subtotal) subtotal = parseFloat(pdfData.subtotal) || subtotal;
+                    if (pdfData.tax) { /* tax handled later */ }
+                    if (pdfData.total) total = parseFloat(pdfData.total) || total;
+                    if (pdfData.poNumber) shopifyOrderNum = pdfData.poNumber;
+                    console.log(`[EMAIL-TO-ORDER] Extracted ${lines.length} lines from PDF attachment: ${pdfAttachments[0].name}`);
+                  } catch (jsonErr) {
+                    console.error("[EMAIL-TO-ORDER] Failed to parse PDF AI response:", jsonErr);
+                  }
+                }
+              }
+            }
+          }
+        } catch (pdfErr: any) {
+          console.error("[EMAIL-TO-ORDER] PDF fallback extraction failed:", pdfErr?.message);
+        }
+      }
+
+      if (lines.length === 0) {
+        console.error("[EMAIL-TO-ORDER] No order lines extracted from email or PDF. Subject:", subject);
         return res.status(400).json({ 
-          error: "No order lines could be parsed from this email. The AI could not extract any products. Please check the email content or create the order manually." 
+          error: "No order lines could be parsed from this email or its PDF attachments. The AI could not extract any products. Please check the email content or create the order manually." 
         });
       }
       console.log(`[EMAIL-TO-ORDER] Successfully extracted ${lines.length} order lines`);
