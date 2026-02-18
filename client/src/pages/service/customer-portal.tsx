@@ -14,6 +14,15 @@ import {
   Search,
   Copy,
   Check,
+  Eye,
+  Building2,
+  Mail,
+  Calendar,
+  Clock,
+  Shield,
+  Package,
+  FileText,
+  DollarSign,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,6 +89,7 @@ export default function CustomerPortalPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null);
+  const [showProfileDialog, setShowProfileDialog] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -317,6 +327,15 @@ export default function CustomerPortalPage() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          onClick={() => setShowProfileDialog(user.id)}
+                          title="View profile"
+                          data-testid={`button-view-${user.id}`}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => toggleMutation.mutate({ id: user.id, active: !user.active })}
                           title={user.active ? "Disable user" : "Enable user"}
                           data-testid={`button-toggle-${user.id}`}
@@ -501,6 +520,273 @@ export default function CustomerPortalPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {showProfileDialog && (
+        <PortalUserProfileDialog
+          userId={showProfileDialog}
+          onClose={() => setShowProfileDialog(null)}
+          onNavigateCompany={(companyId) => {
+            window.location.href = `/companies/${companyId}`;
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+const statusColors: Record<string, string> = {
+  new: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  confirmed: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
+  in_production: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  ready: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  dispatched: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  completed: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
+  cancelled: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  on_hold: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+};
+
+function PortalUserProfileDialog({
+  userId,
+  onClose,
+  onNavigateCompany,
+}: {
+  userId: string;
+  onClose: () => void;
+  onNavigateCompany: (companyId: string) => void;
+}) {
+  const { data: profile, isLoading } = useQuery<any>({
+    queryKey: ["/api/admin/portal-users", userId, "profile"],
+  });
+
+  const gradeColors: Record<string, string> = {
+    A: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
+    B: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+    C: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Users className="w-5 h-5" />
+            Portal User Profile
+          </DialogTitle>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : profile ? (
+          <div className="space-y-6">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <span className="text-lg font-semibold text-primary">
+                  {profile.name?.charAt(0)?.toUpperCase() || "?"}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-lg font-semibold" data-testid="text-profile-name">{profile.name}</h3>
+                  <Badge
+                    className={profile.active
+                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+                      : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}
+                    data-testid="badge-profile-status"
+                  >
+                    {profile.active ? "Active" : "Disabled"}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-1">
+                  <Mail className="w-3.5 h-3.5" />
+                  <span data-testid="text-profile-email">{profile.email}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Building2 className="w-4 h-4" />
+                    Company
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Name</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium" data-testid="text-profile-company">
+                        {profile.tradingName || profile.companyName || "-"}
+                      </p>
+                      {profile.grade && (
+                        <Badge className={gradeColors[profile.grade] || ""} data-testid="badge-profile-grade">
+                          Grade {profile.grade}
+                        </Badge>
+                      )}
+                    </div>
+                    {profile.tradingName && profile.companyName && profile.tradingName !== profile.companyName && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{profile.companyName}</p>
+                    )}
+                  </div>
+                  {profile.paymentTerms && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Payment Terms</p>
+                      <p className="text-sm">{profile.paymentTerms}</p>
+                    </div>
+                  )}
+                  {profile.shippingAddress && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Shipping Address</p>
+                      <p className="text-sm">{profile.shippingAddress}</p>
+                    </div>
+                  )}
+                  {profile.companyPhone && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Phone</p>
+                      <p className="text-sm">{profile.companyPhone}</p>
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-2"
+                    onClick={() => onNavigateCompany(profile.companyId)}
+                    data-testid="button-view-company"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                    View Company Profile
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Shield className="w-4 h-4" />
+                    Access Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <Calendar className="w-3.5 h-3.5 mt-0.5 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Account Created</p>
+                      <p className="text-sm">{format(new Date(profile.createdAt), "MMM d, yyyy")}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Clock className="w-3.5 h-3.5 mt-0.5 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Last Login</p>
+                      <p className="text-sm">
+                        {profile.lastLogin
+                          ? format(new Date(profile.lastLogin), "MMM d, yyyy h:mm a")
+                          : "Never logged in"}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-4">
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <Package className="w-5 h-5 mx-auto mb-1 text-blue-500" />
+                  <p className="text-xl font-semibold" data-testid="text-stat-total-orders">{profile.stats?.totalOrders || 0}</p>
+                  <p className="text-xs text-muted-foreground">Total Orders</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <Package className="w-5 h-5 mx-auto mb-1 text-orange-500" />
+                  <p className="text-xl font-semibold" data-testid="text-stat-open-orders">{profile.stats?.openOrders || 0}</p>
+                  <p className="text-xs text-muted-foreground">Open Orders</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <DollarSign className="w-5 h-5 mx-auto mb-1 text-emerald-500" />
+                  <p className="text-xl font-semibold" data-testid="text-stat-total-spent">
+                    ${(profile.stats?.totalSpent || 0).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Total Spent</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <FileText className="w-5 h-5 mx-auto mb-1 text-red-500" />
+                  <p className="text-xl font-semibold" data-testid="text-stat-outstanding">
+                    ${(profile.stats?.outstandingAmount || 0).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Outstanding</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {profile.recentOrders && profile.recentOrders.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Recent Orders</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Order #</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Payment</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {profile.recentOrders.map((order: any) => (
+                        <TableRow
+                          key={order.id}
+                          className="cursor-pointer"
+                          onClick={() => { window.location.href = `/orders/${order.id}`; }}
+                          data-testid={`row-recent-order-${order.id}`}
+                        >
+                          <TableCell className="font-medium">{order.orderNumber}</TableCell>
+                          <TableCell className="text-sm">
+                            {order.orderDate ? format(new Date(order.orderDate), "MMM d, yyyy") : "-"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              className={statusColors[order.status] || "bg-gray-100 text-gray-800"}
+                            >
+                              {(order.status || "unknown").replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              className={order.paymentStatus === "paid"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"}
+                            >
+                              {order.paymentStatus === "paid" ? "Paid" : "Unpaid"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            ${parseFloat(order.total || "0").toLocaleString("en-AU", { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            <p>User not found</p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

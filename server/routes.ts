@@ -4910,6 +4910,82 @@ Rules:
     }
   });
 
+  app.get("/api/admin/portal-users/:id/profile", requireAdmin, async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const [user] = await pool.query(`
+        SELECT pu.id, pu.company_id, pu.contact_id, pu.name, pu.email, pu.active, pu.created_at, pu.last_login,
+          c.legal_name as company_name, c.trading_name, c.payment_terms, c.phone as company_phone,
+          c.shipping_address, c.grade
+        FROM portal_users pu
+        LEFT JOIN companies c ON c.id = pu.company_id
+        WHERE pu.id = $1
+      `, [userId]).then(r => r.rows);
+      if (!user) return res.status(404).json({ message: "Portal user not found" });
+
+      const orderStats = await pool.query(`
+        SELECT 
+          COUNT(*) as total_orders,
+          COUNT(*) FILTER (WHERE status NOT IN ('completed', 'cancelled')) as open_orders,
+          COALESCE(SUM(CAST(total AS DECIMAL)), 0) as total_spent,
+          MAX(order_date) as last_order_date
+        FROM orders WHERE company_id = $1
+      `, [user.company_id]);
+
+      const invoiceStats = await pool.query(`
+        SELECT 
+          COUNT(*) as total_invoices,
+          COUNT(*) FILTER (WHERE status IN ('sent', 'overdue')) as unpaid_invoices,
+          COALESCE(SUM(CASE WHEN status IN ('sent', 'overdue') THEN CAST(total AS DECIMAL) ELSE 0 END), 0) as outstanding_amount
+        FROM invoices WHERE company_id = $1
+      `, [user.company_id]);
+
+      const recentOrders = await pool.query(`
+        SELECT id, order_number, order_date, status, payment_status, total
+        FROM orders WHERE company_id = $1
+        ORDER BY order_date DESC NULLS LAST
+        LIMIT 5
+      `, [user.company_id]);
+
+      res.json({
+        id: user.id,
+        companyId: user.company_id,
+        contactId: user.contact_id,
+        name: user.name,
+        email: user.email,
+        active: user.active,
+        createdAt: user.created_at,
+        lastLogin: user.last_login,
+        companyName: user.company_name,
+        tradingName: user.trading_name,
+        paymentTerms: user.payment_terms,
+        companyPhone: user.company_phone,
+        shippingAddress: user.shipping_address,
+        grade: user.grade,
+        stats: {
+          totalOrders: parseInt(orderStats.rows[0]?.total_orders || "0"),
+          openOrders: parseInt(orderStats.rows[0]?.open_orders || "0"),
+          totalSpent: parseFloat(orderStats.rows[0]?.total_spent || "0"),
+          lastOrderDate: orderStats.rows[0]?.last_order_date,
+          totalInvoices: parseInt(invoiceStats.rows[0]?.total_invoices || "0"),
+          unpaidInvoices: parseInt(invoiceStats.rows[0]?.unpaid_invoices || "0"),
+          outstandingAmount: parseFloat(invoiceStats.rows[0]?.outstanding_amount || "0"),
+        },
+        recentOrders: recentOrders.rows.map((r: any) => ({
+          id: r.id,
+          orderNumber: r.order_number,
+          orderDate: r.order_date,
+          status: r.status,
+          paymentStatus: r.payment_status,
+          total: r.total,
+        })),
+      });
+    } catch (error) {
+      console.error("Get portal user profile error:", error);
+      res.status(500).json({ message: "Failed to fetch portal user profile" });
+    }
+  });
+
   // ============ DATA EXPORTS ============
 
   app.get("/api/admin/export/:type", requireAdmin, async (req, res) => {
