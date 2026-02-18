@@ -1,19 +1,17 @@
 import { pool } from "./db";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 function loadJsonData(filename: string): any[] | null {
-  const bundledPath = path.join(__dirname, "data", filename);
-  const devPath = path.join(process.cwd(), "server", "data", filename);
-
-  if (fs.existsSync(bundledPath)) {
-    return JSON.parse(fs.readFileSync(bundledPath, "utf-8"));
-  } else if (fs.existsSync(devPath)) {
-    return JSON.parse(fs.readFileSync(devPath, "utf-8"));
+  const candidates = [
+    path.join(process.cwd(), "server", "data", filename),
+    path.join(process.cwd(), "dist", "data", filename),
+    path.join(process.cwd(), "data", filename),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, "utf-8"));
+    }
   }
   console.warn(`Data file ${filename} not found`);
   return null;
@@ -22,7 +20,6 @@ function loadJsonData(filename: string): any[] | null {
 async function importProductsFromCsv() {
   const csvPaths = [
     path.join(process.cwd(), "attached_assets", "ALL_PRODUCTS_replit_1771449439042.csv"),
-    path.join(__dirname, "..", "attached_assets", "ALL_PRODUCTS_replit_1771449439042.csv"),
   ];
   let csvContent: string | null = null;
   for (const p of csvPaths) {
