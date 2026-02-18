@@ -7,7 +7,7 @@ import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { eq, ilike, and } from "drizzle-orm";
-import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts, outlookTokens as outlookTokensTable, crmSettings, portalUsers, attachments } from "@shared/schema";
+import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts, companies as companiesTable, outlookTokens as outlookTokensTable, crmSettings, portalUsers, attachments } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero, autoSyncXeroInvoices } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks, fetchEmailAttachments, downloadAttachment } from "./outlook";
@@ -1050,6 +1050,98 @@ export async function registerRoutes(
       res.json(attachments);
     } catch (error) {
       console.error("Get order attachments error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/companies/:id/attachments", requireAuth, async (req, res) => {
+    try {
+      const result = await storage.getAttachmentsByEntity("company", req.params.id);
+      res.json(result);
+    } catch (error) {
+      console.error("Get company attachments error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/companies/:id/attachments", requireEdit, async (req, res) => {
+    try {
+      const companyId = req.params.id;
+      const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, companyId));
+      if (!company) return res.status(404).json({ message: "Company not found" });
+
+      const contentType = req.headers["content-type"] || "";
+      if (!contentType.includes("multipart/form-data")) {
+        return res.status(400).json({ message: "Expected multipart/form-data" });
+      }
+
+      const busboy = await import("busboy");
+      const path = await import("path");
+      const fs = await import("fs");
+      const bb = busboy.default({ headers: req.headers });
+      const uploadsDir = path.default.join(process.cwd(), "uploads", "companies", companyId);
+      await fs.promises.mkdir(uploadsDir, { recursive: true });
+
+      const filePromises: Promise<any>[] = [];
+
+      bb.on("file", (_fieldname: string, file: any, info: any) => {
+        const { filename, mimeType } = info;
+        const safeFileName = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        const filePath = path.default.join(uploadsDir, safeFileName);
+        let fileSize = 0;
+
+        file.on("data", (data: Buffer) => { fileSize += data.length; });
+
+        const writeStream = fs.createWriteStream(filePath);
+        file.pipe(writeStream);
+
+        const filePromise = new Promise<any>((resolve, reject) => {
+          writeStream.on("finish", () => {
+            resolve({
+              entityType: "company",
+              entityId: companyId,
+              fileName: filename,
+              fileType: mimeType,
+              fileSize,
+              storagePath: filePath,
+              uploadedBy: req.session.userId,
+            });
+          });
+          writeStream.on("error", reject);
+          file.on("error", reject);
+        });
+        filePromises.push(filePromise);
+      });
+
+      bb.on("finish", async () => {
+        try {
+          const uploadedFiles = await Promise.all(filePromises);
+          for (const fileData of uploadedFiles) {
+            await storage.createAttachment(fileData);
+          }
+          await storage.createActivity({
+            entityType: "company",
+            entityId: companyId,
+            activityType: "system",
+            content: `${uploadedFiles.length} file(s) uploaded`,
+            createdBy: req.session.userId,
+          });
+          const result = await storage.getAttachmentsByEntity("company", companyId);
+          res.json(result);
+        } catch (err) {
+          console.error("File write error:", err);
+          res.status(500).json({ message: "Failed to save files" });
+        }
+      });
+
+      bb.on("error", (err: any) => {
+        console.error("Busboy error:", err);
+        res.status(500).json({ message: "Upload processing error" });
+      });
+
+      req.pipe(bb);
+    } catch (error) {
+      console.error("Upload company attachment error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

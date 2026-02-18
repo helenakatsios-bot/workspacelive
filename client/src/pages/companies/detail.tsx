@@ -132,6 +132,11 @@ export default function CompanyDetailPage() {
     enabled: !!params?.id,
   });
 
+  const { data: companyAttachments } = useQuery<any[]>({
+    queryKey: ["/api/companies", params?.id, "attachments"],
+    enabled: !!params?.id,
+  });
+
   const [emailsOpen, setEmailsOpen] = useState(true);
   const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
 
@@ -315,6 +320,41 @@ export default function CompanyDetailPage() {
     },
     onError: (error: any) => {
       toast({ title: "Failed to remove contact", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const attachmentFileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadAttachmentMutation = useMutation({
+    mutationFn: async (files: FileList) => {
+      const formData = new FormData();
+      Array.from(files).forEach((file) => formData.append("file", file));
+      const res = await fetch(`/api/companies/${params?.id}/attachments`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Failed to upload");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id, "attachments"] });
+      toast({ title: "File uploaded" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: async (attachmentId: string) => {
+      return apiRequest("DELETE", `/api/attachments/${attachmentId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id, "attachments"] });
+      toast({ title: "File deleted" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error?.message || "Failed to delete file", variant: "destructive" });
     },
   });
 
@@ -1536,17 +1576,79 @@ export default function CompanyDetailPage() {
                   <div className="flex items-center gap-2">
                     <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${attachmentsOpen ? "" : "-rotate-90"}`} />
                     <CardTitle className="text-sm font-medium">
-                      Attachments
+                      Attachments ({companyAttachments?.length || 0})
                     </CardTitle>
                   </div>
+                  {canEdit && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        attachmentFileInputRef.current?.click();
+                      }}
+                      data-testid="button-upload-attachment"
+                    >
+                      <Upload className="w-3 h-3 mr-1" />
+                      Upload
+                    </Button>
+                  )}
                 </CardHeader>
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="p-3 pt-0">
-                  <div className="text-center py-4 text-muted-foreground">
-                    <Paperclip className="w-6 h-6 mx-auto mb-1 opacity-50" />
-                    <p className="text-xs">No files attached</p>
-                  </div>
+                  <input
+                    type="file"
+                    ref={attachmentFileInputRef}
+                    className="hidden"
+                    multiple
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        uploadAttachmentMutation.mutate(e.target.files);
+                        e.target.value = "";
+                      }
+                    }}
+                  />
+                  {companyAttachments && companyAttachments.length > 0 ? (
+                    <div className="space-y-2">
+                      {companyAttachments.map((file: any) => (
+                        <div key={file.id} className="flex items-center justify-between p-2 rounded-md border" data-testid={`attachment-${file.id}`}>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-xs truncate">{file.fileName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {(file.fileSize / 1024).toFixed(1)} KB
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="icon" asChild data-testid={`button-download-attachment-${file.id}`}>
+                              <a href={`/api/attachments/${file.id}/download`} download>
+                                <Download className="w-4 h-4" />
+                              </a>
+                            </Button>
+                            {canEdit && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                data-testid={`button-delete-attachment-${file.id}`}
+                                onClick={() => {
+                                  if (confirm("Delete this file?")) {
+                                    deleteAttachmentMutation.mutate(file.id);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <Paperclip className="w-6 h-6 mx-auto mb-1 opacity-50" />
+                      <p className="text-xs">No files attached</p>
+                    </div>
+                  )}
                 </CardContent>
               </CollapsibleContent>
             </Card>
