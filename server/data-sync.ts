@@ -1,6 +1,10 @@
 import { pool } from "./db";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function loadJsonData(filename: string): any[] | null {
   const bundledPath = path.join(__dirname, "data", filename);
@@ -13,6 +17,130 @@ function loadJsonData(filename: string): any[] | null {
   }
   console.warn(`Data file ${filename} not found`);
   return null;
+}
+
+async function importProductsFromCsv() {
+  const csvPaths = [
+    path.join(process.cwd(), "attached_assets", "ALL_PRODUCTS_replit_1771449439042.csv"),
+    path.join(__dirname, "..", "attached_assets", "ALL_PRODUCTS_replit_1771449439042.csv"),
+  ];
+  let csvContent: string | null = null;
+  for (const p of csvPaths) {
+    if (fs.existsSync(p)) {
+      csvContent = fs.readFileSync(p, "utf-8");
+      break;
+    }
+  }
+  if (!csvContent) {
+    console.log("CSV product file not found, skipping CSV import");
+    return;
+  }
+
+  const lines = csvContent.split("\n").filter(l => l.trim());
+  const rows = lines.slice(1).map(line => {
+    const parts = line.split(",");
+    return {
+      name: (parts[0] || "").trim(),
+      sku: (parts[1] || "").trim(),
+      subcategory: (parts[2] || "").trim(),
+      category: (parts[3] || "").trim(),
+      filling: (parts[4] || "").trim(),
+      weight: (parts[5] || "").trim(),
+    };
+  });
+
+  const existingProducts = await pool.query("SELECT id, sku, name FROM products");
+  const existingSkus = new Set(existingProducts.rows.map((p: any) => p.sku));
+  const existingNames = new Set(existingProducts.rows.map((p: any) => p.name.toUpperCase()));
+  const productIdBySku = new Map(existingProducts.rows.map((p: any) => [p.sku, p.id]));
+  const productIdByName = new Map(existingProducts.rows.map((p: any) => [p.name.toUpperCase(), p.id]));
+
+  const productMap = new Map<string, { name: string; sku: string; category: string; variants: { filling: string; weight: string }[] }>();
+  for (const row of rows) {
+    if (!row.name) continue;
+    const key = row.sku || row.name;
+    if (!productMap.has(key)) {
+      productMap.set(key, { name: row.name, sku: row.sku, category: row.category || row.subcategory, variants: [] });
+    }
+    if (row.filling || row.weight) {
+      const variants = productMap.get(key)!.variants;
+      if (!variants.some(v => v.filling === row.filling && v.weight === row.weight)) {
+        variants.push({ filling: row.filling, weight: row.weight });
+      }
+    }
+  }
+
+  let insertedProducts = 0;
+  let insertedVariants = 0;
+
+  for (const [key, prod] of productMap) {
+    let sku = prod.sku;
+    let productId: string | undefined;
+
+    if (!sku || sku === "BULK") {
+      if (existingNames.has(prod.name.toUpperCase())) {
+        productId = productIdByName.get(prod.name.toUpperCase());
+      } else {
+        const catPrefix = (prod.category || "MISC").substring(0, 4).toUpperCase();
+        let counter = 900;
+        while (existingSkus.has(`${catPrefix}-${String(counter).padStart(3, "0")}`)) counter++;
+        sku = `${catPrefix}-${String(counter).padStart(3, "0")}`;
+      }
+    }
+
+    if (!productId && existingSkus.has(sku)) {
+      productId = productIdBySku.get(sku);
+    }
+
+    if (!productId && sku) {
+      try {
+        let cat = prod.category;
+        if (["4 SEASON", "5 SEASON", "6 SEASON", "7 SEASON", "8 SEASON", "9 SEASON", "10 SEASON", "11 SEASON", "12 SEASON", "13 SEASON"].includes(cat)) {
+          cat = "4 SEASONS FILLED";
+        }
+        const result = await pool.query(
+          `INSERT INTO products (sku, name, category, unit_price, active) VALUES ($1, $2, $3, '0.00', true) ON CONFLICT (sku) DO NOTHING RETURNING id`,
+          [sku, prod.name, cat || null]
+        );
+        if (result.rows.length > 0) {
+          productId = result.rows[0].id;
+          existingSkus.add(sku);
+          productIdBySku.set(sku, productId!);
+          insertedProducts++;
+        } else {
+          const existing = await pool.query("SELECT id FROM products WHERE sku = $1", [sku]);
+          if (existing.rows.length > 0) productId = existing.rows[0].id;
+        }
+      } catch (e: any) {
+        // skip
+      }
+    }
+
+    if (productId && prod.variants.length > 0) {
+      for (const v of prod.variants) {
+        if (!v.filling) continue;
+        try {
+          const exists = await pool.query(
+            "SELECT id FROM default_variant_prices WHERE product_id = $1 AND filling = $2 AND COALESCE(weight, '') = $3",
+            [productId, v.filling, v.weight || ""]
+          );
+          if (exists.rows.length === 0) {
+            await pool.query(
+              "INSERT INTO default_variant_prices (product_id, filling, weight, unit_price) VALUES ($1, $2, $3, '0.00')",
+              [productId, v.filling, v.weight || null]
+            );
+            insertedVariants++;
+          }
+        } catch (e: any) {
+          // skip duplicates
+        }
+      }
+    }
+  }
+
+  if (insertedProducts > 0 || insertedVariants > 0) {
+    console.log(`CSV import: ${insertedProducts} products, ${insertedVariants} variant prices added`);
+  }
 }
 
 export async function syncProductionData() {
@@ -85,11 +213,6 @@ export async function syncProductionData() {
 
   const currentProducts = parseInt(productCount.rows[0].cnt);
   const currentCompanies = parseInt(companyCount.rows[0].cnt);
-
-  if (currentProducts >= 100 && currentCompanies >= 100) {
-    console.log(`Data already synced: ${currentProducts} products, ${currentCompanies} companies`);
-    return;
-  }
 
   if (currentProducts < 100) {
     const productsData = loadJsonData("products.json");
@@ -167,4 +290,6 @@ export async function syncProductionData() {
       }
     }
   }
+
+  await importProductsFromCsv();
 }
