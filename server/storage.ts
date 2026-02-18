@@ -139,6 +139,7 @@ export interface IStorage {
   getCompanyPrices(companyId: string): Promise<CompanyPrice[]>;
   setCompanyPrice(companyId: string, productId: string, unitPrice: string): Promise<CompanyPrice>;
   deleteCompanyPrice(companyId: string, productId: string): Promise<boolean>;
+  deleteAllCompanyPrices(companyId: string): Promise<number>;
 
   // Dashboard Stats
   getDashboardStats(): Promise<{
@@ -661,6 +662,12 @@ export class DatabaseStorage implements IStorage {
     const result = await db.delete(companyPrices)
       .where(and(eq(companyPrices.companyId, companyId), eq(companyPrices.productId, productId)));
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async deleteAllCompanyPrices(companyId: string): Promise<number> {
+    const result = await db.delete(companyPrices)
+      .where(eq(companyPrices.companyId, companyId));
+    return result.rowCount ?? 0;
   }
 }
 

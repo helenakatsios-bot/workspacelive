@@ -606,6 +606,16 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/companies/:id/prices", requireEdit, async (req, res) => {
+    try {
+      const deleted = await storage.deleteAllCompanyPrices(req.params.id);
+      res.json({ success: true, deleted });
+    } catch (error) {
+      console.error("Delete all company prices error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/companies/:id/prices/export", requireAuth, async (req, res) => {
     try {
       const allProducts = await storage.getAllProducts();

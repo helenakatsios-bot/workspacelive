@@ -177,6 +177,16 @@ export default function CompanyDetailPage() {
     },
   });
 
+  const deleteAllPricesMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("DELETE", `/api/companies/${params?.id}/prices`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id, "prices"] });
+      toast({ title: "All custom prices cleared" });
+    },
+  });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [bulkImporting, setBulkImporting] = useState(false);
 
@@ -1087,6 +1097,22 @@ export default function CompanyDetailPage() {
                           {bulkImporting ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Upload className="w-3.5 h-3.5 mr-1" />}
                           Import CSV
                         </Button>
+                        {(companyPricesData?.length ?? 0) > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (confirm(`Are you sure you want to remove all ${companyPricesData?.length} custom prices for this company?`)) {
+                                deleteAllPricesMutation.mutate();
+                              }
+                            }}
+                            disabled={deleteAllPricesMutation.isPending}
+                            data-testid="button-clear-all-prices"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 mr-1" />
+                            Clear All
+                          </Button>
+                        )}
                         <input
                           ref={fileInputRef}
                           type="file"
