@@ -335,6 +335,19 @@ export default function OrderDetailPage() {
     },
   });
 
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: async (attachmentId: string) => {
+      return apiRequest("DELETE", `/api/attachments/${attachmentId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id, "attachments"] });
+      toast({ title: "File deleted" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error?.message || "Failed to delete file", variant: "destructive" });
+    },
+  });
+
   const addNoteMutation = useMutation({
     mutationFn: async (content: string) => {
       return apiRequest("POST", `/api/orders/${params?.id}/activities`, {
@@ -1255,11 +1268,27 @@ export default function OrderDetailPage() {
                                 {(file.fileSize / 1024).toFixed(1)} KB
                               </p>
                             </div>
-                            <Button variant="ghost" size="icon" asChild>
-                              <a href={`/api/attachments/${file.id}/download`} download>
-                                <Download className="w-4 h-4" />
-                              </a>
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button variant="ghost" size="icon" asChild data-testid={`button-download-attachment-${file.id}`}>
+                                <a href={`/api/attachments/${file.id}/download`} download>
+                                  <Download className="w-4 h-4" />
+                                </a>
+                              </Button>
+                              {canEdit && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  data-testid={`button-delete-attachment-${file.id}`}
+                                  onClick={() => {
+                                    if (confirm("Delete this file?")) {
+                                      deleteAttachmentMutation.mutate(file.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         );
                       })}

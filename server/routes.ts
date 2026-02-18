@@ -1072,6 +1072,27 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/attachments/:id", requireEdit, async (req, res) => {
+    try {
+      const [attachment] = await db.select().from(attachments).where(eq(attachments.id, req.params.id));
+      if (!attachment) return res.status(404).json({ message: "Attachment not found" });
+      const fs = await import("fs");
+      try { if (fs.existsSync(attachment.storagePath)) fs.unlinkSync(attachment.storagePath); } catch {}
+      await db.delete(attachments).where(eq(attachments.id, req.params.id));
+      await storage.createActivity({
+        entityType: attachment.entityType as any,
+        entityId: attachment.entityId,
+        activityType: "system",
+        content: `File deleted: ${attachment.fileName}`,
+        createdBy: req.session.userId,
+      });
+      res.json({ message: "Attachment deleted" });
+    } catch (error) {
+      console.error("Delete attachment error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/orders", requireEdit, async (req, res) => {
     try {
       const { lines, ...orderData } = req.body;
@@ -2794,67 +2815,107 @@ Rules: Extract ALL line items. If prices are not present, use 0. Quantities must
       if (!company) {
         const senderEmail = realSenderEmail || email.fromAddress || "";
         const senderDomain = senderEmail.split("@")[1]?.toLowerCase() || "";
+        const fromDisplayName = (email.fromName || "").toLowerCase().replace(/^hq\s+/i, "").trim();
 
-        // 1. Try matching company name from subject (most reliable for B2B orders)
+        // Collect all searchable text for company matching
         const subjectClean = subject.toLowerCase().replace(/^(fw|fwd|re):\s*/gi, "").replace(/[.]/g, "").replace(/\border\b/gi, "").trim();
         const textClean = plainText.toLowerCase().replace(/[.]/g, "");
         const companyMatches: Array<{ company: any; score: number }> = [];
 
-        for (const c of allCompanies) {
-          const rawNames = [c.legalName, c.tradingName].filter(Boolean);
-          for (const rawName of rawNames) {
-            const nameLower = rawName!.toLowerCase();
-            // Strip /COD suffix for matching purposes
-            const nameWithoutCod = nameLower.replace(/\/cod\s*$/i, "").trim();
-            const nameParts = nameLower.split(/[\/\\|]+/).map(p => p.trim()).filter(p => p.length >= 2 && p !== "cod");
-            const cleanName = nameWithoutCod.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+        // Helper to match company names against search text
+        const matchCompanyInText = (searchText: string, scoreBonus: number) => {
+          for (const c of allCompanies) {
+            if (companyMatches.some(m => m.company.id === c.id)) continue;
+            const rawNames = [c.legalName, c.tradingName].filter(Boolean);
+            for (const rawName of rawNames) {
+              const nameLower = rawName!.toLowerCase();
+              const nameWithoutCod = nameLower.replace(/\/cod\s*$/i, "").trim();
+              const nameParts = nameLower.split(/[\/\\|]+/).map(p => p.trim()).filter(p => p.length >= 2 && p !== "cod");
+              const cleanName = nameWithoutCod.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 
-            // Build match targets: full clean name + individual parts that are multi-word or 6+ chars
-            const matchTargets = new Set<string>();
-            matchTargets.add(cleanName);
-            for (const part of nameParts) {
-              const partClean = part.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
-              if (partClean.split(/\s+/).length >= 2 || partClean.length >= 6) {
-                matchTargets.add(partClean);
+              const matchTargets = new Set<string>();
+              matchTargets.add(cleanName);
+              for (const part of nameParts) {
+                const partClean = part.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+                if (partClean.split(/\s+/).length >= 2 || partClean.length >= 6) {
+                  matchTargets.add(partClean);
+                }
               }
-            }
 
-            for (const target of matchTargets) {
-              if (target.length < 3) continue;
-              const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-              const regex = new RegExp(`\\b${escaped}\\b`);
-              if (regex.test(subjectClean)) {
-                companyMatches.push({ company: c, score: target.length + 20 });
-                break;
-              } else if (regex.test(textClean)) {
-                companyMatches.push({ company: c, score: target.length });
-                break;
+              for (const target of matchTargets) {
+                if (target.length < 3) continue;
+                const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                const regex = new RegExp(`\\b${escaped}\\b`);
+                if (regex.test(searchText)) {
+                  companyMatches.push({ company: c, score: target.length + scoreBonus });
+                  break;
+                }
               }
             }
           }
+        };
+
+        // 1. Try matching from subject (highest priority)
+        matchCompanyInText(subjectClean, 20);
+
+        // 2. Try matching from "From" display name (e.g. "HQ Ecolinen" -> "ecolinen")
+        if (fromDisplayName && fromDisplayName.length >= 3) {
+          matchCompanyInText(fromDisplayName, 15);
+        }
+
+        // 3. Try matching from email body text
+        matchCompanyInText(textClean, 0);
+
+        // 4. Try matching from PDF-extracted company name
+        if (companyName && companyName.length >= 3) {
+          const pdfCompanyClean = companyName.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+          matchCompanyInText(pdfCompanyClean, 10);
         }
 
         if (companyMatches.length > 0) {
           companyMatches.sort((a, b) => b.score - a.score);
           company = companyMatches[0].company;
+          console.log(`[EMAIL-TO-ORDER] Company matched: "${company.legalName}" (score: ${companyMatches[0].score})`);
         }
 
-        // 2. Try matching by contact email
-        if (!company && senderEmail) {
-          const matchedContacts = await db.select().from(contacts).where(ilike(contacts.email, senderEmail)).limit(1);
-          if (matchedContacts.length > 0) {
-            company = allCompanies.find(c => c.id === matchedContacts[0].companyId);
+        // 5. Try matching by contact email (sender or CC)
+        if (!company) {
+          const emailsToCheck = [senderEmail];
+          if (email.ccAddresses && Array.isArray(email.ccAddresses)) {
+            emailsToCheck.push(...email.ccAddresses.map((e: string) => e.trim()));
+          }
+          for (const checkEmail of emailsToCheck) {
+            if (!checkEmail) continue;
+            const matchedContacts = await db.select().from(contacts).where(ilike(contacts.email, checkEmail)).limit(1);
+            if (matchedContacts.length > 0) {
+              company = allCompanies.find(c => c.id === matchedContacts[0].companyId);
+              if (company) {
+                console.log(`[EMAIL-TO-ORDER] Company matched via contact email "${checkEmail}": "${company.legalName}"`);
+                break;
+              }
+            }
           }
         }
 
-        // 3. Try matching by email domain to company name
-        if (!company && senderDomain && senderDomain !== "gmail.com" && senderDomain !== "yahoo.com" && senderDomain !== "hotmail.com" && senderDomain !== "outlook.com") {
-          const domainName = senderDomain.replace(/\.(com|com\.au|net|org|co).*$/, "").replace(/^(shop|info|orders|sales|hello)/, "");
+        // 6. Try matching by email domain to company name (sender domain first, then CC domains)
+        const ignoreDomains = new Set(["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "live.com", "icloud.com", "post.saasu.com", "xero.com"]);
+        const domainsToCheck: string[] = [];
+        if (senderDomain && !ignoreDomains.has(senderDomain)) domainsToCheck.push(senderDomain);
+        if (email.ccAddresses && Array.isArray(email.ccAddresses)) {
+          for (const cc of email.ccAddresses) {
+            const ccDomain = cc.split("@")[1]?.toLowerCase() || "";
+            if (ccDomain && !ignoreDomains.has(ccDomain)) domainsToCheck.push(ccDomain);
+          }
+        }
+        for (const domain of domainsToCheck) {
+          if (company) break;
+          const domainName = domain.replace(/\.(com|com\.au|net|org|co).*$/, "").replace(/^(shop|info|orders|sales|hello|notifications|noreply|no-reply)/, "");
           if (domainName.length >= 3) {
             company = allCompanies.find(c =>
               c.legalName.toLowerCase().replace(/[^a-z0-9]/g, "").includes(domainName) ||
               (c.tradingName && c.tradingName.toLowerCase().replace(/[^a-z0-9]/g, "").includes(domainName))
             );
+            if (company) console.log(`[EMAIL-TO-ORDER] Company matched via domain "${domain}": "${company.legalName}"`);
           }
         }
       }
