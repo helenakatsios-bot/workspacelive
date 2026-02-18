@@ -4916,7 +4916,7 @@ Rules:
       const [user] = await pool.query(`
         SELECT pu.id, pu.company_id, pu.contact_id, pu.name, pu.email, pu.active, pu.created_at, pu.last_login,
           c.legal_name as company_name, c.trading_name, c.payment_terms, c.phone as company_phone,
-          c.shipping_address, c.grade
+          c.shipping_address, c.client_grade as grade
         FROM portal_users pu
         LEFT JOIN companies c ON c.id = pu.company_id
         WHERE pu.id = $1
