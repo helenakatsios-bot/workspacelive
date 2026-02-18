@@ -141,17 +141,36 @@ async function importProductsFromCsv() {
 }
 
 export async function syncProductionData() {
-  // Clean up legacy "DUCK" references in product names/categories/descriptions
-  const duckCleanup = await pool.query(
-    `UPDATE products SET
-      name = REPLACE(name, 'DUCK ', ''),
-      category = REPLACE(category, 'DUCK ', ''),
-      description = REPLACE(description, 'DUCK ', '')
-    WHERE name LIKE '%DUCK %' OR category LIKE '%DUCK %' OR description LIKE '%DUCK %'`
-  );
-  if (duckCleanup.rowCount && duckCleanup.rowCount > 0) {
-    console.log(`Cleaned up DUCK references from ${duckCleanup.rowCount} products`);
+  // Ensure all BULK filling products exist
+  const bulkProducts = [
+    { sku: 'BULK-001', name: '100% FEATHER', category: 'BULK' },
+    { sku: 'BULK-002', name: 'FEATHER & FIBRE', category: 'BULK' },
+    { sku: 'BULK-003', name: '15% DOWN 85% FEATHER', category: 'BULK' },
+    { sku: 'BULK-004', name: '30% DOWN 70% FEATHER', category: 'BULK' },
+    { sku: 'BULK-005', name: '50% DOWN 50% FEATHER', category: 'BULK' },
+    { sku: 'BULK-006', name: '80% DOWN 20% FEATHER', category: 'BULK' },
+    { sku: 'BULK-007', name: '80% GOOSE DOWN 20% GOOSE FEATHER', category: 'BULK' },
+    { sku: 'BULK-008', name: 'FEATHER/FIBRE/DOWN', category: 'BULK' },
+    { sku: 'BULK-009', name: '230CM COTTON JAPARA', category: 'BULK' },
+    { sku: 'BULK-010', name: 'FEATHER & FOAM', category: 'BULK' },
+  ];
+  let bulkInserted = 0;
+  for (const bp of bulkProducts) {
+    const exists = await pool.query("SELECT id FROM products WHERE sku = $1", [bp.sku]);
+    if (exists.rows.length === 0) {
+      await pool.query(
+        "INSERT INTO products (sku, name, category, unit_price, active) VALUES ($1, $2, $3, '0.00', true) ON CONFLICT (sku) DO NOTHING",
+        [bp.sku, bp.name, bp.category]
+      );
+      bulkInserted++;
+    }
   }
+  if (bulkInserted > 0) {
+    console.log(`Added ${bulkInserted} BULK filling products`);
+  }
+
+  // Clean up duplicate BULK products with auto-generated SKUs (BULK-900, BULK-901, etc.)
+  await pool.query("DELETE FROM products WHERE sku LIKE 'BULK-9%' AND category = 'BULK'");
 
   // Sync base prices for 80% WINTER FILLED products (Duck=base, Goose=higher)
   const priceUpdates = [
