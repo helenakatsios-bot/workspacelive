@@ -36,6 +36,7 @@ import {
   Upload,
   Receipt,
   ExternalLink,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -145,6 +146,7 @@ export default function CompanyDetailPage() {
   });
 
   const [pricingSearch, setPricingSearch] = useState("");
+  const [orderSearch, setOrderSearch] = useState("");
   const [pricingCategory, setPricingCategory] = useState("all");
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [editingPriceValue, setEditingPriceValue] = useState("");
@@ -830,35 +832,70 @@ export default function CompanyDetailPage() {
               <Card>
                 <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between gap-2">
                   <CardTitle className="text-base">All Orders</CardTitle>
-                  {canEdit && company.creditStatus === "active" && (
-                    <Button size="sm" onClick={() => navigate(`/orders/new?companyId=${params?.id}`)} data-testid="button-new-order">
-                      <Plus className="w-4 h-4 mr-1" />
-                      New Order
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input
+                        placeholder="Search orders..."
+                        value={orderSearch}
+                        onChange={(e) => setOrderSearch(e.target.value)}
+                        className="pl-7 w-48 text-sm"
+                        data-testid="input-order-search"
+                      />
+                    </div>
+                    {canEdit && company.creditStatus === "active" && (
+                      <Button size="sm" onClick={() => navigate(`/orders/new?companyId=${params?.id}`)} data-testid="button-new-order">
+                        <Plus className="w-4 h-4 mr-1" />
+                        New Order
+                      </Button>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-0">
                   {orders && orders.length > 0 ? (
-                    <div className="space-y-2">
-                      {orders.map((order) => (
-                        <Link key={order.id} href={`/orders/${order.id}`}>
-                          <div className="flex items-center justify-between p-3 rounded-lg border hover-elevate cursor-pointer" data-testid={`row-order-${order.id}`}>
-                            <div>
-                              <p className="font-medium text-sm">{order.orderNumber}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {format(new Date(order.orderDate), "MMM d, yyyy")}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{formatCurrency(order.total)}</span>
-                              <Badge className={getStatusColor(order.status)}>
-                                {order.status.replace("_", " ")}
-                              </Badge>
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
+                    (() => {
+                      const filtered = orders.filter((order) => {
+                        if (!orderSearch) return true;
+                        const q = orderSearch.toLowerCase();
+                        return (
+                          String(order.orderNumber).toLowerCase().includes(q) ||
+                          (order.customerName && order.customerName.toLowerCase().includes(q)) ||
+                          order.status.toLowerCase().includes(q)
+                        );
+                      });
+                      return filtered.length > 0 ? (
+                        <div className="space-y-2">
+                          {filtered.map((order) => (
+                            <Link key={order.id} href={`/orders/${order.id}`}>
+                              <div className="flex items-center justify-between p-3 rounded-lg border hover-elevate cursor-pointer" data-testid={`row-order-${order.id}`}>
+                                <div>
+                                  <p className="font-medium text-sm">
+                                    {order.orderNumber}
+                                    {order.customerName && (
+                                      <span className="text-muted-foreground font-normal"> - {order.customerName}</span>
+                                    )}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {format(new Date(order.orderDate), "MMM d, yyyy")}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium">{formatCurrency(order.total)}</span>
+                                  <Badge className={getStatusColor(order.status)}>
+                                    {order.status.replace("_", " ")}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No orders match "{orderSearch}"</p>
+                        </div>
+                      );
+                    })()
                   ) : (
                     <div className="text-center py-8 text-muted-foreground">
                       <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -1387,7 +1424,12 @@ export default function CompanyDetailPage() {
                         <Link key={order.id} href={`/orders/${order.id}`}>
                           <div className="flex items-center justify-between p-2 rounded-md hover-elevate cursor-pointer" data-testid={`sidebar-order-${order.id}`}>
                             <div className="min-w-0">
-                              <p className="font-medium text-sm truncate">{order.orderNumber}</p>
+                              <p className="font-medium text-sm truncate">
+                                {order.orderNumber}
+                                {order.customerName && (
+                                  <span className="text-muted-foreground font-normal text-xs"> - {order.customerName}</span>
+                                )}
+                              </p>
                               <p className="text-xs text-muted-foreground">
                                 {format(new Date(order.orderDate), "MMM d")}
                               </p>
@@ -1399,9 +1441,18 @@ export default function CompanyDetailPage() {
                         </Link>
                       ))}
                       {orders.length > 5 && (
-                        <p className="text-xs text-primary cursor-pointer hover:underline text-center" onClick={() => setActiveTab("revenue")}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full text-xs text-primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveTab("revenue");
+                          }}
+                          data-testid="button-view-all-orders"
+                        >
                           View all {orders.length} orders
-                        </p>
+                        </Button>
                       )}
                     </div>
                   ) : (
