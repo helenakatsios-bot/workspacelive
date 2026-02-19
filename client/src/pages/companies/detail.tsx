@@ -146,6 +146,7 @@ export default function CompanyDetailPage() {
       apiRequest("PATCH", `/api/companies/${params?.id}`, { priceListId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id, "effective-prices"] });
       toast({ title: "Price list updated", description: "Company price list assignment has been saved." });
     },
     onError: () => {
@@ -184,6 +185,11 @@ export default function CompanyDetailPage() {
   const { data: companyPricesData } = useQuery<CompanyPrice[]>({
     queryKey: ["/api/companies", params?.id, "prices"],
     enabled: !!params?.id && activeTab === "pricing",
+  });
+
+  const { data: priceListPricesData } = useQuery<Array<{ productId: string; filling: string | null; weight: string | null; unitPrice: string }>>({
+    queryKey: ["/api/companies", params?.id, "effective-prices"],
+    enabled: !!params?.id && activeTab === "pricing" && !!company?.priceListId,
   });
 
   const [pricingSearch, setPricingSearch] = useState("");
@@ -1211,12 +1217,34 @@ export default function CompanyDetailPage() {
 
                   {(() => {
                     const priceMap = new Map((companyPricesData || []).map(cp => [cp.productId, cp.unitPrice]));
+                    const plBasePriceMap = new Map<string, string>();
+                    const plVariantMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
+                    for (const plp of (priceListPricesData || [])) {
+                      if (!plp.filling) {
+                        plBasePriceMap.set(plp.productId, plp.unitPrice);
+                      } else {
+                        if (!plVariantMap.has(plp.productId)) plVariantMap.set(plp.productId, []);
+                        plVariantMap.get(plp.productId)!.push({ filling: plp.filling, weight: plp.weight, unitPrice: plp.unitPrice });
+                      }
+                    }
+                    const hasPriceList = !!company?.priceListId;
                     const activeProducts = (allProducts || []).filter(p => p.active);
                     const filtered = activeProducts.filter(p => {
                       const matchSearch = !pricingSearch || p.name.toLowerCase().includes(pricingSearch.toLowerCase()) || p.sku.toLowerCase().includes(pricingSearch.toLowerCase());
                       const matchCategory = pricingCategory === "all" || p.category === pricingCategory;
                       return matchSearch && matchCategory;
                     });
+
+                    const getEffectivePrice = (productId: string, defaultPrice: string) => {
+                      if (priceMap.has(productId)) return { price: priceMap.get(productId)!, source: "custom" as const };
+                      if (hasPriceList && plBasePriceMap.has(productId)) return { price: plBasePriceMap.get(productId)!, source: "pricelist" as const };
+                      if (hasPriceList && plVariantMap.has(productId)) {
+                        const variants = plVariantMap.get(productId)!;
+                        const first = variants[0];
+                        if (first) return { price: first.unitPrice, source: "pricelist-variant" as const };
+                      }
+                      return { price: defaultPrice, source: "default" as const };
+                    };
 
                     const customPriced = filtered.filter(p => priceMap.has(p.id));
                     const defaultPriced = filtered.filter(p => !priceMap.has(p.id));
@@ -1303,69 +1331,163 @@ export default function CompanyDetailPage() {
                         )}
 
                         <div>
-                          <p className="text-xs font-medium text-muted-foreground mb-2">
-                            {customPriced.length > 0 ? "Default Prices" : "All Products"} ({defaultPriced.length})
-                          </p>
-                          <div className="space-y-1">
-                            {defaultPriced.map(product => {
-                              const isEditing = editingPriceId === product.id;
-                              return (
-                                <div key={product.id} className="flex items-center justify-between p-2 rounded-md border" data-testid={`row-default-${product.id}`}>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{product.name}</p>
-                                    <p className="text-xs text-muted-foreground">{product.sku} {product.category && `· ${product.category}`}</p>
+                          {(() => {
+                            const plPriced = hasPriceList ? defaultPriced.filter(p => plBasePriceMap.has(p.id) || plVariantMap.has(p.id)) : [];
+                            const trulyDefault = hasPriceList ? defaultPriced.filter(p => !plBasePriceMap.has(p.id) && !plVariantMap.has(p.id)) : defaultPriced;
+                            const selectedPriceList = priceLists?.find(pl => pl.id === company?.priceListId);
+                            return (
+                              <>
+                                {plPriced.length > 0 && (
+                                  <div className="mb-4">
+                                    <p className="text-xs font-medium text-muted-foreground mb-2">
+                                      Price List: {selectedPriceList?.name || "Assigned"} ({plPriced.length})
+                                    </p>
+                                    <div className="space-y-1">
+                                      {plPriced.map(product => {
+                                        const eff = getEffectivePrice(product.id, product.unitPrice);
+                                        const variants = plVariantMap.get(product.id);
+                                        const isEditing = editingPriceId === product.id;
+                                        return (
+                                          <div key={product.id} className="flex items-center justify-between p-2 rounded-md border" data-testid={`row-pricelist-${product.id}`}>
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-sm font-medium truncate">{product.name}</p>
+                                              <p className="text-xs text-muted-foreground">{product.sku} {product.category && `· ${product.category}`}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2 ml-2">
+                                              {isEditing ? (
+                                                <div className="flex items-center gap-1">
+                                                  <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={editingPriceValue}
+                                                    onChange={(e) => setEditingPriceValue(e.target.value)}
+                                                    className="w-24"
+                                                    data-testid="input-set-price"
+                                                    autoFocus
+                                                    onKeyDown={(e) => {
+                                                      if (e.key === "Enter") {
+                                                        setPriceMutation.mutate({ productId: product.id, unitPrice: editingPriceValue });
+                                                      } else if (e.key === "Escape") {
+                                                        setEditingPriceId(null);
+                                                      }
+                                                    }}
+                                                  />
+                                                  <Button
+                                                    size="sm"
+                                                    onClick={() => setPriceMutation.mutate({ productId: product.id, unitPrice: editingPriceValue })}
+                                                    disabled={setPriceMutation.isPending}
+                                                    data-testid="button-save-new-price"
+                                                  >
+                                                    Set
+                                                  </Button>
+                                                  <Button size="sm" variant="ghost" onClick={() => setEditingPriceId(null)}>
+                                                    Cancel
+                                                  </Button>
+                                                </div>
+                                              ) : (
+                                                <div className="flex items-center gap-1">
+                                                  {variants && variants.length > 0 ? (
+                                                    <span className="text-sm font-mono" data-testid={`text-pricelist-price-${product.id}`}>
+                                                      {(() => {
+                                                        const prices = variants.map(v => Number(v.unitPrice));
+                                                        const min = Math.min(...prices);
+                                                        const max = Math.max(...prices);
+                                                        if (min === max) return `$${min.toFixed(2)}`;
+                                                        return `$${min.toFixed(2)} - $${max.toFixed(2)}`;
+                                                      })()}
+                                                    </span>
+                                                  ) : (
+                                                    <span className="text-sm font-mono" data-testid={`text-pricelist-price-${product.id}`}>${Number(eff.price).toFixed(2)}</span>
+                                                  )}
+                                                  {canEdit && (
+                                                    <Button
+                                                      size="icon"
+                                                      variant="ghost"
+                                                      onClick={() => { setEditingPriceId(product.id); setEditingPriceValue(eff.price); }}
+                                                      data-testid={`button-set-price-${product.id}`}
+                                                    >
+                                                      <Edit className="w-3.5 h-3.5" />
+                                                    </Button>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-2 ml-2">
-                                    {isEditing ? (
-                                      <div className="flex items-center gap-1">
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          value={editingPriceValue}
-                                          onChange={(e) => setEditingPriceValue(e.target.value)}
-                                          className="w-24"
-                                          data-testid="input-set-price"
-                                          autoFocus
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Enter") {
-                                              setPriceMutation.mutate({ productId: product.id, unitPrice: editingPriceValue });
-                                            } else if (e.key === "Escape") {
-                                              setEditingPriceId(null);
-                                            }
-                                          }}
-                                        />
-                                        <Button
-                                          size="sm"
-                                          onClick={() => setPriceMutation.mutate({ productId: product.id, unitPrice: editingPriceValue })}
-                                          disabled={setPriceMutation.isPending}
-                                          data-testid="button-save-new-price"
-                                        >
-                                          Set
-                                        </Button>
-                                        <Button size="sm" variant="ghost" onClick={() => setEditingPriceId(null)}>
-                                          Cancel
-                                        </Button>
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center gap-1">
-                                        <span className="text-sm font-mono text-muted-foreground">${Number(product.unitPrice).toFixed(2)}</span>
-                                        {canEdit && (
-                                          <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            onClick={() => { setEditingPriceId(product.id); setEditingPriceValue(product.unitPrice); }}
-                                            data-testid={`button-set-price-${product.id}`}
-                                          >
-                                            <Edit className="w-3.5 h-3.5" />
-                                          </Button>
-                                        )}
-                                      </div>
-                                    )}
+                                )}
+                                {trulyDefault.length > 0 && (
+                                  <div>
+                                    <p className="text-xs font-medium text-muted-foreground mb-2">
+                                      {(customPriced.length > 0 || plPriced.length > 0) ? "Default Prices" : "All Products"} ({trulyDefault.length})
+                                    </p>
+                                    <div className="space-y-1">
+                                      {trulyDefault.map(product => {
+                                        const isEditing = editingPriceId === product.id;
+                                        return (
+                                          <div key={product.id} className="flex items-center justify-between p-2 rounded-md border" data-testid={`row-default-${product.id}`}>
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-sm font-medium truncate">{product.name}</p>
+                                              <p className="text-xs text-muted-foreground">{product.sku} {product.category && `· ${product.category}`}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2 ml-2">
+                                              {isEditing ? (
+                                                <div className="flex items-center gap-1">
+                                                  <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={editingPriceValue}
+                                                    onChange={(e) => setEditingPriceValue(e.target.value)}
+                                                    className="w-24"
+                                                    data-testid="input-set-price-default"
+                                                    autoFocus
+                                                    onKeyDown={(e) => {
+                                                      if (e.key === "Enter") {
+                                                        setPriceMutation.mutate({ productId: product.id, unitPrice: editingPriceValue });
+                                                      } else if (e.key === "Escape") {
+                                                        setEditingPriceId(null);
+                                                      }
+                                                    }}
+                                                  />
+                                                  <Button
+                                                    size="sm"
+                                                    onClick={() => setPriceMutation.mutate({ productId: product.id, unitPrice: editingPriceValue })}
+                                                    disabled={setPriceMutation.isPending}
+                                                    data-testid="button-save-default-price"
+                                                  >
+                                                    Set
+                                                  </Button>
+                                                  <Button size="sm" variant="ghost" onClick={() => setEditingPriceId(null)}>
+                                                    Cancel
+                                                  </Button>
+                                                </div>
+                                              ) : (
+                                                <div className="flex items-center gap-1">
+                                                  <span className="text-sm font-mono text-muted-foreground">${Number(product.unitPrice).toFixed(2)}</span>
+                                                  {canEdit && (
+                                                    <Button
+                                                      size="icon"
+                                                      variant="ghost"
+                                                      onClick={() => { setEditingPriceId(product.id); setEditingPriceValue(product.unitPrice); }}
+                                                      data-testid={`button-set-price-${product.id}`}
+                                                    >
+                                                      <Edit className="w-3.5 h-3.5" />
+                                                    </Button>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
 
                         {filtered.length === 0 && (

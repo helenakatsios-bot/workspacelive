@@ -582,6 +582,30 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/companies/:id/effective-prices", requireAuth, async (req, res) => {
+    try {
+      const companyId = req.params.id;
+      const companyResult = await pool.query(`SELECT price_list_id FROM companies WHERE id = $1`, [companyId]);
+      const priceListId = companyResult.rows[0]?.price_list_id;
+      if (!priceListId) {
+        return res.json([]);
+      }
+      const plPrices = await pool.query(
+        `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1 ORDER BY product_id, filling, weight`,
+        [priceListId]
+      );
+      res.json(plPrices.rows.map((r: any) => ({
+        productId: r.product_id,
+        filling: r.filling || null,
+        weight: r.weight || null,
+        unitPrice: r.unit_price,
+      })));
+    } catch (error) {
+      console.error("Get effective prices error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.put("/api/companies/:id/prices", requireEdit, async (req, res) => {
     try {
       const { productId, unitPrice } = req.body;
