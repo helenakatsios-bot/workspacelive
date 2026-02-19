@@ -1,13 +1,12 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Package, MoreHorizontal, Eye, Edit, CheckCircle, XCircle, Trash2 } from "lucide-react";
+import { Package, MoreHorizontal, Eye, Edit, CheckCircle, XCircle, Trash2, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -23,6 +22,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   const { data: products, isLoading } = useQuery<Product[]>({
     queryKey: ["/api/products"],
@@ -43,12 +43,34 @@ export default function ProductsPage() {
         return matchesSearch && matchesStatus;
       })
       .sort((a, b) => {
-        const catA = (a.category || "").toLowerCase();
-        const catB = (b.category || "").toLowerCase();
+        const catA = (a.category || "Uncategorised").toLowerCase();
+        const catB = (b.category || "Uncategorised").toLowerCase();
         if (catA !== catB) return catA.localeCompare(catB);
         return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
       });
   }, [products, search, statusFilter]);
+
+  const groupedProducts = useMemo(() => {
+    const groups: Record<string, Product[]> = {};
+    for (const product of filteredProducts) {
+      const cat = product.category || "Uncategorised";
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(product);
+    }
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [filteredProducts]);
+
+  const toggleCategory = (category: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
 
   const deleteProductMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -72,11 +94,13 @@ export default function ProductsPage() {
     }).format(num);
   };
 
+  const totalCategories = groupedProducts.length;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Products"
-        description="Manage your product catalogue"
+        description={`${filteredProducts.length} products across ${totalCategories} categories`}
         searchPlaceholder="Search by name, SKU, or category..."
         searchValue={search}
         onSearchChange={setSearch}
@@ -108,11 +132,11 @@ export default function ProductsPage() {
             <div className="p-6 space-y-4">
               {[1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="flex items-center gap-4">
-                  <Skeleton className="w-10 h-10 rounded-lg" />
+                  <Skeleton className="w-5 h-5 rounded" />
                   <div className="flex-1 space-y-2">
                     <Skeleton className="h-4 w-48" />
-                    <Skeleton className="h-3 w-24" />
                   </div>
+                  <Skeleton className="h-6 w-8 rounded-full" />
                 </div>
               ))}
             </div>
@@ -130,102 +154,99 @@ export default function ProductsPage() {
               )}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead>SKU</TableHead>
-                  <TableHead className="hidden md:table-cell">Category</TableHead>
-                  {canViewPricing && <TableHead className="text-right">Price</TableHead>}
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProducts.map((product) => (
-                  <TableRow
-                    key={product.id}
-                    className="hover-elevate cursor-pointer"
-                    onClick={() => navigate(`/products/${product.id}`)}
-                  >
-                    <TableCell>
+            <div className="divide-y">
+              {groupedProducts.map(([category, catProducts]) => {
+                const isExpanded = expandedCategories.has(category);
+                return (
+                  <div key={category}>
+                    <button
+                      onClick={() => toggleCategory(category)}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 hover-elevate text-left"
+                      data-testid={`button-category-${category.replace(/\s+/g, "-").toLowerCase()}`}
+                    >
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <Package className="w-5 h-5 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-medium" data-testid={`text-product-name-${product.id}`}>
-                            {product.name}
-                          </p>
-                          {product.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-1">{product.description}</p>
-                          )}
-                        </div>
+                        <ChevronRight
+                          className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                        />
+                        <span className="font-semibold text-sm">{category}</span>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <code className="text-xs bg-muted px-2 py-1 rounded">{product.sku}</code>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">
-                      {product.category || "-"}
-                    </TableCell>
-                    {canViewPricing && (
-                      <TableCell className="text-right font-medium">{formatCurrency(product.unitPrice)}</TableCell>
+                      <Badge variant="secondary" className="no-default-active-elevate">
+                        {catProducts.length}
+                      </Badge>
+                    </button>
+                    {isExpanded && (
+                      <div className="border-t bg-muted/30">
+                        {catProducts.map((product) => (
+                          <div
+                            key={product.id}
+                            className="flex items-center gap-3 px-4 py-2.5 pl-11 hover-elevate cursor-pointer border-b last:border-b-0 border-border/50"
+                            onClick={() => navigate(`/products/${product.id}`)}
+                            data-testid={`row-product-${product.id}`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-medium" data-testid={`text-product-name-${product.id}`}>
+                                  {product.name}
+                                </span>
+                                <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                                  {product.sku}
+                                </code>
+                                {!product.active && (
+                                  <Badge variant="secondary" className="text-xs gap-1">
+                                    <XCircle className="w-3 h-3" />
+                                    Inactive
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            {canViewPricing && (
+                              <span className="text-sm text-muted-foreground whitespace-nowrap">
+                                {formatCurrency(product.unitPrice)}
+                              </span>
+                            )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                <Button variant="ghost" size="icon">
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => navigate(`/products/${product.id}`)}>
+                                  <Eye className="w-4 h-4 mr-2" />
+                                  View
+                                </DropdownMenuItem>
+                                {canEdit && (
+                                  <DropdownMenuItem onClick={() => navigate(`/products/${product.id}/edit`)}>
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                )}
+                                {canEdit && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      className="text-destructive"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setProductToDelete(product);
+                                      }}
+                                      data-testid={`button-delete-product-${product.id}`}
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        ))}
+                      </div>
                     )}
-                    <TableCell>
-                      {product.active ? (
-                        <Badge variant="outline" className="gap-1">
-                          <CheckCircle className="w-3 h-3" />
-                          Active
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="gap-1">
-                          <XCircle className="w-3 h-3" />
-                          Inactive
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => navigate(`/products/${product.id}`)}>
-                            <Eye className="w-4 h-4 mr-2" />
-                            View
-                          </DropdownMenuItem>
-                          {canEdit && (
-                            <DropdownMenuItem onClick={() => navigate(`/products/${product.id}/edit`)}>
-                              <Edit className="w-4 h-4 mr-2" />
-                              Edit
-                            </DropdownMenuItem>
-                          )}
-                          {canEdit && (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setProductToDelete(product);
-                                }}
-                                data-testid={`button-delete-product-${product.id}`}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
