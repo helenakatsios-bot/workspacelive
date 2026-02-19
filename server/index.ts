@@ -9,6 +9,7 @@ import { startAutoEmailSync } from "./outlook";
 import { startInactivityChecker } from "./inactivity-checker";
 import { startAutoXeroInvoiceSync } from "./xero";
 import { importPuradownPrices } from "./import-puradown-prices";
+import { seedPriceLists } from "./seed-price-lists";
 
 const app = express();
 const httpServer = createServer(app);
@@ -287,6 +288,13 @@ async function runStartupTasks() {
     await importPuradownPrices();
   } catch (error) {
     console.error("Puradown price import error:", error);
+  }
+
+  // Seed price lists from CSV files
+  try {
+    await seedPriceLists();
+  } catch (error) {
+    console.error("Price list seeding error:", error);
   }
 
   console.log("All startup tasks completed");
