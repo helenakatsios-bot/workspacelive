@@ -66,7 +66,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Company, Contact, Order, Activity, Deal, Product, CompanyPrice, Invoice } from "@shared/schema";
+import type { Company, Contact, Order, Activity, Deal, Product, CompanyPrice, Invoice, PriceList } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function CompanyDetailPage() {
@@ -135,6 +135,22 @@ export default function CompanyDetailPage() {
   const { data: companyAttachments } = useQuery<any[]>({
     queryKey: ["/api/companies", params?.id, "attachments"],
     enabled: !!params?.id,
+  });
+
+  const { data: priceLists } = useQuery<PriceList[]>({
+    queryKey: ["/api/price-lists"],
+  });
+
+  const updatePriceListMutation = useMutation({
+    mutationFn: (priceListId: string | null) =>
+      apiRequest("PATCH", `/api/companies/${params?.id}`, { priceListId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id] });
+      toast({ title: "Price list updated", description: "Company price list assignment has been saved." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update price list.", variant: "destructive" });
+    },
   });
 
   const [emailsOpen, setEmailsOpen] = useState(true);
@@ -700,6 +716,29 @@ export default function CompanyDetailPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">Payment Terms</p>
                   <p className="text-sm" data-testid="text-payment-terms">{company.paymentTerms || "Net 30"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Price List</p>
+                  {canEdit ? (
+                    <Select
+                      value={company.priceListId || "none"}
+                      onValueChange={(value) => updatePriceListMutation.mutate(value === "none" ? null : value)}
+                    >
+                      <SelectTrigger className="w-full mt-0.5" data-testid="select-company-price-list">
+                        <SelectValue placeholder="Select price list" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No price list assigned</SelectItem>
+                        {priceLists?.map((pl) => (
+                          <SelectItem key={pl.id} value={pl.id}>{pl.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm" data-testid="text-price-list">
+                      {priceLists?.find(pl => pl.id === company.priceListId)?.name || "None assigned"}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Total Orders</p>
