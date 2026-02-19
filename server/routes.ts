@@ -4761,6 +4761,7 @@ Rules:
         'MATTRESS TOPPER CASE',
         'MEN JACKET',
         'WOMAN JACKET',
+        'WINTER',
       ];
       const hiddenProductNames = ['Freight'];
       const result = await pool.query(`

@@ -898,6 +898,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
             const hasFillingOption = FILLING_CATEGORIES.includes(category);
             const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
               '50% WINTER FILLED': '50% DUCK WINTER FILLED',
+              '80% WINTER FILLED': 'WINTER 80% DOWN',
             };
             const displayCategory = CATEGORY_DISPLAY_NAMES[category] || category;
             return (
@@ -924,6 +925,9 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                             let name = product.name.replace(/\s*[\-–]\s*\(.*?\)\s*/g, '').replace(/\s*\(.*?\)\s*/g, '').trim();
                             if (category === '50% WINTER FILLED') {
                               name = name.replace(/\s*-?\s*50% WINTER FILLED/i, '').trim();
+                            }
+                            if (category === '80% WINTER FILLED') {
+                              name = name.replace(/\s*-?\s*80% WINTER FILLED/i, '').trim();
                             }
                             return name;
                           })()}</p>
