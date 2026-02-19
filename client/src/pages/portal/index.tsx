@@ -678,7 +678,6 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
 
   const WEIGHT_OPTIONS: Record<string, string[]> = {
     '4 SEASONS FILLED': ['Normal'],
-    'MATTRESS TOPPER FILLED': ['Normal'],
     '80% WINTER FILLED': ['Normal'],
     '80% MID WARM FILLED': ['Normal'],
     'PIPED PILLOWS': ['Normal'],
@@ -726,28 +725,37 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     return sorted;
   }, [filteredProducts]);
 
+  const isNonZero = (price: string | null | undefined): boolean => {
+    return !!price && price !== "0.00" && price !== "0";
+  };
+
   const getVariantPrice = (product: any, filling?: string, weight?: string): string => {
     if (!product?.variantPrices || product.variantPrices.length === 0) return product?.unitPrice || "0";
     if (!filling) {
-      if (product.unitPrice && product.unitPrice !== "0.00" && product.unitPrice !== "0") {
+      if (isNonZero(product.unitPrice)) {
         return product.unitPrice;
       }
-      const nonZero = product.variantPrices.find((vp: any) => vp.unitPrice && vp.unitPrice !== "0.00" && vp.unitPrice !== "0");
+      const nonZero = product.variantPrices.find((vp: any) => isNonZero(vp.unitPrice));
       return nonZero?.unitPrice || product.variantPrices[0]?.unitPrice || "0";
     }
     const f = filling.trim();
     const w = weight?.trim() || null;
     const variants = product.variantPrices.filter((vp: any) => vp.filling?.trim() === f);
     if (variants.length === 0) return product.unitPrice || "0";
+
+    let matched: string | null = null;
     if (w) {
       const exactMatch = variants.find((vp: any) => vp.weight?.trim() === w);
-      if (exactMatch) return exactMatch.unitPrice;
+      if (exactMatch && isNonZero(exactMatch.unitPrice)) return exactMatch.unitPrice;
+      if (exactMatch) matched = exactMatch.unitPrice;
     }
     const nullWeight = variants.find((vp: any) => !vp.weight);
-    if (nullWeight) return nullWeight.unitPrice;
+    if (nullWeight && isNonZero(nullWeight.unitPrice)) return nullWeight.unitPrice;
     const normalWeight = variants.find((vp: any) => vp.weight?.trim() === "Normal");
-    if (normalWeight) return normalWeight.unitPrice;
-    return variants[0].unitPrice;
+    if (normalWeight && isNonZero(normalWeight.unitPrice)) return normalWeight.unitPrice;
+    const anyNonZero = variants.find((vp: any) => isNonZero(vp.unitPrice));
+    if (anyNonZero) return anyNonZero.unitPrice;
+    return matched || variants[0].unitPrice;
   };
 
   const cartItems = useMemo(() => {

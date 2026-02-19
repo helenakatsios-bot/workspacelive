@@ -4829,7 +4829,19 @@ Rules:
       }
 
       res.json(result.rows.map((r: any) => {
-        const variants = variantPriceMap.get(r.id) || priceListVariantMap.get(r.id) || defaultVariantMap.get(r.id) || [];
+        let variants = variantPriceMap.get(r.id) || priceListVariantMap.get(r.id) || defaultVariantMap.get(r.id) || [];
+        const allVariantsZero = variants.length > 0 && variants.every((v: any) => !v.unitPrice || v.unitPrice === "0.00" || v.unitPrice === "0");
+        if (allVariantsZero) {
+          const plVariants = priceListVariantMap.get(r.id);
+          if (plVariants && plVariants.some((v: any) => v.unitPrice && v.unitPrice !== "0.00" && v.unitPrice !== "0")) {
+            variants = plVariants;
+          } else {
+            const defVariants = defaultVariantMap.get(r.id);
+            if (defVariants && defVariants.some((v: any) => v.unitPrice && v.unitPrice !== "0.00" && v.unitPrice !== "0")) {
+              variants = defVariants;
+            }
+          }
+        }
         let effectiveUnitPrice = priceMap.get(r.id) || priceListPriceMap.get(r.id) || r.unit_price;
         const isZeroPrice = !effectiveUnitPrice || effectiveUnitPrice === "0.00" || effectiveUnitPrice === "0";
         if (isZeroPrice && variants.length > 0) {
