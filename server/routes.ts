@@ -900,6 +900,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/products/:id/variants", requireAuth, async (req, res) => {
+    try {
+      const variants = await storage.getDefaultVariantPricesByProductId(req.params.id);
+      res.json(variants);
+    } catch (error) {
+      console.error("Get variant prices error:", error);
+      res.status(500).json({ message: "Failed to get variant prices" });
+    }
+  });
+
   app.get("/api/products/:id", requireAuth, async (req, res) => {
     try {
       const product = await storage.getProduct(req.params.id);
@@ -950,16 +960,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Update product error:", error);
       res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.get("/api/products/:id/variants", requireAuth, async (req, res) => {
-    try {
-      const variants = await storage.getDefaultVariantPricesByProductId(req.params.id);
-      res.json(variants);
-    } catch (error) {
-      console.error("Get variant prices error:", error);
-      res.status(500).json({ message: "Failed to get variant prices" });
     }
   });
 
