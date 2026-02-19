@@ -953,6 +953,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/products/:id/variants", requireAuth, async (req, res) => {
+    try {
+      const variants = await storage.getDefaultVariantPricesByProductId(req.params.id);
+      res.json(variants);
+    } catch (error) {
+      console.error("Get variant prices error:", error);
+      res.status(500).json({ message: "Failed to get variant prices" });
+    }
+  });
+
   app.delete("/api/products/:id", requireEdit, async (req, res) => {
     try {
       const product = await storage.getProduct(req.params.id);

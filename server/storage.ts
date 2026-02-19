@@ -13,7 +13,8 @@ import {
   type AuditLog, type InsertAuditLog,
   type CustomerOrderRequest, type InsertCustomerOrderRequest, type CrmSetting,
   type Form, type InsertForm, type FormSubmission, type InsertFormSubmission,
-  type CompanyPrice, type InsertCompanyPrice
+  type CompanyPrice, type InsertCompanyPrice,
+  defaultVariantPrices, type DefaultVariantPrice
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
@@ -56,6 +57,7 @@ export interface IStorage {
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, data: Partial<InsertProduct>): Promise<Product | undefined>;
   deleteProduct(id: string): Promise<boolean>;
+  getDefaultVariantPricesByProductId(productId: string): Promise<DefaultVariantPrice[]>;
 
   // Quotes
   getQuote(id: string): Promise<Quote | undefined>;
@@ -316,6 +318,12 @@ export class DatabaseStorage implements IStorage {
   async deleteProduct(id: string): Promise<boolean> {
     const [deleted] = await db.delete(products).where(eq(products.id, id)).returning();
     return !!deleted;
+  }
+
+  async getDefaultVariantPricesByProductId(productId: string): Promise<DefaultVariantPrice[]> {
+    return db.select().from(defaultVariantPrices)
+      .where(eq(defaultVariantPrices.productId, productId))
+      .orderBy(defaultVariantPrices.filling, defaultVariantPrices.weight);
   }
 
   // Quotes

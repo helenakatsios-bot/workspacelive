@@ -1,16 +1,26 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
-import { useState } from "react";
-import { ArrowLeft, Package, Edit, Trash2, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { ArrowLeft, Package, Edit, Trash2, CheckCircle, XCircle, Loader2, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Product } from "@shared/schema";
+
+interface VariantPrice {
+  id: string;
+  productId: string;
+  filling: string;
+  weight: string | null;
+  unitPrice: string;
+  updatedAt: string;
+}
 
 export default function ProductDetailPage() {
   const [, navigate] = useLocation();
@@ -21,6 +31,10 @@ export default function ProductDetailPage() {
 
   const { data: product, isLoading } = useQuery<Product>({
     queryKey: ["/api/products", params.id],
+  });
+
+  const { data: variants, isLoading: variantsLoading } = useQuery<VariantPrice[]>({
+    queryKey: ["/api/products", params.id, "variants"],
   });
 
   const deleteMutation = useMutation({
@@ -44,6 +58,21 @@ export default function ProductDetailPage() {
       style: "currency",
       currency: "AUD",
     }).format(num);
+  };
+
+  const uniqueFillings = useMemo(() => {
+    if (!variants || variants.length === 0) return [];
+    return Array.from(new Set(variants.map(v => v.filling))).sort();
+  }, [variants]);
+
+  const uniqueWeights = useMemo(() => {
+    if (!variants || variants.length === 0) return [];
+    return Array.from(new Set(variants.map(v => v.weight).filter(Boolean) as string[])).sort();
+  }, [variants]);
+
+  const getVariantPrice = (filling: string, weight: string) => {
+    if (!variants) return null;
+    return variants.find(v => v.filling === filling && v.weight === weight);
   };
 
   if (isLoading) {
@@ -73,6 +102,9 @@ export default function ProductDetailPage() {
     );
   }
 
+  const hasVariants = variants && variants.length > 0;
+  const hasWeights = uniqueWeights.length > 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -92,6 +124,12 @@ export default function ProductDetailPage() {
                 <Badge variant="secondary" className="gap-1">
                   <XCircle className="w-3 h-3" />
                   Inactive
+                </Badge>
+              )}
+              {hasVariants && (
+                <Badge variant="secondary" className="gap-1">
+                  <Layers className="w-3 h-3" />
+                  {variants.length} variants
                 </Badge>
               )}
             </div>
@@ -152,7 +190,7 @@ export default function ProductDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <p className="text-sm text-muted-foreground">Unit Price</p>
+                <p className="text-sm text-muted-foreground">Base Unit Price</p>
                 <p className="text-xl font-bold">{formatCurrency(product.unitPrice)}</p>
               </div>
               <div>
@@ -171,6 +209,74 @@ export default function ProductDetailPage() {
           </Card>
         )}
       </div>
+
+      {canViewPricing && hasVariants && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Layers className="w-5 h-5" />
+              Variant Prices
+              <Badge variant="secondary" className="ml-1">{variants.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {hasWeights ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="sticky left-0 bg-background z-10 min-w-[180px]">Filling</TableHead>
+                      {uniqueWeights.map(w => (
+                        <TableHead key={w} className="text-right min-w-[100px]" data-testid={`th-weight-${w}`}>{w}</TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {uniqueFillings.map(filling => (
+                      <TableRow key={filling}>
+                        <TableCell className="sticky left-0 bg-background z-10 font-medium" data-testid={`td-filling-${filling}`}>
+                          {filling}
+                        </TableCell>
+                        {uniqueWeights.map(weight => {
+                          const vp = getVariantPrice(filling, weight);
+                          return (
+                            <TableCell key={weight} className="text-right" data-testid={`td-price-${filling}-${weight}`}>
+                              {vp ? formatCurrency(vp.unitPrice) : <span className="text-muted-foreground">-</span>}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Filling</TableHead>
+                    <TableHead className="text-right">Price</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {variants.map(v => (
+                    <TableRow key={v.id}>
+                      <TableCell className="font-medium" data-testid={`td-filling-${v.filling}`}>{v.filling}</TableCell>
+                      <TableCell className="text-right" data-testid={`td-price-${v.filling}`}>{formatCurrency(v.unitPrice)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {!hasVariants && !variantsLoading && (
+        <div className="text-center py-8 text-muted-foreground text-sm">
+          No variant prices configured for this product.
+        </div>
+      )}
 
       <AlertDialog open={showDelete} onOpenChange={setShowDelete}>
         <AlertDialogContent>
