@@ -64,7 +64,33 @@ function detectColumns(header: string): ColumnMap {
   return { productName: 0, sku: 1, filling: 3, weight: 4, price: 5 };
 }
 
+async function deduplicatePriceLists() {
+  const allLists = await db.select().from(priceLists);
+  const nameGroups: Record<string, typeof allLists> = {};
+  allLists.forEach(l => {
+    if (!nameGroups[l.name]) nameGroups[l.name] = [];
+    nameGroups[l.name].push(l);
+  });
+
+  for (const [name, lists] of Object.entries(nameGroups)) {
+    if (lists.length <= 1) continue;
+    const counts = await Promise.all(lists.map(async l => {
+      const rows = await db.select({ count: sql<number>`count(*)` }).from(priceListPrices)
+        .where(eq(priceListPrices.priceListId, l.id));
+      return { list: l, count: Number(rows[0]?.count || 0) };
+    }));
+    counts.sort((a, b) => b.count - a.count);
+    for (let i = 1; i < counts.length; i++) {
+      console.log(`[PRICE-LISTS] Removing duplicate "${name}" (${counts[i].count} prices, keeping one with ${counts[0].count} prices)`);
+      await db.delete(priceListPrices).where(eq(priceListPrices.priceListId, counts[i].list.id));
+      await db.delete(priceLists).where(eq(priceLists.id, counts[i].list.id));
+    }
+  }
+}
+
 export async function seedPriceLists() {
+  await deduplicatePriceLists();
+
   const existingLists = await db.select().from(priceLists);
 
   if (existingLists.length >= PRICE_LIST_CONFIGS.length) {
