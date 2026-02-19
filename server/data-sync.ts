@@ -70,7 +70,11 @@ async function importProductsFromCsv() {
   let insertedProducts = 0;
   let insertedVariants = 0;
 
+  const EXCLUDED_CATEGORIES = ["CASES", "WINTER"];
+
   for (const [key, prod] of productMap) {
+    if (EXCLUDED_CATEGORIES.includes((prod.category || "").toUpperCase())) continue;
+
     let sku = prod.sku;
     let productId: string | undefined;
 
