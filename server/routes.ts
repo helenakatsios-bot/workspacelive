@@ -977,6 +977,23 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/price-lists/:priceListId/prices", requireAuth, async (req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT plp.id, plp.product_id, plp.filling, plp.weight, plp.unit_price, p.name as product_name, p.category
+         FROM price_list_prices plp
+         JOIN products p ON p.id = plp.product_id
+         WHERE plp.price_list_id = $1
+         ORDER BY p.category, p.name, plp.filling, plp.weight`,
+        [req.params.priceListId]
+      );
+      res.json(rows);
+    } catch (error) {
+      console.error("Get all price list prices error:", error);
+      res.status(500).json({ message: "Failed to get price list prices" });
+    }
+  });
+
   app.get("/api/price-lists/:priceListId/products/:productId/prices", requireAuth, async (req, res) => {
     try {
       const prices = await storage.getPriceListPrices(req.params.priceListId, req.params.productId);

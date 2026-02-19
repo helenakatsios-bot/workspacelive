@@ -1,8 +1,8 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
-import { ListFilter, Plus, Pencil, Trash2, Star, Loader2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { ListFilter, Plus, Pencil, Trash2, Star, Loader2, Eye, Search, Download, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,16 +17,86 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { PriceList } from "@shared/schema";
 
+interface PriceListPrice {
+  id: string;
+  product_id: string;
+  filling: string | null;
+  weight: string | null;
+  unit_price: string;
+  product_name: string;
+  category: string;
+}
+
 export default function PriceListsPage() {
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingList, setEditingList] = useState<PriceList | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PriceList | null>(null);
+  const [viewingList, setViewingList] = useState<PriceList | null>(null);
+  const [priceSearch, setPriceSearch] = useState("");
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [formData, setFormData] = useState({ name: "", description: "", isDefault: false, active: true });
 
   const { data: priceLists, isLoading } = useQuery<PriceList[]>({
     queryKey: ["/api/price-lists"],
   });
+
+  const { data: priceListPrices, isLoading: pricesLoading } = useQuery<PriceListPrice[]>({
+    queryKey: ["/api/price-lists", viewingList?.id, "prices"],
+    queryFn: async () => {
+      const res = await fetch(`/api/price-lists/${viewingList!.id}/prices`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch prices");
+      return res.json();
+    },
+    enabled: !!viewingList,
+  });
+
+  const groupedPrices = useMemo(() => {
+    if (!priceListPrices) return {};
+    const filtered = priceListPrices.filter(p => {
+      if (!priceSearch) return true;
+      const search = priceSearch.toLowerCase();
+      return p.product_name.toLowerCase().includes(search) ||
+        (p.category && p.category.toLowerCase().includes(search)) ||
+        (p.filling && p.filling.toLowerCase().includes(search)) ||
+        (p.weight && p.weight.toLowerCase().includes(search));
+    });
+    const groups: Record<string, PriceListPrice[]> = {};
+    for (const p of filtered) {
+      const cat = p.category || "Uncategorized";
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(p);
+    }
+    return groups;
+  }, [priceListPrices, priceSearch]);
+
+  const totalProducts = priceListPrices?.length || 0;
+  const categories = Object.keys(groupedPrices).sort();
+
+  const toggleCategory = (cat: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
+
+  const exportCSV = () => {
+    if (!priceListPrices || !viewingList) return;
+    const rows = [["Category", "Product", "Filling", "Weight", "Price"]];
+    for (const p of priceListPrices) {
+      rows.push([p.category || "", p.product_name, p.filling || "", p.weight || "", p.unit_price]);
+    }
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${viewingList.name.replace(/\s+/g, "_")}_prices.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
@@ -136,14 +206,18 @@ export default function PriceListsPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
+                  <TableHead className="w-[140px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {priceLists.map(pl => (
                   <TableRow key={pl.id} data-testid={`row-price-list-${pl.id}`}>
                     <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
+                      <button
+                        className="flex items-center gap-2 text-left hover:underline cursor-pointer"
+                        onClick={() => { setViewingList(pl); setPriceSearch(""); setCollapsedCategories(new Set()); }}
+                        data-testid={`link-view-${pl.id}`}
+                      >
                         {pl.name}
                         {pl.isDefault && (
                           <Badge variant="outline" className="gap-1">
@@ -151,7 +225,7 @@ export default function PriceListsPage() {
                             Default
                           </Badge>
                         )}
-                      </div>
+                      </button>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{pl.description || "-"}</TableCell>
                     <TableCell>
@@ -161,6 +235,9 @@ export default function PriceListsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => { setViewingList(pl); setPriceSearch(""); setCollapsedCategories(new Set()); }} data-testid={`button-view-${pl.id}`}>
+                          <Eye className="w-4 h-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => openEdit(pl)} data-testid={`button-edit-${pl.id}`}>
                           <Pencil className="w-4 h-4" />
                         </Button>
@@ -178,6 +255,96 @@ export default function PriceListsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!viewingList} onOpenChange={(open) => { if (!open) setViewingList(null); }}>
+        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {viewingList?.name} Prices
+              {viewingList?.isDefault && (
+                <Badge variant="outline" className="gap-1">
+                  <Star className="w-3 h-3" />
+                  Default
+                </Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {totalProducts} price entries across {categories.length} categories
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search products, categories, fillings..."
+                value={priceSearch}
+                onChange={e => setPriceSearch(e.target.value)}
+                className="pl-9"
+                data-testid="input-price-search"
+              />
+            </div>
+            <Button variant="outline" size="default" onClick={exportCSV} data-testid="button-export-csv">
+              <Download className="w-4 h-4 mr-2" />
+              CSV
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {pricesLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : categories.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                {priceSearch ? "No matching prices found." : "No prices set for this price list yet."}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {categories.map(cat => {
+                  const prices = groupedPrices[cat];
+                  const isCollapsed = collapsedCategories.has(cat);
+                  return (
+                    <div key={cat}>
+                      <button
+                        className="flex items-center gap-2 w-full text-left py-2 px-3 rounded-md hover-elevate font-semibold text-sm"
+                        onClick={() => toggleCategory(cat)}
+                        data-testid={`button-toggle-category-${cat}`}
+                      >
+                        {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        {cat}
+                        <Badge variant="secondary" className="ml-auto">{prices.length}</Badge>
+                      </button>
+                      {!isCollapsed && (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Product</TableHead>
+                              <TableHead>Filling</TableHead>
+                              <TableHead>Weight</TableHead>
+                              <TableHead className="text-right">Price</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {prices.map(p => (
+                              <TableRow key={p.id} data-testid={`row-price-${p.id}`}>
+                                <TableCell className="font-medium">{p.product_name}</TableCell>
+                                <TableCell className="text-muted-foreground">{p.filling || "-"}</TableCell>
+                                <TableCell className="text-muted-foreground">{p.weight || "-"}</TableCell>
+                                <TableCell className="text-right font-mono">
+                                  ${parseFloat(p.unit_price).toFixed(2)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showForm} onOpenChange={(open) => { if (!open) closeForm(); }}>
         <DialogContent>
