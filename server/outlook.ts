@@ -124,7 +124,8 @@ export async function deleteOutlookToken(userId: string) {
 
 export async function refreshOutlookTokenIfNeeded(
   userId: string,
-  redirectUri: string
+  redirectUri: string,
+  maxRetries: number = 3
 ): Promise<string | null> {
   const token = await getStoredOutlookToken(userId);
   if (!token) return null;
@@ -132,51 +133,64 @@ export async function refreshOutlookTokenIfNeeded(
   const now = new Date();
   const expiresAt = new Date(token.expiresAt);
   
-  if (expiresAt.getTime() - now.getTime() > 5 * 60 * 1000) {
+  if (expiresAt.getTime() - now.getTime() > 15 * 60 * 1000) {
     return token.accessToken;
   }
 
   if (!token.refreshToken) {
-    console.error("No refresh token available for Outlook");
+    console.error(`[OUTLOOK] No refresh token available for user ${userId} (${token.emailAddress})`);
     return null;
   }
 
-  try {
-    const msalClient = createMsalClient(redirectUri);
-    
-    const response = await msalClient.acquireTokenByRefreshToken({
-      refreshToken: token.refreshToken,
-      scopes: OUTLOOK_SCOPES,
-    });
+  console.log(`[OUTLOOK] Token for ${token.emailAddress} expires soon (${expiresAt.toISOString()}), refreshing...`);
 
-    if (!response || !response.accessToken) {
-      console.error("Failed to refresh Outlook token");
-      return null;
-    }
-
-    const newExpiresAt = response.expiresOn ? new Date(response.expiresOn) : new Date(Date.now() + 3600 * 1000);
-    
-    let newRefreshToken = token.refreshToken;
-    const newTokenCache = msalClient.getTokenCache().serialize();
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const cacheData = JSON.parse(newTokenCache);
-      if (cacheData.RefreshToken) {
-        const refreshTokenKeys = Object.keys(cacheData.RefreshToken);
-        if (refreshTokenKeys.length > 0) {
-          newRefreshToken = cacheData.RefreshToken[refreshTokenKeys[0]].secret;
-        }
-      }
-    } catch {
-      // Keep the original refresh token if cache parsing fails
-    }
+      const msalClient = createMsalClient(redirectUri);
+      
+      const response = await msalClient.acquireTokenByRefreshToken({
+        refreshToken: token.refreshToken,
+        scopes: OUTLOOK_SCOPES,
+      });
 
-    await saveOutlookToken(userId, response.accessToken, newRefreshToken, newExpiresAt, token.emailAddress || undefined);
-    
-    return response.accessToken;
-  } catch (error) {
-    console.error("Error refreshing Outlook token:", error);
-    return null;
+      if (!response || !response.accessToken) {
+        console.error(`[OUTLOOK] Refresh attempt ${attempt}/${maxRetries} failed for ${token.emailAddress} - no token returned`);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+          continue;
+        }
+        return null;
+      }
+
+      const newExpiresAt = response.expiresOn ? new Date(response.expiresOn) : new Date(Date.now() + 3600 * 1000);
+      
+      let newRefreshToken = token.refreshToken;
+      const newTokenCache = msalClient.getTokenCache().serialize();
+      try {
+        const cacheData = JSON.parse(newTokenCache);
+        if (cacheData.RefreshToken) {
+          const refreshTokenKeys = Object.keys(cacheData.RefreshToken);
+          if (refreshTokenKeys.length > 0) {
+            newRefreshToken = cacheData.RefreshToken[refreshTokenKeys[0]].secret;
+          }
+        }
+      } catch {
+      }
+
+      await saveOutlookToken(userId, response.accessToken, newRefreshToken, newExpiresAt, token.emailAddress || undefined);
+      console.log(`[OUTLOOK] Successfully refreshed token for ${token.emailAddress}, new expiry: ${newExpiresAt.toISOString()}`);
+      
+      return response.accessToken;
+    } catch (error: any) {
+      console.error(`[OUTLOOK] Refresh attempt ${attempt}/${maxRetries} error for ${token.emailAddress}:`, error?.message || error);
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+      }
+    }
   }
+
+  console.error(`[OUTLOOK] All ${maxRetries} refresh attempts failed for ${token.emailAddress}. Token may need manual reconnection.`);
+  return null;
 }
 
 function createGraphClient(accessToken: string): Client {
@@ -519,6 +533,7 @@ export async function backfillEmailCompanyLinks(): Promise<number> {
 }
 
 let autoSyncInterval: ReturnType<typeof setInterval> | null = null;
+const failedRefreshCounts = new Map<string, number>();
 
 export function startAutoEmailSync(redirectUri: string, intervalMinutes: number = 5) {
   if (autoSyncInterval) {
@@ -530,26 +545,36 @@ export function startAutoEmailSync(redirectUri: string, intervalMinutes: number 
       const allTokens = await db.select().from(outlookTokens);
       if (allTokens.length === 0) return;
 
+      console.log(`[AUTO-SYNC] Running email sync for ${allTokens.length} connected account(s)...`);
+
       for (const token of allTokens) {
         try {
           const accessToken = await refreshOutlookTokenIfNeeded(token.userId, redirectUri);
           if (!accessToken) {
-            console.log(`[AUTO-SYNC] Skipping user ${token.userId} - token expired or unavailable`);
+            const failCount = (failedRefreshCounts.get(token.userId) || 0) + 1;
+            failedRefreshCounts.set(token.userId, failCount);
+            console.warn(`[AUTO-SYNC] Cannot sync ${token.emailAddress || token.userId} - token refresh failed (attempt ${failCount}). Will retry next cycle.`);
             continue;
           }
+
+          failedRefreshCounts.delete(token.userId);
 
           const folders = ["inbox", "sentItems", "drafts"];
           let totalSynced = 0;
           for (const folder of folders) {
-            const synced = await syncEmailsToDatabase(token.userId, accessToken, folder);
-            totalSynced += synced;
+            try {
+              const synced = await syncEmailsToDatabase(token.userId, accessToken, folder);
+              totalSynced += synced;
+            } catch (folderErr: any) {
+              console.error(`[AUTO-SYNC] Error syncing ${folder} for ${token.emailAddress}:`, folderErr?.message || folderErr);
+            }
           }
 
           if (totalSynced > 0) {
-            console.log(`[AUTO-SYNC] Synced ${totalSynced} new emails for user ${token.userId}`);
+            console.log(`[AUTO-SYNC] Synced ${totalSynced} new emails for ${token.emailAddress || token.userId}`);
           }
-        } catch (err) {
-          console.error(`[AUTO-SYNC] Error syncing emails for user ${token.userId}:`, err);
+        } catch (err: any) {
+          console.error(`[AUTO-SYNC] Error syncing emails for ${token.emailAddress || token.userId}:`, err?.message || err);
         }
       }
     } catch (err) {
