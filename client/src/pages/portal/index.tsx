@@ -939,7 +939,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                             }
                             return name;
                           })()}</p>
-                          {product.description && category !== '50% WINTER FILLED' && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
+                          {product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
                         </TableCell>
                         {hasFillingOption && (
                           <TableCell>
