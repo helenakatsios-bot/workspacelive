@@ -4830,8 +4830,18 @@ Rules:
       res.json(result.rows.map((r: any) => {
         const variants = variantPriceMap.get(r.id) || priceListVariantMap.get(r.id) || defaultVariantMap.get(r.id) || [];
         let effectiveUnitPrice = priceMap.get(r.id) || priceListPriceMap.get(r.id) || r.unit_price;
-        if ((!effectiveUnitPrice || effectiveUnitPrice === "0.00" || effectiveUnitPrice === "0") && variants.length > 0) {
-          effectiveUnitPrice = variants[0].unitPrice;
+        const isZeroPrice = !effectiveUnitPrice || effectiveUnitPrice === "0.00" || effectiveUnitPrice === "0";
+        if (isZeroPrice && variants.length > 0) {
+          const nonZeroVariant = variants.find((v: any) => v.unitPrice && v.unitPrice !== "0.00" && v.unitPrice !== "0");
+          if (nonZeroVariant) {
+            effectiveUnitPrice = nonZeroVariant.unitPrice;
+          } else {
+            const plVariants = priceListVariantMap.get(r.id) || [];
+            const plNonZero = plVariants.find((v: any) => v.unitPrice && v.unitPrice !== "0.00" && v.unitPrice !== "0");
+            if (plNonZero) {
+              effectiveUnitPrice = plNonZero.unitPrice;
+            }
+          }
         }
         return {
           id: r.id,

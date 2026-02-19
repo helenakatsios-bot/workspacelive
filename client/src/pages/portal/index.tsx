@@ -729,8 +729,11 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const getVariantPrice = (product: any, filling?: string, weight?: string): string => {
     if (!product?.variantPrices || product.variantPrices.length === 0) return product?.unitPrice || "0";
     if (!filling) {
-      const fallback = product.unitPrice && product.unitPrice !== "0.00" && product.unitPrice !== "0" ? product.unitPrice : product.variantPrices[0]?.unitPrice || "0";
-      return fallback;
+      if (product.unitPrice && product.unitPrice !== "0.00" && product.unitPrice !== "0") {
+        return product.unitPrice;
+      }
+      const nonZero = product.variantPrices.find((vp: any) => vp.unitPrice && vp.unitPrice !== "0.00" && vp.unitPrice !== "0");
+      return nonZero?.unitPrice || product.variantPrices[0]?.unitPrice || "0";
     }
     const f = filling.trim();
     const w = weight?.trim() || null;
@@ -897,12 +900,10 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
               '50% WINTER FILLED': '50% DUCK WINTER FILLED',
             };
             const displayCategory = CATEGORY_DISPLAY_NAMES[category] || category;
-            const categoryDescription = category === '50% WINTER FILLED' ? '50% DUCK WINTER FILLED' : null;
             return (
             <Card key={category}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-muted-foreground">{displayCategory}</CardTitle>
-                {categoryDescription && <p className="text-xs text-muted-foreground">{categoryDescription}</p>}
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
@@ -919,11 +920,14 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                     {prods.filter((product: any) => product.name !== 'CUSTOM INSERT').map((product: any) => (
                       <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
                         <TableCell>
-                          {category === '50% WINTER FILLED' && (
-                            <p className="text-xs font-semibold text-muted-foreground">50% DUCK WINTER FILLED</p>
-                          )}
-                          <p className="font-medium">{product.name.replace(/\s*[\-–]\s*\(.*?\)\s*/g, '').replace(/\s*\(.*?\)\s*/g, '').trim()}</p>
-                          {product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
+                          <p className="font-medium">{(() => {
+                            let name = product.name.replace(/\s*[\-–]\s*\(.*?\)\s*/g, '').replace(/\s*\(.*?\)\s*/g, '').trim();
+                            if (category === '50% WINTER FILLED') {
+                              name = name.replace(/\s*-?\s*50% WINTER FILLED/i, '').trim();
+                            }
+                            return name;
+                          })()}</p>
+                          {product.description && category !== '50% WINTER FILLED' && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
                         </TableCell>
                         {hasFillingOption && (
                           <TableCell>
