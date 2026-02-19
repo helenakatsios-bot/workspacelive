@@ -140,6 +140,72 @@ async function importProductsFromCsv() {
   }
 }
 
+async function syncAllVariantsFromCsv() {
+  const csvPath = path.join(process.cwd(), "attached_assets", "ALL_PRODUCTS_replit_1771449439042.csv");
+  if (!fs.existsSync(csvPath)) return;
+  const csvContent = fs.readFileSync(csvPath, "utf-8");
+  const lines = csvContent.split("\n").filter(l => l.trim());
+  const rows = lines.slice(1).map(line => {
+    const parts = line.split(",");
+    const rawFilling = (parts[4] || "").trim();
+    const rawWeight = (parts[5] || "").trim();
+    let filling = rawFilling;
+    let weight = rawWeight;
+    if (!filling && rawWeight) {
+      filling = rawWeight;
+      weight = "";
+    }
+    return {
+      name: (parts[0] || "").trim(),
+      sku: (parts[1] || "").trim(),
+      filling,
+      weight,
+    };
+  });
+
+  const allProducts = await pool.query("SELECT id, name, sku FROM products");
+  const productByName = new Map<string, string>();
+  const productBySku = new Map<string, string>();
+  for (const p of allProducts.rows) {
+    productByName.set(p.name.toUpperCase(), p.id);
+    productBySku.set(p.sku, p.id);
+  }
+
+  const existingVariants = await pool.query("SELECT product_id, filling, COALESCE(weight, '') as weight FROM default_variant_prices");
+  const existingKeys = new Set(existingVariants.rows.map((v: any) => `${v.product_id}|${v.filling}|${v.weight}`));
+
+  let inserted = 0;
+  for (const row of rows) {
+    if (!row.name || !row.filling) continue;
+
+    const nameUpper = row.name.toUpperCase();
+    const cleanName = nameUpper.replace(/^DUCK\s+/i, "");
+    let productId = productByName.get(nameUpper)
+      || productByName.get(cleanName)
+      || productBySku.get(row.sku);
+
+    if (!productId) continue;
+
+    const key = `${productId}|${row.filling}|${row.weight}`;
+    if (existingKeys.has(key)) continue;
+
+    try {
+      await pool.query(
+        "INSERT INTO default_variant_prices (product_id, filling, weight, unit_price) VALUES ($1, $2, $3, '0.00')",
+        [productId, row.filling, row.weight || null]
+      );
+      existingKeys.add(key);
+      inserted++;
+    } catch (e: any) {
+      // skip
+    }
+  }
+
+  if (inserted > 0) {
+    console.log(`Synced ${inserted} filling variant prices from CSV`);
+  }
+}
+
 export async function syncProductionData() {
   // Ensure all BULK filling products exist
   const bulkProducts = [
@@ -172,6 +238,25 @@ export async function syncProductionData() {
   // Clean up duplicate BULK products with auto-generated SKUs (BULK-900, BULK-901, etc.)
   await pool.query("DELETE FROM products WHERE sku LIKE 'BULK-9%' AND category = 'BULK'");
 
+  // Clean up duplicate WINT-* products (they duplicate DUCK-* products from CSV import)
+  // Move any variant prices from WINT products to their DUCK counterparts first
+  const wintProducts = await pool.query("SELECT id, name, sku FROM products WHERE sku LIKE 'WINT-%'");
+  for (const wp of wintProducts.rows) {
+    const duckSku = wp.sku.replace('WINT-', 'DUCK-');
+    const duckProduct = await pool.query("SELECT id FROM products WHERE sku = $1", [duckSku]);
+    if (duckProduct.rows.length > 0) {
+      await pool.query(
+        "UPDATE default_variant_prices SET product_id = $1 WHERE product_id = $2 AND NOT EXISTS (SELECT 1 FROM default_variant_prices dvp2 WHERE dvp2.product_id = $1 AND dvp2.filling = default_variant_prices.filling AND COALESCE(dvp2.weight, '') = COALESCE(default_variant_prices.weight, ''))",
+        [duckProduct.rows[0].id, wp.id]
+      );
+      await pool.query("DELETE FROM default_variant_prices WHERE product_id = $1", [wp.id]);
+      await pool.query("DELETE FROM products WHERE id = $1", [wp.id]);
+    }
+  }
+  if (wintProducts.rows.length > 0) {
+    console.log(`Cleaned up ${wintProducts.rows.length} duplicate WINT products`);
+  }
+
   // Sync base prices for 80% WINTER FILLED products (Duck=base, Goose=higher)
   const priceUpdates = [
     { name: 'SINGLE - 80% WINTER FILLED', price: '105.00' },
@@ -201,28 +286,8 @@ export async function syncProductionData() {
   await pool.query(`CREATE INDEX IF NOT EXISTS default_variant_prices_product_idx ON default_variant_prices(product_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS default_variant_prices_lookup_idx ON default_variant_prices(product_id, filling, weight)`);
 
-  // Seed default variant prices for 80% WINTER FILLED if not already present
-  const dvpCount = await pool.query("SELECT COUNT(*) as cnt FROM default_variant_prices");
-  if (parseInt(dvpCount.rows[0].cnt) === 0) {
-    const winterProducts = await pool.query("SELECT id, name FROM products WHERE category = '80% WINTER FILLED'");
-    const defaultPrices: Record<string, { Duck: string; Goose: string }> = {
-      'SINGLE - 80% WINTER FILLED': { Duck: '105.00', Goose: '160.00' },
-      'DOUBLE - 80% WINTER FILLED': { Duck: '120.00', Goose: '185.00' },
-      'QUEEN - 80% WINTER FILLED': { Duck: '140.00', Goose: '215.00' },
-      'KING - 80% WINTER FILLED': { Duck: '160.00', Goose: '245.00' },
-      'SUPER KING - 80% WINTER FILLED': { Duck: '230.00', Goose: '330.00' },
-    };
-    for (const row of winterProducts.rows) {
-      const prices = defaultPrices[row.name];
-      if (prices) {
-        await pool.query(
-          `INSERT INTO default_variant_prices (product_id, filling, unit_price) VALUES ($1, 'Duck', $2), ($1, 'Goose', $3)`,
-          [row.id, prices.Duck, prices.Goose]
-        );
-      }
-    }
-    console.log("Seeded default variant prices for 80% WINTER FILLED products");
-  }
+  // Sync ALL filling variants from CSV for products that have them (quilts, pillows, etc.)
+  await syncAllVariantsFromCsv();
 
   const productCount = await pool.query("SELECT COUNT(*) as cnt FROM products");
   const companyCount = await pool.query("SELECT COUNT(*) as cnt FROM companies");
