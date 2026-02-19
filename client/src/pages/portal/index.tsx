@@ -666,7 +666,6 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const FILLING_OPTIONS: Record<string, string[]> = {
     '4 SEASONS FILLED': ['Duck', 'Goose'],
     'MATTRESS TOPPER FILLED': ['Duck', 'Goose'],
-    '50% WINTER FILLED': ['Duck'],
     '80% WINTER FILLED': ['Duck', 'Goose'],
     '80% MID WARM FILLED': ['Duck', 'Goose', 'Hungarian'],
     'PIPED PILLOWS': ['100% Feather', '30% Down 70% Feather', '50% Down 50% Feather', '80% Down 20% Feather'],
@@ -680,7 +679,6 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const WEIGHT_OPTIONS: Record<string, string[]> = {
     '4 SEASONS FILLED': ['Normal'],
     'MATTRESS TOPPER FILLED': ['Normal'],
-    '50% WINTER FILLED': ['Normal'],
     '80% WINTER FILLED': ['Normal'],
     '80% MID WARM FILLED': ['Normal'],
     'PIPED PILLOWS': ['Normal'],
@@ -730,7 +728,10 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
 
   const getVariantPrice = (product: any, filling?: string, weight?: string): string => {
     if (!product?.variantPrices || product.variantPrices.length === 0) return product?.unitPrice || "0";
-    if (!filling) return product.unitPrice || "0";
+    if (!filling) {
+      const fallback = product.unitPrice && product.unitPrice !== "0.00" && product.unitPrice !== "0" ? product.unitPrice : product.variantPrices[0]?.unitPrice || "0";
+      return fallback;
+    }
     const f = filling.trim();
     const w = weight?.trim() || null;
     const variants = product.variantPrices.filter((vp: any) => vp.filling?.trim() === f);
@@ -892,10 +893,16 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
 
           {Object.entries(grouped).map(([category, prods]) => {
             const hasFillingOption = FILLING_CATEGORIES.includes(category);
+            const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+              '50% WINTER FILLED': '50% DUCK WINTER FILLED',
+            };
+            const displayCategory = CATEGORY_DISPLAY_NAMES[category] || category;
+            const categoryDescription = category === '50% WINTER FILLED' ? '50% DUCK WINTER FILLED' : null;
             return (
             <Card key={category}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">{category}</CardTitle>
+                <CardTitle className="text-sm text-muted-foreground">{displayCategory}</CardTitle>
+                {categoryDescription && <p className="text-xs text-muted-foreground">{categoryDescription}</p>}
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
@@ -912,6 +919,9 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                     {prods.filter((product: any) => product.name !== 'CUSTOM INSERT').map((product: any) => (
                       <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
                         <TableCell>
+                          {category === '50% WINTER FILLED' && (
+                            <p className="text-xs font-semibold text-muted-foreground">50% DUCK WINTER FILLED</p>
+                          )}
                           <p className="font-medium">{product.name.replace(/\s*[\-–]\s*\(.*?\)\s*/g, '').replace(/\s*\(.*?\)\s*/g, '').trim()}</p>
                           {product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
                         </TableCell>

@@ -4827,16 +4827,23 @@ Rules:
         defaultVariantMap.get(key)!.push({ filling: dvp.filling, weight: dvp.weight, unitPrice: dvp.unit_price });
       }
 
-      res.json(result.rows.map((r: any) => ({
-        id: r.id,
-        sku: r.sku,
-        name: r.name,
-        description: r.description,
-        category: r.category,
-        unitPrice: priceMap.get(r.id) || priceListPriceMap.get(r.id) || r.unit_price,
-        hasCustomPrice: priceMap.has(r.id) || priceListPriceMap.has(r.id),
-        variantPrices: variantPriceMap.get(r.id) || priceListVariantMap.get(r.id) || defaultVariantMap.get(r.id) || [],
-      })));
+      res.json(result.rows.map((r: any) => {
+        const variants = variantPriceMap.get(r.id) || priceListVariantMap.get(r.id) || defaultVariantMap.get(r.id) || [];
+        let effectiveUnitPrice = priceMap.get(r.id) || priceListPriceMap.get(r.id) || r.unit_price;
+        if ((!effectiveUnitPrice || effectiveUnitPrice === "0.00" || effectiveUnitPrice === "0") && variants.length > 0) {
+          effectiveUnitPrice = variants[0].unitPrice;
+        }
+        return {
+          id: r.id,
+          sku: r.sku,
+          name: r.name,
+          description: r.description,
+          category: r.category,
+          unitPrice: effectiveUnitPrice,
+          hasCustomPrice: priceMap.has(r.id) || priceListPriceMap.has(r.id),
+          variantPrices: variants,
+        };
+      }));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch products" });
     }
