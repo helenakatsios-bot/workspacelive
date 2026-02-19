@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { priceLists, priceListPrices, products } from "@shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and } from "drizzle-orm";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -24,10 +24,6 @@ const PRICE_LIST_CONFIGS: PriceListConfig[] = [
   { name: "Space Craft", description: "Space Craft pricing", isDefault: false, csvFile: "prices_for_replit_space_craft_CSV_1771463629286.csv" },
 ];
 
-function parseCsvLine(line: string): string[] {
-  return line.split(",");
-}
-
 function cleanPrice(raw: string | undefined): number | null {
   if (!raw) return null;
   let s = raw.trim().replace("$", "").replace(" ", "").replace("..", ".");
@@ -37,9 +33,41 @@ function cleanPrice(raw: string | undefined): number | null {
   return val;
 }
 
+interface ColumnMap {
+  productName: number;
+  sku: number;
+  filling: number;
+  weight: number;
+  price: number;
+}
+
+function detectColumns(header: string): ColumnMap {
+  const cols = header.split(",").map(c => c.trim().toLowerCase().replace(/[^a-z ]/g, ""));
+
+  const nameIdx = cols.findIndex(c => c.includes("product name"));
+  const priceIdx = cols.findIndex(c => c.includes("customer price") || c.includes("price"));
+
+  const skuIdx = cols.indexOf("sku");
+  const fillingIdx = cols.indexOf("filling");
+  const weightIdx = cols.indexOf("weight");
+
+  if (fillingIdx >= 0 && weightIdx >= 0) {
+    return {
+      productName: nameIdx >= 0 ? nameIdx : 0,
+      sku: skuIdx >= 0 ? skuIdx : 1,
+      filling: fillingIdx,
+      weight: weightIdx,
+      price: priceIdx >= 0 ? priceIdx : weightIdx + 1,
+    };
+  }
+
+  return { productName: 0, sku: 1, filling: 3, weight: 4, price: 5 };
+}
+
 export async function seedPriceLists() {
   const existingLists = await db.select().from(priceLists);
-  if (existingLists.length > 0) {
+
+  if (existingLists.length >= PRICE_LIST_CONFIGS.length) {
     console.log(`Price lists already seeded (${existingLists.length} lists), skipping`);
     return;
   }
@@ -56,7 +84,7 @@ export async function seedPriceLists() {
 
   function findProductId(productName: string, csvSku: string): string | null {
     if (csvSku && csvSku.length > 2 && skuMap[csvSku]) return skuMap[csvSku];
-    const upperName = productName.toUpperCase();
+    const upperName = productName.toUpperCase().trim();
     if (nameMap[upperName]) return nameMap[upperName];
     const sizePart = upperName.split(" - ")[0]?.trim();
     if (sizePart && nameMap[sizePart]) return nameMap[sizePart];
@@ -68,7 +96,24 @@ export async function seedPriceLists() {
     return null;
   }
 
+  const existingNames = new Set(existingLists.map(l => l.name));
+
   for (const config of PRICE_LIST_CONFIGS) {
+    if (existingNames.has(config.name)) {
+      const existing = existingLists.find(l => l.name === config.name);
+      if (existing) {
+        const prices = await db.select({ id: priceListPrices.id }).from(priceListPrices)
+          .where(eq(priceListPrices.priceListId, existing.id)).limit(1);
+        if (prices.length > 0) {
+          console.log(`[PRICE-LISTS] ${config.name} already has prices, skipping`);
+          continue;
+        }
+        await db.delete(priceListPrices).where(eq(priceListPrices.priceListId, existing.id));
+        await db.delete(priceLists).where(eq(priceLists.id, existing.id));
+        console.log(`[PRICE-LISTS] Removed empty ${config.name} list, re-importing`);
+      }
+    }
+
     const csvPath = path.join(process.cwd(), "attached_assets", config.csvFile);
     if (!fs.existsSync(csvPath)) {
       console.log(`[PRICE-LISTS] CSV not found: ${config.csvFile}, skipping ${config.name}`);
@@ -83,26 +128,31 @@ export async function seedPriceLists() {
     }).returning();
 
     const csv = fs.readFileSync(csvPath, "utf8");
-    const lines = csv.trim().split("\n").slice(1);
+    const allLines = csv.trim().split("\n");
+    const header = allLines[0];
+    const colMap = detectColumns(header);
+    const lines = allLines.slice(1);
 
     let inserted = 0;
     let skipped = 0;
 
+    const batchValues: any[] = [];
+
     for (const line of lines) {
-      if (!line.trim() || line.trim() === ",,,,,,,,,,,,") continue;
-      const parts = parseCsvLine(line);
-      const productName = parts[0]?.trim();
-      const csvSku = parts[1]?.trim() || "";
-      const filling = parts[3]?.trim() || null;
-      const weight = parts[4]?.trim() || null;
-      const price = cleanPrice(parts[5]);
+      if (!line.trim() || line.trim().replace(/,/g, "") === "") continue;
+      const parts = line.split(",");
+      const productName = parts[colMap.productName]?.trim();
+      const csvSku = parts[colMap.sku]?.trim() || "";
+      const filling = parts[colMap.filling]?.trim() || null;
+      const weight = parts[colMap.weight]?.trim() || null;
+      const price = cleanPrice(parts[colMap.price]);
 
       if (!productName || price === null) { skipped++; continue; }
 
       const productId = findProductId(productName, csvSku);
       if (!productId) { skipped++; continue; }
 
-      await db.insert(priceListPrices).values({
+      batchValues.push({
         id: sql`gen_random_uuid()`,
         priceListId: created.id,
         productId,
@@ -110,8 +160,13 @@ export async function seedPriceLists() {
         weight: weight || null,
         unitPrice: price.toFixed(2),
       });
-      inserted++;
     }
+
+    for (let i = 0; i < batchValues.length; i += 50) {
+      const batch = batchValues.slice(i, i + 50);
+      await db.insert(priceListPrices).values(batch);
+    }
+    inserted = batchValues.length;
 
     console.log(`[PRICE-LISTS] ${config.name}: ${inserted} prices imported (${skipped} skipped)`);
   }
