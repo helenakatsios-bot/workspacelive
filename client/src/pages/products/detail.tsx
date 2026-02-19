@@ -1,22 +1,24 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import { useState, useMemo } from "react";
-import { ArrowLeft, Package, Edit, Trash2, CheckCircle, XCircle, Loader2, Layers } from "lucide-react";
+import { ArrowLeft, Package, Edit, Trash2, CheckCircle, XCircle, Loader2, Layers, ListFilter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Product } from "@shared/schema";
+import type { Product, PriceList } from "@shared/schema";
 
-interface VariantPrice {
+interface PriceListPrice {
   id: string;
+  priceListId: string;
   productId: string;
-  filling: string;
+  filling: string | null;
   weight: string | null;
   unitPrice: string;
   updatedAt: string;
@@ -28,13 +30,23 @@ export default function ProductDetailPage() {
   const { canEdit, canViewPricing } = useAuth();
   const { toast } = useToast();
   const [showDelete, setShowDelete] = useState(false);
+  const [selectedPriceList, setSelectedPriceList] = useState<string>("");
 
   const { data: product, isLoading } = useQuery<Product>({
     queryKey: ["/api/products", params.id],
   });
 
-  const { data: variants, isLoading: variantsLoading } = useQuery<VariantPrice[]>({
-    queryKey: ["/api/products", params.id, "variants"],
+  const { data: priceLists } = useQuery<PriceList[]>({
+    queryKey: ["/api/price-lists"],
+  });
+
+  const defaultPriceListId = priceLists?.find(pl => pl.isDefault)?.id || priceLists?.[0]?.id || "";
+  const activePriceListId = selectedPriceList || defaultPriceListId;
+  const activePriceList = priceLists?.find(pl => pl.id === activePriceListId);
+
+  const { data: priceListPrices, isLoading: priceListPricesLoading } = useQuery<PriceListPrice[]>({
+    queryKey: ["/api/price-lists", activePriceListId, "products", params.id, "prices"],
+    enabled: !!activePriceListId && !!params.id,
   });
 
   const deleteMutation = useMutation({
@@ -60,19 +72,31 @@ export default function ProductDetailPage() {
     }).format(num);
   };
 
+  const displayVariants = useMemo(() => {
+    if (!priceListPrices) return [];
+    return priceListPrices.map(p => ({
+      id: p.id,
+      productId: p.productId,
+      filling: p.filling || "",
+      weight: p.weight,
+      unitPrice: p.unitPrice,
+      updatedAt: p.updatedAt,
+    }));
+  }, [priceListPrices]);
+
   const uniqueFillings = useMemo(() => {
-    if (!variants || variants.length === 0) return [];
-    return Array.from(new Set(variants.map(v => v.filling))).sort();
-  }, [variants]);
+    if (!displayVariants || displayVariants.length === 0) return [];
+    return Array.from(new Set(displayVariants.map(v => v.filling))).sort();
+  }, [displayVariants]);
 
   const uniqueWeights = useMemo(() => {
-    if (!variants || variants.length === 0) return [];
-    return Array.from(new Set(variants.map(v => v.weight).filter(Boolean) as string[])).sort();
-  }, [variants]);
+    if (!displayVariants || displayVariants.length === 0) return [];
+    return Array.from(new Set(displayVariants.map(v => v.weight).filter(Boolean) as string[])).sort();
+  }, [displayVariants]);
 
   const getVariantPrice = (filling: string, weight: string) => {
-    if (!variants) return null;
-    return variants.find(v => v.filling === filling && v.weight === weight);
+    if (!displayVariants) return null;
+    return displayVariants.find(v => v.filling === filling && v.weight === weight);
   };
 
   if (isLoading) {
@@ -102,8 +126,9 @@ export default function ProductDetailPage() {
     );
   }
 
-  const hasVariants = variants && variants.length > 0;
+  const hasVariants = displayVariants && displayVariants.length > 0;
   const hasWeights = uniqueWeights.length > 0;
+  const isLoadingPrices = priceListPricesLoading;
 
   return (
     <div className="space-y-6">
@@ -129,7 +154,7 @@ export default function ProductDetailPage() {
               {hasVariants && (
                 <Badge variant="secondary" className="gap-1">
                   <Layers className="w-3 h-3" />
-                  {variants.length} variants
+                  {displayVariants.length} variants
                 </Badge>
               )}
             </div>
@@ -210,72 +235,98 @@ export default function ProductDetailPage() {
         )}
       </div>
 
-      {canViewPricing && hasVariants && (
+      {canViewPricing && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Layers className="w-5 h-5" />
-              Variant Prices
-              <Badge variant="secondary" className="ml-1">{variants.length}</Badge>
-            </CardTitle>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <CardTitle className="flex items-center gap-2">
+                <Layers className="w-5 h-5" />
+                Variant Prices
+                {hasVariants && <Badge variant="secondary" className="ml-1">{displayVariants.length}</Badge>}
+              </CardTitle>
+              {priceLists && priceLists.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <ListFilter className="w-4 h-4 text-muted-foreground" />
+                  <Select value={activePriceListId} onValueChange={setSelectedPriceList} data-testid="select-price-list">
+                    <SelectTrigger className="w-[200px]" data-testid="select-price-list-trigger">
+                      <SelectValue placeholder="Select price list" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {priceLists.filter(pl => pl.active).map(pl => (
+                        <SelectItem key={pl.id} value={pl.id} data-testid={`select-price-list-${pl.name}`}>
+                          {pl.name}
+                          {pl.isDefault && " (Default)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="p-0">
-            {hasWeights ? (
-              <div className="overflow-x-auto">
+            {isLoadingPrices ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : hasVariants ? (
+              hasWeights ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="sticky left-0 bg-background z-10 min-w-[180px]">Filling</TableHead>
+                        {uniqueWeights.map(w => (
+                          <TableHead key={w} className="text-right min-w-[100px]" data-testid={`th-weight-${w}`}>{w}</TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {uniqueFillings.map(filling => (
+                        <TableRow key={filling}>
+                          <TableCell className="sticky left-0 bg-background z-10 font-medium" data-testid={`td-filling-${filling}`}>
+                            {filling}
+                          </TableCell>
+                          {uniqueWeights.map(weight => {
+                            const vp = getVariantPrice(filling, weight);
+                            return (
+                              <TableCell key={weight} className="text-right" data-testid={`td-price-${filling}-${weight}`}>
+                                {vp ? formatCurrency(vp.unitPrice) : <span className="text-muted-foreground">-</span>}
+                              </TableCell>
+                            );
+                          })}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="sticky left-0 bg-background z-10 min-w-[180px]">Filling</TableHead>
-                      {uniqueWeights.map(w => (
-                        <TableHead key={w} className="text-right min-w-[100px]" data-testid={`th-weight-${w}`}>{w}</TableHead>
-                      ))}
+                      <TableHead>Filling</TableHead>
+                      <TableHead className="text-right">Price</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {uniqueFillings.map(filling => (
-                      <TableRow key={filling}>
-                        <TableCell className="sticky left-0 bg-background z-10 font-medium" data-testid={`td-filling-${filling}`}>
-                          {filling}
-                        </TableCell>
-                        {uniqueWeights.map(weight => {
-                          const vp = getVariantPrice(filling, weight);
-                          return (
-                            <TableCell key={weight} className="text-right" data-testid={`td-price-${filling}-${weight}`}>
-                              {vp ? formatCurrency(vp.unitPrice) : <span className="text-muted-foreground">-</span>}
-                            </TableCell>
-                          );
-                        })}
+                    {displayVariants.map(v => (
+                      <TableRow key={v.id}>
+                        <TableCell className="font-medium" data-testid={`td-filling-${v.filling}`}>{v.filling}</TableCell>
+                        <TableCell className="text-right" data-testid={`td-price-${v.filling}`}>{formatCurrency(v.unitPrice)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-              </div>
+              )
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Filling</TableHead>
-                    <TableHead className="text-right">Price</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {variants.map(v => (
-                    <TableRow key={v.id}>
-                      <TableCell className="font-medium" data-testid={`td-filling-${v.filling}`}>{v.filling}</TableCell>
-                      <TableCell className="text-right" data-testid={`td-price-${v.filling}`}>{formatCurrency(v.unitPrice)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                {activePriceList && !activePriceList.isDefault
+                  ? `No prices set for this product in the "${activePriceList.name}" price list.`
+                  : "No variant prices configured for this product."}
+              </div>
             )}
           </CardContent>
         </Card>
-      )}
-
-      {!hasVariants && !variantsLoading && (
-        <div className="text-center py-8 text-muted-foreground text-sm">
-          No variant prices configured for this product.
-        </div>
       )}
 
       <AlertDialog open={showDelete} onOpenChange={setShowDelete}>

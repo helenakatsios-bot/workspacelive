@@ -910,6 +910,99 @@ export async function registerRoutes(
     }
   });
 
+  // ============ PRICE LISTS ============
+  app.get("/api/price-lists", requireAuth, async (req, res) => {
+    try {
+      const lists = await storage.getAllPriceLists();
+      res.json(lists);
+    } catch (error) {
+      console.error("Get price lists error:", error);
+      res.status(500).json({ message: "Failed to get price lists" });
+    }
+  });
+
+  app.post("/api/price-lists", requireAdmin, async (req, res) => {
+    try {
+      const list = await storage.createPriceList(req.body);
+      res.status(201).json(list);
+    } catch (error) {
+      console.error("Create price list error:", error);
+      res.status(500).json({ message: "Failed to create price list" });
+    }
+  });
+
+  app.patch("/api/price-lists/:id", requireAdmin, async (req, res) => {
+    try {
+      const list = await storage.updatePriceList(req.params.id, req.body);
+      if (!list) return res.status(404).json({ message: "Price list not found" });
+      res.json(list);
+    } catch (error) {
+      console.error("Update price list error:", error);
+      res.status(500).json({ message: "Failed to update price list" });
+    }
+  });
+
+  app.delete("/api/price-lists/:id", requireAdmin, async (req, res) => {
+    try {
+      const success = await storage.deletePriceList(req.params.id);
+      if (!success) return res.status(400).json({ message: "Cannot delete default price list" });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete price list error:", error);
+      res.status(500).json({ message: "Failed to delete price list" });
+    }
+  });
+
+  app.get("/api/price-lists/:priceListId/products/:productId/prices", requireAuth, async (req, res) => {
+    try {
+      const prices = await storage.getPriceListPrices(req.params.priceListId, req.params.productId);
+      res.json(prices);
+    } catch (error) {
+      console.error("Get price list prices error:", error);
+      res.status(500).json({ message: "Failed to get price list prices" });
+    }
+  });
+
+  app.post("/api/price-lists/:priceListId/products/:productId/prices", requireAdmin, async (req, res) => {
+    try {
+      const price = await storage.upsertPriceListPrice({
+        ...req.body,
+        priceListId: req.params.priceListId,
+        productId: req.params.productId,
+      });
+      res.status(201).json(price);
+    } catch (error) {
+      console.error("Upsert price list price error:", error);
+      res.status(500).json({ message: "Failed to upsert price list price" });
+    }
+  });
+
+  app.post("/api/price-lists/:priceListId/products/:productId/prices/bulk", requireAdmin, async (req, res) => {
+    try {
+      const prices = (req.body.prices || []).map((p: any) => ({
+        ...p,
+        priceListId: req.params.priceListId,
+        productId: req.params.productId,
+      }));
+      const results = await storage.bulkUpsertPriceListPrices(prices);
+      res.status(201).json(results);
+    } catch (error) {
+      console.error("Bulk upsert price list prices error:", error);
+      res.status(500).json({ message: "Failed to bulk upsert price list prices" });
+    }
+  });
+
+  app.delete("/api/price-list-prices/:id", requireAdmin, async (req, res) => {
+    try {
+      const success = await storage.deletePriceListPrice(req.params.id);
+      if (!success) return res.status(404).json({ message: "Price list price not found" });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete price list price error:", error);
+      res.status(500).json({ message: "Failed to delete price list price" });
+    }
+  });
+
   app.get("/api/products/:id", requireAuth, async (req, res) => {
     try {
       const product = await storage.getProduct(req.params.id);

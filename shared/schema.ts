@@ -550,6 +550,39 @@ export const insertDefaultVariantPriceSchema = createInsertSchema(defaultVariant
 export type InsertDefaultVariantPrice = z.infer<typeof insertDefaultVariantPriceSchema>;
 export type DefaultVariantPrice = typeof defaultVariantPrices.$inferSelect;
 
+// ============ PRICE LISTS ============
+export const priceLists = pgTable("price_lists", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  isDefault: boolean("is_default").notNull().default(false),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPriceListSchema = createInsertSchema(priceLists).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPriceList = z.infer<typeof insertPriceListSchema>;
+export type PriceList = typeof priceLists.$inferSelect;
+
+export const priceListPrices = pgTable("price_list_prices", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  priceListId: varchar("price_list_id", { length: 36 }).notNull().references(() => priceLists.id, { onDelete: "cascade" }),
+  productId: varchar("product_id", { length: 36 }).notNull().references(() => products.id, { onDelete: "cascade" }),
+  filling: text("filling"),
+  weight: text("weight"),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("price_list_prices_list_idx").on(table.priceListId),
+  index("price_list_prices_product_idx").on(table.priceListId, table.productId),
+  index("price_list_prices_variant_idx").on(table.priceListId, table.productId, table.filling, table.weight),
+]);
+
+export const insertPriceListPriceSchema = createInsertSchema(priceListPrices).omit({ id: true, updatedAt: true });
+export type InsertPriceListPrice = z.infer<typeof insertPriceListPriceSchema>;
+export type PriceListPrice = typeof priceListPrices.$inferSelect;
+
 // ============ VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),

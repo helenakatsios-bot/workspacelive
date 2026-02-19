@@ -26,6 +26,7 @@ import OrderDetailPage from "@/pages/orders/detail";
 import InvoicesPage from "@/pages/invoices/index";
 import NewInvoicePage from "@/pages/invoices/new";
 import AdminPage from "@/pages/admin/index";
+import PriceListsPage from "@/pages/admin/price-lists";
 import ClientsSinceJuly2021Page from "@/pages/reports/clients-since-july-2021";
 import ReportingDashboardsPage from "@/pages/reporting/dashboards";
 import ReportingReportsPage from "@/pages/reporting/reports";
@@ -177,6 +178,7 @@ function AuthenticatedApp() {
         <Route path="/reporting/goals" component={ReportingGoalsPage} />
         <Route path="/reports/clients-since-july-2021" component={ClientsSinceJuly2021Page} />
         <Route path="/admin" component={AdminPage} />
+        <Route path="/admin/price-lists" component={PriceListsPage} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>

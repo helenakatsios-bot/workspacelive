@@ -14,7 +14,9 @@ import {
   type CustomerOrderRequest, type InsertCustomerOrderRequest, type CrmSetting,
   type Form, type InsertForm, type FormSubmission, type InsertFormSubmission,
   type CompanyPrice, type InsertCompanyPrice,
-  defaultVariantPrices, type DefaultVariantPrice
+  defaultVariantPrices, type DefaultVariantPrice,
+  priceLists, type PriceList, type InsertPriceList,
+  priceListPrices, type PriceListPrice, type InsertPriceListPrice
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
@@ -58,6 +60,17 @@ export interface IStorage {
   updateProduct(id: string, data: Partial<InsertProduct>): Promise<Product | undefined>;
   deleteProduct(id: string): Promise<boolean>;
   getDefaultVariantPricesByProductId(productId: string): Promise<DefaultVariantPrice[]>;
+
+  // Price Lists
+  getAllPriceLists(): Promise<PriceList[]>;
+  getPriceList(id: string): Promise<PriceList | undefined>;
+  createPriceList(data: InsertPriceList): Promise<PriceList>;
+  updatePriceList(id: string, data: Partial<InsertPriceList>): Promise<PriceList | undefined>;
+  deletePriceList(id: string): Promise<boolean>;
+  getPriceListPrices(priceListId: string, productId: string): Promise<PriceListPrice[]>;
+  upsertPriceListPrice(data: InsertPriceListPrice): Promise<PriceListPrice>;
+  deletePriceListPrice(id: string): Promise<boolean>;
+  bulkUpsertPriceListPrices(prices: InsertPriceListPrice[]): Promise<PriceListPrice[]>;
 
   // Quotes
   getQuote(id: string): Promise<Quote | undefined>;
@@ -324,6 +337,79 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(defaultVariantPrices)
       .where(eq(defaultVariantPrices.productId, productId))
       .orderBy(defaultVariantPrices.filling, defaultVariantPrices.weight);
+  }
+
+  // Price Lists
+  async getAllPriceLists(): Promise<PriceList[]> {
+    return db.select().from(priceLists).orderBy(desc(priceLists.isDefault), priceLists.name);
+  }
+
+  async getPriceList(id: string): Promise<PriceList | undefined> {
+    const [pl] = await db.select().from(priceLists).where(eq(priceLists.id, id));
+    return pl;
+  }
+
+  async createPriceList(data: InsertPriceList): Promise<PriceList> {
+    if (data.isDefault) {
+      await db.update(priceLists).set({ isDefault: false }).where(eq(priceLists.isDefault, true));
+    }
+    const [created] = await db.insert(priceLists).values(data).returning();
+    return created;
+  }
+
+  async updatePriceList(id: string, data: Partial<InsertPriceList>): Promise<PriceList | undefined> {
+    if (data.isDefault) {
+      await db.update(priceLists).set({ isDefault: false }).where(eq(priceLists.isDefault, true));
+    }
+    const [updated] = await db.update(priceLists).set({ ...data, updatedAt: new Date() }).where(eq(priceLists.id, id)).returning();
+    return updated;
+  }
+
+  async deletePriceList(id: string): Promise<boolean> {
+    const [pl] = await db.select().from(priceLists).where(eq(priceLists.id, id));
+    if (pl?.isDefault) return false;
+    const result = await db.delete(priceLists).where(eq(priceLists.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getPriceListPrices(priceListId: string, productId: string): Promise<PriceListPrice[]> {
+    return db.select().from(priceListPrices)
+      .where(and(eq(priceListPrices.priceListId, priceListId), eq(priceListPrices.productId, productId)))
+      .orderBy(priceListPrices.filling, priceListPrices.weight);
+  }
+
+  async upsertPriceListPrice(data: InsertPriceListPrice): Promise<PriceListPrice> {
+    const existing = await db.select().from(priceListPrices).where(
+      and(
+        eq(priceListPrices.priceListId, data.priceListId),
+        eq(priceListPrices.productId, data.productId),
+        data.filling ? eq(priceListPrices.filling, data.filling) : sql`${priceListPrices.filling} IS NULL`,
+        data.weight ? eq(priceListPrices.weight, data.weight) : sql`${priceListPrices.weight} IS NULL`
+      )
+    );
+    if (existing.length > 0) {
+      const [updated] = await db.update(priceListPrices)
+        .set({ unitPrice: data.unitPrice, updatedAt: new Date() })
+        .where(eq(priceListPrices.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(priceListPrices).values(data).returning();
+    return created;
+  }
+
+  async deletePriceListPrice(id: string): Promise<boolean> {
+    const result = await db.delete(priceListPrices).where(eq(priceListPrices.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async bulkUpsertPriceListPrices(prices: InsertPriceListPrice[]): Promise<PriceListPrice[]> {
+    const results: PriceListPrice[] = [];
+    for (const price of prices) {
+      const result = await this.upsertPriceListPrice(price);
+      results.push(result);
+    }
+    return results;
   }
 
   // Quotes

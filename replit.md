@@ -36,6 +36,7 @@ Preferred communication style: Simple, everyday language.
 - **Marketing Section**: Campaigns, Email, Forms, Marketing Analytics.
 - **Customer-Specific Pricing**: Per-company product pricing managed via company profiles, applied automatically to portal orders.
 - **Variant Pricing**: Per-company pricing by product filling and weight options, dynamically updated in the portal.
+- **Price Lists**: Multiple named price lists (Standard, Interiors, Trade, etc.) with dropdown selector on product detail pages. Admin management at /admin/price-lists. Uses price_lists and price_list_prices tables.
 - **Contact Import**: Automated contact import from HubSpot CSV, matching by email domain and name.
 - **Date-Based Order Filtering**: Powerful date range filtering with presets on the Orders page.
 - **Role-Based Access Control**: Four roles (Admin, Office/Sales, Warehouse, Read-only) with distinct permissions.
