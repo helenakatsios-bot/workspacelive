@@ -13,7 +13,7 @@ interface PriceListConfig {
 
 const PRICE_LIST_CONFIGS: PriceListConfig[] = [
   { name: "Standard", description: "Standard pricing", isDefault: true, csvFile: "PRICES_FOR_REPLIT_STANDARD_+_bulk_CSV_1771462231694.csv" },
-  { name: "Interiors", description: "Interiors pricing", isDefault: false, csvFile: "prices_for_replit_INTERIORS_PLUS_BULK_CSV_1771463115800.csv" },
+  { name: "Interiors", description: "Interiors pricing", isDefault: false, csvFile: "ALL_PRODUCTS_replit_INTERIORS_CSV_new_1771473578873.csv" },
   { name: "The Bedroom", description: "The Bedroom pricing", isDefault: false, csvFile: "Price_for_replit_the_bedroom_CSV_1771463298893.csv" },
   { name: "Walter G", description: "Walter G pricing", isDefault: false, csvFile: "prices_for_replit_watler_g_CSV_1771463426825.csv" },
   { name: "Poulos", description: "Poulos pricing", isDefault: false, csvFile: "prices_for_replit_poulos_CSV_1771463441907.csv" },
