@@ -4748,6 +4748,9 @@ Rules:
       const companyId = req.session.portalCompanyId;
       let priceMap = new Map<string, string>();
       let variantPriceMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
+      let priceListPriceMap = new Map<string, string>();
+      let priceListVariantMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
+
       if (companyId) {
         const companyPricesList = await storage.getCompanyPrices(companyId);
         for (const cp of companyPricesList) {
@@ -4762,9 +4765,26 @@ Rules:
           if (!variantPriceMap.has(key)) variantPriceMap.set(key, []);
           variantPriceMap.get(key)!.push({ filling: vp.filling, weight: vp.weight, unitPrice: vp.unit_price });
         }
+
+        const companyResult = await pool.query(`SELECT price_list_id FROM companies WHERE id = $1`, [companyId]);
+        const priceListId = companyResult.rows[0]?.price_list_id;
+        if (priceListId) {
+          const plPrices = await pool.query(
+            `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1 ORDER BY filling, weight`,
+            [priceListId]
+          );
+          for (const plp of plPrices.rows) {
+            if (!plp.filling && !plp.weight) {
+              priceListPriceMap.set(plp.product_id, plp.unit_price);
+            } else {
+              const key = plp.product_id;
+              if (!priceListVariantMap.has(key)) priceListVariantMap.set(key, []);
+              priceListVariantMap.get(key)!.push({ filling: plp.filling || "", weight: plp.weight, unitPrice: plp.unit_price });
+            }
+          }
+        }
       }
 
-      // Load default variant prices as fallback for products without company-specific variant prices
       const defaultVariantResult = await pool.query(
         `SELECT product_id, filling, weight, unit_price FROM default_variant_prices ORDER BY filling, weight`
       );
@@ -4781,9 +4801,9 @@ Rules:
         name: r.name,
         description: r.description,
         category: r.category,
-        unitPrice: priceMap.get(r.id) || r.unit_price,
-        hasCustomPrice: priceMap.has(r.id),
-        variantPrices: variantPriceMap.get(r.id) || defaultVariantMap.get(r.id) || [],
+        unitPrice: priceMap.get(r.id) || priceListPriceMap.get(r.id) || r.unit_price,
+        hasCustomPrice: priceMap.has(r.id) || priceListPriceMap.has(r.id),
+        variantPrices: variantPriceMap.get(r.id) || priceListVariantMap.get(r.id) || defaultVariantMap.get(r.id) || [],
       })));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch products" });
@@ -4809,7 +4829,24 @@ Rules:
         [companyId]
       );
       const variantPrices = variantResult.rows;
-      // Load default variant prices as fallback
+
+      const companyRow = await pool.query(`SELECT price_list_id FROM companies WHERE id = $1`, [companyId]);
+      const orderPriceListId = companyRow.rows[0]?.price_list_id;
+      let priceListPrices: any[] = [];
+      const priceListBasePriceMap = new Map<string, string>();
+      if (orderPriceListId) {
+        const plResult = await pool.query(
+          `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`,
+          [orderPriceListId]
+        );
+        priceListPrices = plResult.rows;
+        for (const plp of plResult.rows) {
+          if (!plp.filling && !plp.weight) {
+            priceListBasePriceMap.set(plp.product_id, plp.unit_price);
+          }
+        }
+      }
+
       const defaultVarResult = await pool.query(
         `SELECT product_id, filling, weight, unit_price FROM default_variant_prices`
       );
@@ -4825,8 +4862,10 @@ Rules:
           if (item.filling) {
             const f = (item.filling || "").trim();
             const w = (item.weight || "").trim() || null;
-            // Try company-specific variant prices first, then fall back to default variant prices
             let prodVariants = variantPrices.filter((vp: any) => vp.product_id === prod.id && (vp.filling || "").trim() === f);
+            if (prodVariants.length === 0) {
+              prodVariants = priceListPrices.filter((vp: any) => vp.product_id === prod.id && (vp.filling || "").trim() === f);
+            }
             if (prodVariants.length === 0) {
               prodVariants = defaultVariantPrices.filter((vp: any) => vp.product_id === prod.id && (vp.filling || "").trim() === f);
             }
@@ -4837,10 +4876,11 @@ Rules:
             if (!variantMatch) {
               variantMatch = prodVariants.find((vp: any) => !vp.weight) || prodVariants.find((vp: any) => (vp.weight || "").trim() === "Normal") || prodVariants[0] || null;
             }
-            price = variantMatch ? parseFloat(variantMatch.unit_price) : (companyPriceMap.has(prod.id) ? parseFloat(companyPriceMap.get(prod.id)!) : parseFloat(prod.unit_price));
+            price = variantMatch ? parseFloat(variantMatch.unit_price) : (companyPriceMap.has(prod.id) ? parseFloat(companyPriceMap.get(prod.id)!) : (priceListBasePriceMap.has(prod.id) ? parseFloat(priceListBasePriceMap.get(prod.id)!) : parseFloat(prod.unit_price)));
           } else {
             const customPrice = companyPriceMap.get(prod.id);
-            price = customPrice ? parseFloat(customPrice) : parseFloat(prod.unit_price);
+            const plPrice = priceListBasePriceMap.get(prod.id);
+            price = customPrice ? parseFloat(customPrice) : (plPrice ? parseFloat(plPrice) : parseFloat(prod.unit_price));
           }
           const lineTotal = price * qty;
           subtotal += lineTotal;
