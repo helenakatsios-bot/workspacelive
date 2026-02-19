@@ -4762,12 +4762,14 @@ Rules:
         'MEN JACKET',
         'WOMAN JACKET',
       ];
+      const hiddenProductNames = ['Freight'];
       const result = await pool.query(`
         SELECT id, sku, name, description, category, unit_price
         FROM products WHERE active = true
         AND (category IS NULL OR category NOT IN (${hiddenCategories.map((_, i) => `$${i + 1}`).join(', ')}))
+        AND name NOT IN (${hiddenProductNames.map((_, i) => `$${hiddenCategories.length + i + 1}`).join(', ')})
         ORDER BY category, name
-      `, hiddenCategories);
+      `, [...hiddenCategories, ...hiddenProductNames]);
 
       const companyId = req.session.portalCompanyId;
       let priceMap = new Map<string, string>();
@@ -4791,7 +4793,13 @@ Rules:
         }
 
         const companyResult = await pool.query(`SELECT price_list_id FROM companies WHERE id = $1`, [companyId]);
-        const priceListId = companyResult.rows[0]?.price_list_id;
+        let priceListId = companyResult.rows[0]?.price_list_id;
+        if (!priceListId) {
+          const standardList = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
+          if (standardList.rows.length > 0) {
+            priceListId = standardList.rows[0].id;
+          }
+        }
         if (priceListId) {
           const plPrices = await pool.query(
             `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1 ORDER BY filling, weight`,
@@ -4855,7 +4863,13 @@ Rules:
       const variantPrices = variantResult.rows;
 
       const companyRow = await pool.query(`SELECT price_list_id FROM companies WHERE id = $1`, [companyId]);
-      const orderPriceListId = companyRow.rows[0]?.price_list_id;
+      let orderPriceListId = companyRow.rows[0]?.price_list_id;
+      if (!orderPriceListId) {
+        const standardList = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
+        if (standardList.rows.length > 0) {
+          orderPriceListId = standardList.rows[0].id;
+        }
+      }
       let priceListPrices: any[] = [];
       const priceListBasePriceMap = new Map<string, string>();
       if (orderPriceListId) {
