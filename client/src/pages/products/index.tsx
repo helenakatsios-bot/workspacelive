@@ -57,7 +57,39 @@ export default function ProductsPage() {
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(product);
     }
-    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+    const CATEGORY_ORDER = [
+      "INSERTS",
+      "80% WINTER FILLED",
+      "80% MID WARM FILLED",
+      "50% WINTER FILLED",
+      "50% MID WARM FILLED",
+      "4 SEASONS FILLED",
+      "STRIPPED QUILT",
+      "MATTRESS TOPPER FILLED",
+      "PIPED PILLOWS",
+      "CHAMBER PILLOW",
+      "STRIP PILLOW",
+      "MICROSOFT",
+      "KHAKI BLANKET",
+      "SILVER BLANKET",
+      "BULK",
+      "CASSETTES CASES",
+      "4 SEASONS CASE",
+      "CHANNELLED CASES",
+      "GOLD QUILT CASE",
+      "MATTRESS TOPPER CASE",
+      "GOLD PILLOW CASE",
+      "MEN JACKET",
+      "WOMAN JACKET",
+    ];
+    return Object.entries(groups).sort(([a], [b]) => {
+      const idxA = CATEGORY_ORDER.indexOf(a);
+      const idxB = CATEGORY_ORDER.indexOf(b);
+      if (idxA >= 0 && idxB >= 0) return idxA - idxB;
+      if (idxA >= 0) return -1;
+      if (idxB >= 0) return 1;
+      return a.localeCompare(b);
+    });
   }, [filteredProducts]);
 
   const toggleCategory = (category: string) => {
