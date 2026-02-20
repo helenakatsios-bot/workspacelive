@@ -1046,12 +1046,19 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Price list not found" });
       }
 
-      const allProducts = await pool.query("SELECT id, name, sku FROM products WHERE active = true");
+      const allProducts = await pool.query("SELECT id, name, sku, category FROM products WHERE active = true");
       const productByName = new Map<string, string>();
       const productBySku = new Map<string, string>();
+      const productByDimension = new Map<string, string>();
       for (const p of allProducts.rows) {
         productByName.set(p.name.toUpperCase().trim(), p.id);
-        productBySku.set(p.sku.toUpperCase().trim(), p.id);
+        if (p.sku) productBySku.set(p.sku.toUpperCase().trim(), p.id);
+        const dimMatch = p.name.match(/^(\d+)X(\d+)CM$/i);
+        if (dimMatch) {
+          const d1 = dimMatch[1], d2 = dimMatch[2];
+          productByDimension.set(`${d1}X${d2}`, p.id);
+          productByDimension.set(`${d2}X${d1}`, p.id);
+        }
       }
 
       function normalizeProductName(name: string): string {
@@ -1059,17 +1066,50 @@ export async function registerRoutes(
           .replace(/\bDUCK\s+FEATHER\b/gi, "FEATHER")
           .replace(/\bDUCK\s+DOWN\b/gi, "DOWN")
           .replace(/\bDUCK\s+/gi, "")
+          .replace(/\bd\/feather\b/gi, "FEATHER")
+          .replace(/\bd\/down\b/gi, "DOWN")
           .trim();
+      }
+
+      function extractDimensions(name: string): string | null {
+        let m = name.match(/(\d+)\s*[xX×]\s*(\d+)\s*cm/i);
+        if (m) return `${m[1]}X${m[2]}`;
+        m = name.match(/(\d+)cm\s*[xX×]\s*(\d+)cm/i);
+        if (m) return `${m[1]}X${m[2]}`;
+        m = name.match(/(\d+)\s*[xX×]\s*(\d+)/);
+        if (m) return `${m[1]}X${m[2]}`;
+        m = name.match(/(\d+)cm\s+round/i);
+        if (m) return `${m[1]}X${m[1]}`;
+        return null;
+      }
+
+      function generateSku(category: string, existingSkus: Set<string>): string {
+        const prefix = category.substring(0, 4).toUpperCase().replace(/\s/g, "");
+        let num = 1;
+        while (existingSkus.has(`${prefix}-${String(num).padStart(3, "0")}`)) {
+          num++;
+        }
+        const sku = `${prefix}-${String(num).padStart(3, "0")}`;
+        existingSkus.add(sku);
+        return sku;
+      }
+
+      const existingSkus = new Set<string>();
+      for (const p of allProducts.rows) {
+        if (p.sku) existingSkus.add(p.sku.toUpperCase().trim());
       }
 
       let imported = 0;
       let skipped = 0;
       let notFound = 0;
+      let created = 0;
       const notFoundNames: string[] = [];
+      const createdNames: string[] = [];
 
       for (const row of rows) {
         const productName = (row.product || row.Product || "").trim();
         const rowSku = (row.sku || row.Sku || row.SKU || "").trim();
+        const rowCategory = (row.category || row.Category || "").trim().toUpperCase();
         const filling = (row.filling || row.Filling || "").trim() || null;
         const weight = (row.weight || row.Weight || "").trim() || null;
         const priceStr = (row.price || row.Price || row.unit_price || row.unitPrice || "").toString().replace(/[^0-9.]/g, "");
@@ -1091,6 +1131,17 @@ export async function registerRoutes(
         }
 
         if (!productId) {
+          const dims = extractDimensions(nameUpper);
+          if (dims) {
+            productId = productByDimension.get(dims);
+            if (!productId) {
+              const [d1, d2] = dims.split("X");
+              productId = productByDimension.get(`${d2}X${d1}`);
+            }
+          }
+        }
+
+        if (!productId) {
           const sizeMatch = nameUpper.match(/^(.+?)\s*-\s*(.+)$/);
           if (sizeMatch) {
             const combinedName = `${sizeMatch[1].trim()} - ${sizeMatch[2].trim()}`;
@@ -1102,9 +1153,38 @@ export async function registerRoutes(
         }
 
         if (!productId) {
-          notFound++;
-          if (notFoundNames.length < 20) notFoundNames.push(productName);
-          continue;
+          const category = rowCategory || "UNCATEGORIZED";
+          let sku = rowSku;
+          if (sku && existingSkus.has(sku.toUpperCase())) {
+            const existingId = productBySku.get(sku.toUpperCase());
+            if (existingId) {
+              productId = existingId;
+              console.log(`[IMPORT] Matched "${productName}" by duplicate SKU ${sku} to existing product`);
+            }
+          }
+          if (!productId) {
+            if (!sku || existingSkus.has(sku.toUpperCase())) {
+              sku = generateSku(category, existingSkus);
+            }
+            try {
+              const newProduct = await pool.query(
+                `INSERT INTO products (name, sku, category, unit_price, active) VALUES ($1, $2, $3, $4, true) RETURNING id`,
+                [productName, sku, category, price.toFixed(2)]
+              );
+              productId = newProduct.rows[0].id;
+              productByName.set(nameUpper, productId);
+              productBySku.set(sku.toUpperCase(), productId);
+              existingSkus.add(sku.toUpperCase());
+              created++;
+              createdNames.push(productName);
+              console.log(`[IMPORT] Created new product: "${productName}" (SKU: ${sku}, Category: ${category})`);
+            } catch (createErr: any) {
+              console.error(`[IMPORT] Failed to create product "${productName}":`, createErr.message);
+              notFound++;
+              if (notFoundNames.length < 20) notFoundNames.push(productName);
+              continue;
+            }
+          }
         }
 
         try {
@@ -1130,11 +1210,13 @@ export async function registerRoutes(
       }
 
       res.json({
-        message: `Imported ${imported} prices. ${skipped} skipped. ${notFound} products not found.`,
+        message: `Imported ${imported} prices. ${created} products created. ${skipped} skipped. ${notFound} products not found.`,
         imported,
+        created,
         skipped,
         notFound,
         notFoundNames,
+        createdNames,
       });
     } catch (error) {
       console.error("Price list CSV import error:", error);

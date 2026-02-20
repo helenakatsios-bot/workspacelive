@@ -121,6 +121,7 @@ export default function PriceListsPage() {
 
       const productIdx = headers.findIndex(h => h === "product" || h === "product_name" || h === "product name" || h === "name");
       const skuIdx = headers.findIndex(h => h === "sku" || h === "sku_code" || h === "product_code" || h === "code");
+      const categoryIdx = headers.findIndex(h => h === "category" || h === "product_category" || h === "type");
       const fillingIdx = headers.findIndex(h => h === "filling");
       const weightIdx = headers.findIndex(h => h === "weight");
       const priceIdx = headers.findIndex(h => h.includes("price") && !h.includes("product"));
@@ -145,11 +146,12 @@ export default function PriceListsPage() {
 
         const product = parts[productIdx] || "";
         const sku = skuIdx >= 0 ? parts[skuIdx] || "" : "";
+        const category = categoryIdx >= 0 ? parts[categoryIdx] || "" : "";
         const filling = fillingIdx >= 0 ? parts[fillingIdx] || "" : "";
         const weight = weightIdx >= 0 ? parts[weightIdx] || "" : "";
         const price = parts[priceIdx] || "";
         if (product && price) {
-          rows.push({ product, sku, filling, weight, price });
+          rows.push({ product, sku, category, filling, weight, price });
         }
       }
 
@@ -162,7 +164,9 @@ export default function PriceListsPage() {
       const res = await apiRequest("POST", `/api/price-lists/${viewingList.id}/import-csv`, { rows });
       const result = await res.json();
       queryClient.invalidateQueries({ queryKey: ["/api/price-lists", viewingList.id, "prices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       let description = `${result.imported} prices imported`;
+      if (result.created > 0) description += `, ${result.created} new products created`;
       if (result.skipped > 0) description += `, ${result.skipped} skipped`;
       if (result.notFound > 0) description += `, ${result.notFound} products not found`;
       if (result.notFoundNames?.length > 0) {
