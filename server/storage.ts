@@ -60,6 +60,7 @@ export interface IStorage {
   updateProduct(id: string, data: Partial<InsertProduct>): Promise<Product | undefined>;
   deleteProduct(id: string): Promise<boolean>;
   getDefaultVariantPricesByProductId(productId: string): Promise<DefaultVariantPrice[]>;
+  getAllDefaultVariantPrices(): Promise<DefaultVariantPrice[]>;
 
   // Price Lists
   getAllPriceLists(): Promise<PriceList[]>;
@@ -337,6 +338,11 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(defaultVariantPrices)
       .where(eq(defaultVariantPrices.productId, productId))
       .orderBy(defaultVariantPrices.filling, defaultVariantPrices.weight);
+  }
+
+  async getAllDefaultVariantPrices(): Promise<DefaultVariantPrice[]> {
+    return db.select().from(defaultVariantPrices)
+      .orderBy(defaultVariantPrices.productId, defaultVariantPrices.filling, defaultVariantPrices.weight);
   }
 
   // Price Lists

@@ -934,6 +934,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/products/all-variant-prices", requireAuth, async (req, res) => {
+    try {
+      const variants = await storage.getAllDefaultVariantPrices();
+      res.json(variants);
+    } catch (error) {
+      console.error("Get all variant prices error:", error);
+      res.status(500).json({ message: "Failed to get variant prices" });
+    }
+  });
+
   // ============ PRICE LISTS ============
   app.get("/api/price-lists", requireAuth, async (req, res) => {
     try {
