@@ -154,7 +154,7 @@ export type QuoteLine = typeof quoteLines.$inferSelect;
 // ============ ORDERS (CORE TABLE) ============
 export const orders = pgTable("orders", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  orderNumber: text("order_number").notNull().unique(),
+  orderNumber: text("order_number").notNull(),
   companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id),
   contactId: varchar("contact_id", { length: 36 }).references(() => contacts.id),
   quoteId: varchar("quote_id", { length: 36 }).references(() => quotes.id),

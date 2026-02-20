@@ -211,6 +211,14 @@ async function syncAllVariantsFromCsv() {
 }
 
 export async function syncProductionData() {
+  // Remove unique constraint on order_number to allow same order numbers across different companies
+  try {
+    await pool.query("ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_order_number_unique");
+    console.log("[DATA-SYNC] Removed unique constraint on order_number (allows same number for different companies)");
+  } catch (e: any) {
+    // Already removed or doesn't exist
+  }
+
   // Ensure all BULK filling products exist
   const bulkProducts = [
     { sku: 'BULK-001', name: '100% FEATHER', category: 'BULK' },

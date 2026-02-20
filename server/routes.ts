@@ -3258,9 +3258,8 @@ Rules: Extract ALL line items. If prices are not present, use 0. Quantities must
             if (existingForSameCompany) {
               return res.status(400).json({ message: `Order for ${company.legalName} with Shopify #${shopifyOrderNum} already exists`, orderId: existingForSameCompany.id });
             }
-            console.log(`[EMAIL-TO-ORDER] Order #${shopifyOrderNum} exists for different company (${duplicate.companyId} - "${duplicate.customerNotes?.substring(0,50)}"), creating new order for ${company.legalName}`);
-            const maxResult = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
-            orderNumber = String((parseInt(maxResult.rows[0].max_num) || 0) + 1);
+            console.log(`[EMAIL-TO-ORDER] Order #${shopifyOrderNum} exists for different company (${duplicate.companyId}), preserving original order number for ${company.legalName}`);
+            orderNumber = shopifyOrderNum;
           } else if (duplicate.companyId === company?.id) {
             return res.status(400).json({ message: `Order #${shopifyOrderNum} already exists for ${company.legalName}`, orderId: duplicate.id });
           } else {
