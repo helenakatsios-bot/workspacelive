@@ -258,5 +258,48 @@ export async function seedPriceLists() {
     console.error("[PRICE-LISTS] Error syncing default variant prices:", err);
   }
 
+  // Sync base product unit_price from Standard price list for products with $0.00
+  try {
+    const { pool: pgPool } = await import("./db");
+    const fixResult = await pgPool.query(`
+      UPDATE products p 
+      SET unit_price = plp.unit_price 
+      FROM price_list_prices plp 
+      JOIN price_lists pl ON plp.price_list_id = pl.id 
+      WHERE pl.is_default = true 
+        AND plp.product_id = p.id 
+        AND (p.unit_price = '0.00' OR p.unit_price = '0')
+        AND plp.unit_price IS NOT NULL 
+        AND plp.unit_price != '0.00'
+        AND plp.unit_price != '0'
+        AND plp.filling IS NULL
+    `);
+    if (fixResult.rowCount && fixResult.rowCount > 0) {
+      console.log(`[PRICE-LISTS] Updated ${fixResult.rowCount} product base prices from Standard list`);
+    }
+    // Also fix products where no null-filling price exists but a variant price does
+    const fixResult2 = await pgPool.query(`
+      UPDATE products p 
+      SET unit_price = sub.unit_price
+      FROM (
+        SELECT DISTINCT ON (plp.product_id) plp.product_id, plp.unit_price
+        FROM price_list_prices plp 
+        JOIN price_lists pl ON plp.price_list_id = pl.id 
+        WHERE pl.is_default = true 
+          AND plp.unit_price IS NOT NULL 
+          AND plp.unit_price != '0.00'
+          AND plp.unit_price != '0'
+        ORDER BY plp.product_id, plp.unit_price ASC
+      ) sub
+      WHERE sub.product_id = p.id 
+        AND (p.unit_price = '0.00' OR p.unit_price = '0')
+    `);
+    if (fixResult2.rowCount && fixResult2.rowCount > 0) {
+      console.log(`[PRICE-LISTS] Updated ${fixResult2.rowCount} more product base prices from variant prices`);
+    }
+  } catch (err) {
+    console.error("[PRICE-LISTS] Error syncing product base prices:", err);
+  }
+
   console.log("[PRICE-LISTS] Price list seeding complete");
 }
