@@ -1069,6 +1069,7 @@ export async function registerRoutes(
 
       for (const row of rows) {
         const productName = (row.product || row.Product || "").trim();
+        const rowSku = (row.sku || row.Sku || row.SKU || "").trim();
         const filling = (row.filling || row.Filling || "").trim() || null;
         const weight = (row.weight || row.Weight || "").trim() || null;
         const priceStr = (row.price || row.Price || row.unit_price || row.unitPrice || "").toString().replace(/[^0-9.]/g, "");
@@ -1084,6 +1085,10 @@ export async function registerRoutes(
         let productId = productByName.get(nameUpper)
           || productByName.get(normalizedName)
           || productBySku.get(nameUpper);
+
+        if (!productId && rowSku) {
+          productId = productBySku.get(rowSku.toUpperCase());
+        }
 
         if (!productId) {
           const sizeMatch = nameUpper.match(/^(.+?)\s*-\s*(.+)$/);

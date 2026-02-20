@@ -120,6 +120,7 @@ export default function PriceListsPage() {
       const headers = headerLine.split(",").map(h => h.replace(/^"|"$/g, "").replace(/[^\x20-\x7E]/g, "").trim().toLowerCase());
 
       const productIdx = headers.findIndex(h => h === "product" || h === "product_name" || h === "product name" || h === "name");
+      const skuIdx = headers.findIndex(h => h === "sku" || h === "sku_code" || h === "product_code" || h === "code");
       const fillingIdx = headers.findIndex(h => h === "filling");
       const weightIdx = headers.findIndex(h => h === "weight");
       const priceIdx = headers.findIndex(h => h.includes("price") && !h.includes("product"));
@@ -143,11 +144,12 @@ export default function PriceListsPage() {
         parts.push(current.trim());
 
         const product = parts[productIdx] || "";
+        const sku = skuIdx >= 0 ? parts[skuIdx] || "" : "";
         const filling = fillingIdx >= 0 ? parts[fillingIdx] || "" : "";
         const weight = weightIdx >= 0 ? parts[weightIdx] || "" : "";
         const price = parts[priceIdx] || "";
         if (product && price) {
-          rows.push({ product, filling, weight, price });
+          rows.push({ product, sku, filling, weight, price });
         }
       }
 
