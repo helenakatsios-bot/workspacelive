@@ -368,6 +368,8 @@ export class DatabaseStorage implements IStorage {
   async deletePriceList(id: string): Promise<boolean> {
     const [pl] = await db.select().from(priceLists).where(eq(priceLists.id, id));
     if (pl?.isDefault) return false;
+    await db.delete(priceListPrices).where(eq(priceListPrices.priceListId, id));
+    await db.update(companies).set({ priceListId: null }).where(eq(companies.priceListId, id));
     const result = await db.delete(priceLists).where(eq(priceLists.id, id)).returning();
     return result.length > 0;
   }
