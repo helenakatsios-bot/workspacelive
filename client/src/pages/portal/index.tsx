@@ -727,8 +727,10 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
 
   const grouped = useMemo(() => {
     const groups: Record<string, any[]> = {};
+    const HIDDEN_CATEGORIES = ['CASES', 'CASSETTES CASES', 'CHANNELLED CASES', 'WINTER'];
     for (const p of filteredProducts) {
       const cat = p.category || "Other";
+      if (HIDDEN_CATEGORIES.includes(cat)) continue;
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(p);
     }
