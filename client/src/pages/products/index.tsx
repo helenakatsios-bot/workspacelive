@@ -52,8 +52,10 @@ export default function ProductsPage() {
 
   const groupedProducts = useMemo(() => {
     const groups: Record<string, Product[]> = {};
+    const HIDDEN_CATEGORIES = ['CASES', 'CASSETTES CASES', 'CHANNELLED CASES', '4 SEASONS CASE', 'GOLD QUILT CASE', 'MATTRESS TOPPER CASE', 'GOLD PILLOW CASE', 'WINTER'];
     for (const product of filteredProducts) {
       const cat = product.category || "Uncategorised";
+      if (HIDDEN_CATEGORIES.includes(cat)) continue;
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(product);
     }
@@ -73,12 +75,6 @@ export default function ProductsPage() {
       "KHAKI BLANKET",
       "SILVER BLANKET",
       "BULK",
-      "CASSETTES CASES",
-      "4 SEASONS CASE",
-      "CHANNELLED CASES",
-      "GOLD QUILT CASE",
-      "MATTRESS TOPPER CASE",
-      "GOLD PILLOW CASE",
       "MEN JACKET",
       "WOMAN JACKET",
     ];
