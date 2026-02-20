@@ -5075,45 +5075,82 @@ Rules:
         defaultVariantMap.get(key)!.push({ filling: dvp.filling, weight: dvp.weight, unitPrice: dvp.unit_price });
       }
 
+      const anyPriceListResult = await pool.query(
+        `SELECT DISTINCT ON (product_id, filling, weight) product_id, filling, weight, unit_price 
+         FROM price_list_prices 
+         WHERE unit_price IS NOT NULL AND unit_price != '0.00' AND unit_price != '0'
+         ORDER BY product_id, filling, weight, unit_price`
+      );
+      const anyPriceListVariantMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
+      const anyPriceListBaseMap = new Map<string, string>();
+      for (const row of anyPriceListResult.rows) {
+        if (!row.filling && !row.weight) {
+          if (!anyPriceListBaseMap.has(row.product_id)) {
+            anyPriceListBaseMap.set(row.product_id, row.unit_price);
+          }
+        } else {
+          const key = row.product_id;
+          if (!anyPriceListVariantMap.has(key)) anyPriceListVariantMap.set(key, []);
+          anyPriceListVariantMap.get(key)!.push({ filling: row.filling || "", weight: row.weight, unitPrice: row.unit_price });
+        }
+      }
+
+      const isNonZeroPrice = (p: string | null | undefined) => !!p && p !== "0.00" && p !== "0";
+
       res.json(result.rows.map((r: any) => {
-        let variants = variantPriceMap.get(r.id) || priceListVariantMap.get(r.id) || defaultVariantMap.get(r.id) || [];
-        const allVariantsZero = variants.length > 0 && variants.every((v: any) => !v.unitPrice || v.unitPrice === "0.00" || v.unitPrice === "0");
+        let variants = variantPriceMap.get(r.id) || priceListVariantMap.get(r.id) || defaultVariantMap.get(r.id) || anyPriceListVariantMap.get(r.id) || [];
+        const allVariantsZero = variants.length > 0 && variants.every((v: any) => !isNonZeroPrice(v.unitPrice));
         if (allVariantsZero) {
           const plVariants = priceListVariantMap.get(r.id);
-          if (plVariants && plVariants.some((v: any) => v.unitPrice && v.unitPrice !== "0.00" && v.unitPrice !== "0")) {
+          if (plVariants && plVariants.some((v: any) => isNonZeroPrice(v.unitPrice))) {
             variants = plVariants;
           } else {
             const defVariants = defaultVariantMap.get(r.id);
-            if (defVariants && defVariants.some((v: any) => v.unitPrice && v.unitPrice !== "0.00" && v.unitPrice !== "0")) {
+            if (defVariants && defVariants.some((v: any) => isNonZeroPrice(v.unitPrice))) {
               variants = defVariants;
+            } else {
+              const anyVariants = anyPriceListVariantMap.get(r.id);
+              if (anyVariants && anyVariants.some((v: any) => isNonZeroPrice(v.unitPrice))) {
+                variants = anyVariants;
+              }
             }
           }
         }
         let effectiveUnitPrice = priceMap.get(r.id) || priceListPriceMap.get(r.id) || r.unit_price;
-        const isZeroPrice = !effectiveUnitPrice || effectiveUnitPrice === "0.00" || effectiveUnitPrice === "0";
-        if (isZeroPrice) {
+        if (!isNonZeroPrice(effectiveUnitPrice)) {
           if (variants.length > 0) {
-            const nonZeroVariant = variants.find((v: any) => v.unitPrice && v.unitPrice !== "0.00" && v.unitPrice !== "0");
+            const nonZeroVariant = variants.find((v: any) => isNonZeroPrice(v.unitPrice));
             if (nonZeroVariant) {
               effectiveUnitPrice = nonZeroVariant.unitPrice;
             }
           }
-          const stillZero = !effectiveUnitPrice || effectiveUnitPrice === "0.00" || effectiveUnitPrice === "0";
-          if (stillZero) {
+          if (!isNonZeroPrice(effectiveUnitPrice)) {
             const plVariants = priceListVariantMap.get(r.id) || [];
-            const plNonZero = plVariants.find((v: any) => v.unitPrice && v.unitPrice !== "0.00" && v.unitPrice !== "0");
+            const plNonZero = plVariants.find((v: any) => isNonZeroPrice(v.unitPrice));
             if (plNonZero) {
               effectiveUnitPrice = plNonZero.unitPrice;
               if (variants.length === 0) variants = plVariants;
             }
           }
-          const stillZero2 = !effectiveUnitPrice || effectiveUnitPrice === "0.00" || effectiveUnitPrice === "0";
-          if (stillZero2) {
+          if (!isNonZeroPrice(effectiveUnitPrice)) {
             const defVariants = defaultVariantMap.get(r.id) || [];
-            const defNonZero = defVariants.find((v: any) => v.unitPrice && v.unitPrice !== "0.00" && v.unitPrice !== "0");
+            const defNonZero = defVariants.find((v: any) => isNonZeroPrice(v.unitPrice));
             if (defNonZero) {
               effectiveUnitPrice = defNonZero.unitPrice;
               if (variants.length === 0) variants = defVariants;
+            }
+          }
+          if (!isNonZeroPrice(effectiveUnitPrice)) {
+            const fallbackBase = anyPriceListBaseMap.get(r.id);
+            if (fallbackBase) {
+              effectiveUnitPrice = fallbackBase;
+            } else {
+              const anyVariants = anyPriceListVariantMap.get(r.id) || [];
+              const anyNonZero = anyVariants.find((v: any) => isNonZeroPrice(v.unitPrice));
+              if (anyNonZero) {
+                effectiveUnitPrice = anyNonZero.unitPrice;
+                if (variants.length === 0) variants = anyVariants;
+              }
             }
           }
         }
