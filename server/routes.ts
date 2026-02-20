@@ -1120,7 +1120,7 @@ export async function registerRoutes(
           continue;
         }
 
-        const nameUpper = productName.toUpperCase();
+        const nameUpper = productName.toUpperCase().trim();
         const normalizedName = normalizeProductName(nameUpper);
         let productId = productByName.get(nameUpper)
           || productByName.get(normalizedName)
@@ -1128,6 +1128,13 @@ export async function registerRoutes(
 
         if (!productId && rowSku) {
           productId = productBySku.get(rowSku.toUpperCase());
+        }
+
+        if (!productId) {
+          const strippedParenthetical = nameUpper.replace(/\s*-\s*\([^)]+\)\s*/g, "").trim();
+          if (strippedParenthetical !== nameUpper) {
+            productId = productByName.get(strippedParenthetical);
+          }
         }
 
         if (!productId) {
@@ -1142,18 +1149,41 @@ export async function registerRoutes(
         }
 
         if (!productId) {
-          const sizeMatch = nameUpper.match(/^(.+?)\s*-\s*(.+)$/);
-          if (sizeMatch) {
-            const combinedName = `${sizeMatch[1].trim()} - ${sizeMatch[2].trim()}`;
-            const normalizedCombined = normalizeProductName(combinedName);
-            productId = productByName.get(combinedName)
-              || productByName.get(normalizedCombined)
-              || productByName.get(sizeMatch[2].trim() + " - " + sizeMatch[1].trim());
+          for (const [dbName, dbId] of productByName.entries()) {
+            if (dbName.replace(/\s*[\u2013\u2014]\s*/g, " - ").replace(/\s+/g, " ") === nameUpper.replace(/\s+/g, " ")) {
+              productId = dbId;
+              break;
+            }
+            const dbNorm = dbName.replace(/\s*[\u2013\u2014-]\s*/g, " ").replace(/\s*\([^)]+\)\s*/g, " ").replace(/\s+/g, " ").trim();
+            const csvNorm = nameUpper.replace(/\s*[\u2013\u2014-]\s*/g, " ").replace(/\s*\([^)]+\)\s*/g, " ").replace(/\s+/g, " ").trim();
+            if (dbNorm === csvNorm) {
+              productId = dbId;
+              break;
+            }
+          }
+        }
+
+        if (!productId && rowCategory) {
+          const normalizedCategory = rowCategory.replace(/\bDUCK\s+/gi, "").trim();
+          const csvSizeMatch = nameUpper.match(/^(.+?)\s*[-\u2013\u2014]\s*/);
+          if (csvSizeMatch) {
+            const sizePrefix = csvSizeMatch[1].trim();
+            for (const [dbName, dbId] of productByName.entries()) {
+              const dbProduct = allProducts.rows.find((p: any) => p.id === dbId);
+              if (!dbProduct) continue;
+              const dbCat = dbProduct.category.toUpperCase();
+              if (dbCat === rowCategory || dbCat === normalizedCategory) {
+                if (dbName.startsWith(sizePrefix + " ") || dbName.startsWith(sizePrefix + " -") || dbName.startsWith(sizePrefix + " \u2013")) {
+                  productId = dbId;
+                  break;
+                }
+              }
+            }
           }
         }
 
         if (!productId) {
-          const category = rowCategory || "UNCATEGORIZED";
+          const category = rowCategory ? rowCategory.replace(/\bDUCK\s+/gi, "").trim() || rowCategory : "UNCATEGORIZED";
           let sku = rowSku;
           if (sku && existingSkus.has(sku.toUpperCase())) {
             const existingId = productBySku.get(sku.toUpperCase());
