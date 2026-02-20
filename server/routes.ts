@@ -4964,15 +4964,29 @@ Rules:
         }
         let effectiveUnitPrice = priceMap.get(r.id) || priceListPriceMap.get(r.id) || r.unit_price;
         const isZeroPrice = !effectiveUnitPrice || effectiveUnitPrice === "0.00" || effectiveUnitPrice === "0";
-        if (isZeroPrice && variants.length > 0) {
-          const nonZeroVariant = variants.find((v: any) => v.unitPrice && v.unitPrice !== "0.00" && v.unitPrice !== "0");
-          if (nonZeroVariant) {
-            effectiveUnitPrice = nonZeroVariant.unitPrice;
-          } else {
+        if (isZeroPrice) {
+          if (variants.length > 0) {
+            const nonZeroVariant = variants.find((v: any) => v.unitPrice && v.unitPrice !== "0.00" && v.unitPrice !== "0");
+            if (nonZeroVariant) {
+              effectiveUnitPrice = nonZeroVariant.unitPrice;
+            }
+          }
+          const stillZero = !effectiveUnitPrice || effectiveUnitPrice === "0.00" || effectiveUnitPrice === "0";
+          if (stillZero) {
             const plVariants = priceListVariantMap.get(r.id) || [];
             const plNonZero = plVariants.find((v: any) => v.unitPrice && v.unitPrice !== "0.00" && v.unitPrice !== "0");
             if (plNonZero) {
               effectiveUnitPrice = plNonZero.unitPrice;
+              if (variants.length === 0) variants = plVariants;
+            }
+          }
+          const stillZero2 = !effectiveUnitPrice || effectiveUnitPrice === "0.00" || effectiveUnitPrice === "0";
+          if (stillZero2) {
+            const defVariants = defaultVariantMap.get(r.id) || [];
+            const defNonZero = defVariants.find((v: any) => v.unitPrice && v.unitPrice !== "0.00" && v.unitPrice !== "0");
+            if (defNonZero) {
+              effectiveUnitPrice = defNonZero.unitPrice;
+              if (variants.length === 0) variants = defVariants;
             }
           }
         }
