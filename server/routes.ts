@@ -1033,6 +1033,110 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/price-lists/:priceListId/import-csv", requireAdmin, async (req, res) => {
+    try {
+      const { rows } = req.body;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({ message: "No price data provided" });
+      }
+
+      const priceListId = req.params.priceListId;
+      const priceList = await storage.getPriceList(priceListId);
+      if (!priceList) {
+        return res.status(404).json({ message: "Price list not found" });
+      }
+
+      const allProducts = await pool.query("SELECT id, name, sku FROM products WHERE active = true");
+      const productByName = new Map<string, string>();
+      const productBySku = new Map<string, string>();
+      for (const p of allProducts.rows) {
+        productByName.set(p.name.toUpperCase().trim(), p.id);
+        productBySku.set(p.sku.toUpperCase().trim(), p.id);
+      }
+
+      function normalizeProductName(name: string): string {
+        return name
+          .replace(/\bDUCK\s+FEATHER\b/gi, "FEATHER")
+          .replace(/\bDUCK\s+DOWN\b/gi, "DOWN")
+          .replace(/\bDUCK\s+/gi, "")
+          .trim();
+      }
+
+      let imported = 0;
+      let skipped = 0;
+      let notFound = 0;
+      const notFoundNames: string[] = [];
+
+      for (const row of rows) {
+        const productName = (row.product || row.Product || "").trim();
+        const filling = (row.filling || row.Filling || "").trim() || null;
+        const weight = (row.weight || row.Weight || "").trim() || null;
+        const priceStr = (row.price || row.Price || row.unit_price || row.unitPrice || "").toString().replace(/[^0-9.]/g, "");
+        const price = parseFloat(priceStr);
+
+        if (!productName || isNaN(price)) {
+          skipped++;
+          continue;
+        }
+
+        const nameUpper = productName.toUpperCase();
+        const normalizedName = normalizeProductName(nameUpper);
+        let productId = productByName.get(nameUpper)
+          || productByName.get(normalizedName)
+          || productBySku.get(nameUpper);
+
+        if (!productId) {
+          const sizeMatch = nameUpper.match(/^(.+?)\s*-\s*(.+)$/);
+          if (sizeMatch) {
+            const combinedName = `${sizeMatch[1].trim()} - ${sizeMatch[2].trim()}`;
+            const normalizedCombined = normalizeProductName(combinedName);
+            productId = productByName.get(combinedName)
+              || productByName.get(normalizedCombined)
+              || productByName.get(sizeMatch[2].trim() + " - " + sizeMatch[1].trim());
+          }
+        }
+
+        if (!productId) {
+          notFound++;
+          if (notFoundNames.length < 20) notFoundNames.push(productName);
+          continue;
+        }
+
+        try {
+          const existing = await pool.query(
+            `SELECT id FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 AND COALESCE(filling, '') = $3 AND COALESCE(weight, '') = $4`,
+            [priceListId, productId, filling || "", weight || ""]
+          );
+          if (existing.rows.length > 0) {
+            await pool.query(
+              `UPDATE price_list_prices SET unit_price = $1 WHERE id = $2`,
+              [price.toFixed(2), existing.rows[0].id]
+            );
+          } else {
+            await pool.query(
+              `INSERT INTO price_list_prices (price_list_id, product_id, filling, weight, unit_price) VALUES ($1, $2, $3, $4, $5)`,
+              [priceListId, productId, filling, weight, price.toFixed(2)]
+            );
+          }
+          imported++;
+        } catch (e: any) {
+          skipped++;
+        }
+      }
+
+      res.json({
+        message: `Imported ${imported} prices. ${skipped} skipped. ${notFound} products not found.`,
+        imported,
+        skipped,
+        notFound,
+        notFoundNames,
+      });
+    } catch (error) {
+      console.error("Price list CSV import error:", error);
+      res.status(500).json({ message: "Failed to import prices" });
+    }
+  });
+
   app.delete("/api/price-list-prices/:id", requireAdmin, async (req, res) => {
     try {
       const success = await storage.deletePriceListPrice(req.params.id);

@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
-import { ListFilter, Plus, Pencil, Trash2, Star, Loader2, Eye, Search, Download, ChevronDown, ChevronRight } from "lucide-react";
+import { useState, useMemo, useRef } from "react";
+import { ListFilter, Plus, Pencil, Trash2, Star, Loader2, Eye, Search, Download, Upload, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +96,80 @@ export default function PriceListsPage() {
     a.download = `${viewingList.name.replace(/\s+/g, "_")}_prices.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !viewingList) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const lines = text.split("\n").filter(l => l.trim());
+      if (lines.length < 2) {
+        toast({ title: "CSV file is empty or has no data rows", variant: "destructive" });
+        setImporting(false);
+        return;
+      }
+      const headerLine = lines[0];
+      const headers = headerLine.split(",").map(h => h.replace(/^"|"$/g, "").trim().toLowerCase());
+
+      const productIdx = headers.findIndex(h => h === "product" || h === "product_name" || h === "name");
+      const fillingIdx = headers.findIndex(h => h === "filling");
+      const weightIdx = headers.findIndex(h => h === "weight");
+      const priceIdx = headers.findIndex(h => h === "price" || h === "unit_price" || h === "unitprice");
+
+      if (productIdx === -1 || priceIdx === -1) {
+        toast({ title: "CSV must have 'Product' and 'Price' columns", description: "Expected columns: Product, Filling, Weight, Price", variant: "destructive" });
+        setImporting(false);
+        return;
+      }
+
+      const rows = [];
+      for (let i = 1; i < lines.length; i++) {
+        const parts: string[] = [];
+        let current = "";
+        let inQuotes = false;
+        for (const char of lines[i]) {
+          if (char === '"') { inQuotes = !inQuotes; continue; }
+          if (char === ',' && !inQuotes) { parts.push(current.trim()); current = ""; continue; }
+          current += char;
+        }
+        parts.push(current.trim());
+
+        const product = parts[productIdx] || "";
+        const filling = fillingIdx >= 0 ? parts[fillingIdx] || "" : "";
+        const weight = weightIdx >= 0 ? parts[weightIdx] || "" : "";
+        const price = parts[priceIdx] || "";
+        if (product && price) {
+          rows.push({ product, filling, weight, price });
+        }
+      }
+
+      if (rows.length === 0) {
+        toast({ title: "No valid price rows found in CSV", variant: "destructive" });
+        setImporting(false);
+        return;
+      }
+
+      const res = await apiRequest("POST", `/api/price-lists/${viewingList.id}/import-csv`, { rows });
+      const result = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/price-lists", viewingList.id, "prices"] });
+      let description = `${result.imported} prices imported`;
+      if (result.skipped > 0) description += `, ${result.skipped} skipped`;
+      if (result.notFound > 0) description += `, ${result.notFound} products not found`;
+      if (result.notFoundNames?.length > 0) {
+        description += `\nNot found: ${result.notFoundNames.slice(0, 5).join(", ")}`;
+      }
+      toast({ title: "Import complete", description });
+    } catch (err: any) {
+      toast({ title: "Import failed", description: err.message || "Unknown error", variant: "destructive" });
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const createMutation = useMutation({
@@ -283,9 +357,27 @@ export default function PriceListsPage() {
                 data-testid="input-price-search"
               />
             </div>
+            <input
+              type="file"
+              accept=".csv"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={handleImportCSV}
+              data-testid="input-import-csv"
+            />
+            <Button
+              variant="outline"
+              size="default"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              data-testid="button-import-csv"
+            >
+              {importing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+              Import
+            </Button>
             <Button variant="outline" size="default" onClick={exportCSV} data-testid="button-export-csv">
               <Download className="w-4 h-4 mr-2" />
-              CSV
+              Export
             </Button>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0">
