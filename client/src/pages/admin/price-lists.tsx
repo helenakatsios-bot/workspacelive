@@ -117,9 +117,24 @@ export default function PriceListsPage() {
         return;
       }
       const headerLine = lines[0].replace(/^\uFEFF/, '');
-      const headers = headerLine.split(",").map(h => h.replace(/^"|"$/g, "").replace(/[^\x20-\x7E]/g, "").trim().toLowerCase());
+      const delimiter = headerLine.includes("\t") ? "\t" : ",";
 
-      const productIdx = headers.findIndex(h => h === "product" || h === "product_name" || h === "product name" || h === "name");
+      const splitLine = (line: string, delim: string): string[] => {
+        const parts: string[] = [];
+        let current = "";
+        let inQuotes = false;
+        for (const char of line) {
+          if (char === '"') { inQuotes = !inQuotes; continue; }
+          if (char === delim && !inQuotes) { parts.push(current.trim()); current = ""; continue; }
+          current += char;
+        }
+        parts.push(current.trim());
+        return parts;
+      };
+
+      const headers = splitLine(headerLine, delimiter).map(h => h.replace(/^"|"$/g, "").replace(/[^\x20-\x7E]/g, "").trim().toLowerCase());
+
+      const productIdx = headers.findIndex(h => h === "product" || h === "product_name" || h === "product name" || h === "name" || h === "productname");
       const skuIdx = headers.findIndex(h => h === "sku" || h === "sku_code" || h === "product_code" || h === "code");
       const categoryIdx = headers.findIndex(h => h === "category" || h === "product_category" || h === "type");
       const fillingIdx = headers.findIndex(h => h === "filling");
@@ -127,22 +142,14 @@ export default function PriceListsPage() {
       const priceIdx = headers.findIndex(h => h.includes("price") && !h.includes("product"));
 
       if (productIdx === -1 || priceIdx === -1) {
-        toast({ title: "CSV must have 'Product' and 'Price' columns", description: "Expected columns: Product, Filling, Weight, Price", variant: "destructive" });
+        toast({ title: "CSV must have 'Product' and 'Price' columns", description: `Expected columns: Product, Filling, Weight, Price. Found: ${headers.join(", ")}`, variant: "destructive" });
         setImporting(false);
         return;
       }
 
       const rows = [];
       for (let i = 1; i < lines.length; i++) {
-        const parts: string[] = [];
-        let current = "";
-        let inQuotes = false;
-        for (const char of lines[i]) {
-          if (char === '"') { inQuotes = !inQuotes; continue; }
-          if (char === ',' && !inQuotes) { parts.push(current.trim()); current = ""; continue; }
-          current += char;
-        }
-        parts.push(current.trim());
+        const parts = splitLine(lines[i], delimiter);
 
         const product = parts[productIdx] || "";
         const sku = skuIdx >= 0 ? parts[skuIdx] || "" : "";
@@ -368,7 +375,7 @@ export default function PriceListsPage() {
             </div>
             <input
               type="file"
-              accept=".csv"
+              accept=".csv,.tsv,.txt"
               ref={fileInputRef}
               className="hidden"
               onChange={handleImportCSV}
