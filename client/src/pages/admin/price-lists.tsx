@@ -119,10 +119,10 @@ export default function PriceListsPage() {
       const headerLine = lines[0];
       const headers = headerLine.split(",").map(h => h.replace(/^"|"$/g, "").trim().toLowerCase());
 
-      const productIdx = headers.findIndex(h => h === "product" || h === "product_name" || h === "name");
+      const productIdx = headers.findIndex(h => h === "product" || h === "product_name" || h === "product name" || h === "name");
       const fillingIdx = headers.findIndex(h => h === "filling");
       const weightIdx = headers.findIndex(h => h === "weight");
-      const priceIdx = headers.findIndex(h => h === "price" || h === "unit_price" || h === "unitprice");
+      const priceIdx = headers.findIndex(h => h.includes("price"));
 
       if (productIdx === -1 || priceIdx === -1) {
         toast({ title: "CSV must have 'Product' and 'Price' columns", description: "Expected columns: Product, Filling, Weight, Price", variant: "destructive" });
