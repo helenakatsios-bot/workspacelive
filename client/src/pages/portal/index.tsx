@@ -23,6 +23,7 @@ import {
   Eye,
   EyeOff,
   ChevronRight,
+  ChevronDown,
   ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -695,8 +696,34 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     return products.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || (p.category || "").toLowerCase().includes(q));
   }, [products, search]);
 
-  const TOP_CATEGORIES = ['INSERTS'];
-  const BOTTOM_CATEGORIES = ['MICROSOFT', 'KHAKI BLANKET', 'SILVER BLANKET'];
+  const PORTAL_CATEGORY_ORDER = [
+    'INSERTS',
+    '80% WINTER FILLED',
+    '80% MID WARM FILLED',
+    '50% WINTER FILLED',
+    '50% MID WARM FILLED',
+    '4 SEASONS FILLED',
+    'STRIPPED QUILT',
+    'MATTRESS TOPPER FILLED',
+    'PIPED PILLOWS',
+    'CHAMBER PILLOW',
+    'STRIP PILLOW',
+    'MICROSOFT',
+    'KHAKI BLANKET',
+    'SILVER BLANKET',
+    'BULK',
+  ];
+
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+
+  const toggleCategory = (cat: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
 
   const grouped = useMemo(() => {
     const groups: Record<string, any[]> = {};
@@ -706,21 +733,15 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       groups[cat].push(p);
     }
     const sorted: Record<string, any[]> = {};
-    const topEntries: [string, any[]][] = [];
-    const middleEntries: [string, any[]][] = [];
-    const bottomEntries: [string, any[]][] = [];
-    for (const [cat, prods] of Object.entries(groups)) {
-      if (TOP_CATEGORIES.includes(cat)) {
-        topEntries.push([cat, prods]);
-      } else if (BOTTOM_CATEGORIES.includes(cat)) {
-        bottomEntries.push([cat, prods]);
-      } else {
-        middleEntries.push([cat, prods]);
+    for (const cat of PORTAL_CATEGORY_ORDER) {
+      if (groups[cat]) {
+        sorted[cat] = groups[cat];
       }
     }
-    bottomEntries.sort((a, b) => BOTTOM_CATEGORIES.indexOf(a[0]) - BOTTOM_CATEGORIES.indexOf(b[0]));
-    for (const [cat, prods] of [...topEntries, ...middleEntries, ...bottomEntries]) {
-      sorted[cat] = prods;
+    for (const [cat, prods] of Object.entries(groups)) {
+      if (!sorted[cat]) {
+        sorted[cat] = prods;
+      }
     }
     return sorted;
   }, [filteredProducts]);
@@ -909,12 +930,24 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
               '80% WINTER FILLED': 'WINTER 80% DOWN',
             };
             const displayCategory = CATEGORY_DISPLAY_NAMES[category] || category;
+            const isExpanded = expandedCategories.has(category);
+            const categoryHasItems = Object.entries(cart).some(([id, qty]) => qty > 0 && prods.some((p: any) => p.id === id));
             return (
             <Card key={category}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">{displayCategory}</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
+              <button
+                className="flex items-center justify-between w-full px-4 py-3 text-left hover-elevate rounded-md"
+                onClick={() => toggleCategory(category)}
+                data-testid={`button-toggle-category-${category}`}
+              >
+                <div className="flex items-center gap-2">
+                  {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  <span className="font-semibold text-sm">{displayCategory}</span>
+                  {categoryHasItems && <Badge variant="default" className="text-xs">In cart</Badge>}
+                </div>
+                <Badge variant="secondary">{prods.filter((p: any) => p.name !== 'CUSTOM INSERT').length}</Badge>
+              </button>
+              {isExpanded && (
+              <CardContent className="p-0 pt-0">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1111,6 +1144,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                   </TableBody>
                 </Table>
               </CardContent>
+              )}
             </Card>
           );
           })}
