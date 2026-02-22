@@ -708,7 +708,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     '50% DUCK WINTER FILLED',
     '50% GOOSE DOWN',
     '4 SEASONS FILLED',
-    'STRIPPED QUILT',
+    'HUNGARIAN',
     'MATTRESS TOPPER FILLED',
     'MATTRESS TOPPER',
     'PIPED PILLOWS',
@@ -718,6 +718,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     'MICROSOFT',
     'MICROSFT',
     'BLANKETS',
+    'JACKETS',
     'BULK',
     '80% DUCK COT FILLED',
     '80% DUCK SUMMER FILLED',
@@ -725,8 +726,10 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     '80% GOOSE SUMMER',
     '80% GOOSE DOWN',
     '80% HUNGARIAN GOOSE',
-    'HUNGARIAN',
+    'CASES',
   ];
+
+  const HIDDEN_PORTAL_CATEGORIES = ['MISC'];
 
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
@@ -743,6 +746,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     const groups: Record<string, any[]> = {};
     for (const p of filteredProducts) {
       const cat = p.category || "Other";
+      if (HIDDEN_PORTAL_CATEGORIES.includes(cat)) continue;
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(p);
     }
@@ -976,20 +980,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                     {prods.filter((product: any) => product.name !== 'CUSTOM INSERT').map((product: any) => (
                       <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
                         <TableCell>
-                          <p className="font-medium">{(() => {
-                            let name = product.name;
-                            name = name.replace(/\s*[\-–]\s*\(.*?\)\s*/g, '').replace(/\s*\(.*?\)\s*/g, '').trim();
-                            if (category) {
-                              const escaped = category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                              name = name.replace(new RegExp(`\\s*[-–]?\\s*${escaped}`, 'i'), '').trim();
-                            }
-                            name = name.replace(/\s*[-–]?\s*ULTRA\s+WARM\s+\d+%\s+\w+\s+DOWN/i, '').trim();
-                            name = name.replace(/\s*[-–]?\s*\d+%\s+\w+\s+DOWN\s*\d*%?\s*\w*/i, '').trim();
-                            name = name.replace(/\s*[-–]?\s*KHAKI\s+BLANKET/i, '').trim();
-                            name = name.replace(/\s*[-–]?\s*SILVER\s+BLANKET/i, '').trim();
-                            name = name.replace(/\s*[-–]\s*$/, '').trim();
-                            return name || product.name;
-                          })()}</p>
+                          <p className="font-medium">{product.name}</p>
                           {product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
                         </TableCell>
                         {hasFillingOption && (
