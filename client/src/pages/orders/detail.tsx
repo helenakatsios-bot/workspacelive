@@ -205,20 +205,34 @@ export default function OrderDetailPage() {
     ).slice(0, 50);
   }, [companies, companySearch]);
 
-  const filteredProducts = useMemo(() => {
-    if (!products) return [];
-    if (!productSearch) return products;
-    const q = productSearch.toLowerCase();
-    return products.filter((p) =>
-      p.name.toLowerCase().includes(q) ||
-      p.sku.toLowerCase().includes(q)
-    );
-  }, [products, productSearch]);
-
   const selectedCompany = useMemo(
     () => companies?.find((c) => c.id === editCompanyId),
     [companies, editCompanyId]
   );
+
+  const { data: priceListProducts } = useQuery<any[]>({
+    queryKey: ["/api/price-lists", selectedCompany?.priceListId, "prices"],
+    enabled: !!selectedCompany?.priceListId && isEditing,
+  });
+
+  const priceListProductIds = useMemo(() => {
+    if (!priceListProducts) return null;
+    return new Set(priceListProducts.map((p: any) => p.productId || p.product_id));
+  }, [priceListProducts]);
+
+  const filteredProducts = useMemo(() => {
+    if (!products) return [];
+    let available = products.filter((p) => p.active);
+    if (priceListProductIds) {
+      available = available.filter((p) => priceListProductIds.has(p.id));
+    }
+    if (!productSearch) return available;
+    const q = productSearch.toLowerCase();
+    return available.filter((p) =>
+      p.name.toLowerCase().includes(q) ||
+      p.sku.toLowerCase().includes(q)
+    );
+  }, [products, productSearch, priceListProductIds]);
 
   const editSubtotal = useMemo(() => editLines.reduce((sum, l) => sum + l.lineTotal, 0), [editLines]);
   const editTax = editSubtotal * 0.1;

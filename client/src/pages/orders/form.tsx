@@ -147,6 +147,16 @@ export default function OrderFormPage() {
     [companies, companyId]
   );
 
+  const { data: priceListProducts } = useQuery<any[]>({
+    queryKey: ["/api/price-lists", selectedCompany?.priceListId, "prices"],
+    enabled: !!selectedCompany?.priceListId,
+  });
+
+  const priceListProductIds = useMemo(() => {
+    if (!priceListProducts) return null;
+    return new Set(priceListProducts.map((p: any) => p.productId || p.product_id));
+  }, [priceListProducts]);
+
   const filteredCompanies = useMemo(() => {
     if (!companies) return [];
     if (!companySearch) return companies.slice(0, 50);
@@ -162,7 +172,10 @@ export default function OrderFormPage() {
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
-    const active = products.filter((p) => p.active);
+    let active = products.filter((p) => p.active);
+    if (priceListProductIds) {
+      active = active.filter((p) => priceListProductIds.has(p.id));
+    }
     if (!productSearch) return active;
     const q = productSearch.toLowerCase();
     return active
@@ -172,7 +185,7 @@ export default function OrderFormPage() {
           p.sku.toLowerCase().includes(q) ||
           (p.category || "").toLowerCase().includes(q)
       );
-  }, [products, productSearch]);
+  }, [products, productSearch, priceListProductIds]);
 
   const addProduct = (product: Product) => {
     const existing = lines.find((l) => l.productId === product.id);
