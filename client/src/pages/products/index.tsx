@@ -79,6 +79,8 @@ export default function ProductsPage() {
     if (!products) return [];
     return products
       .filter((product) => {
+        const hasPriceInList = !!pricesByProduct[product.id];
+        if (!hasPriceInList) return false;
         const matchesSearch =
           product.name.toLowerCase().includes(search.toLowerCase()) ||
           product.sku.toLowerCase().includes(search.toLowerCase()) ||
@@ -110,19 +112,30 @@ export default function ProductsPage() {
       "INSERTS",
       "80% WINTER FILLED",
       "80% MID WARM FILLED",
-      "50% WINTER FILLED",
       "50% MID WARM FILLED",
       "4 SEASONS FILLED",
       "STRIPPED QUILT",
       "MATTRESS TOPPER FILLED",
+      "MATTRESS TOPPER",
       "PIPED PILLOWS",
+      "PILLOW",
       "CHAMBER PILLOW",
       "STRIP PILLOW",
       "MICROSOFT",
-      "BLANKET",
+      "MICROSFT",
+      "BLANKETS",
       "BULK",
-      "MEN JACKET",
-      "WOMAN JACKET",
+      "50% DUCK WINTER FILLED",
+      "80% DUCK COT FILLED",
+      "80% DUCK SUMMER FILLED",
+      "80% GOOSE SUMMER FILLED",
+      "80% GOOSE SUMMER",
+      "80% GOOSE DOWN",
+      "50% GOOSE DOWN",
+      "80% HUNGARIAN GOOSE",
+      "HUNGARIAN",
+      "JACKETS",
+      "MISC",
     ];
     return Object.entries(groups).sort(([a], [b]) => {
       const idxA = CATEGORY_ORDER.indexOf(a);
