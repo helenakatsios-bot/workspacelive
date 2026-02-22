@@ -79,8 +79,6 @@ export default function ProductsPage() {
     if (!products) return [];
     return products
       .filter((product) => {
-        const hasPriceInList = !!pricesByProduct[product.id];
-        if (!hasPriceInList) return false;
         const matchesSearch =
           product.name.toLowerCase().includes(search.toLowerCase()) ||
           product.sku.toLowerCase().includes(search.toLowerCase()) ||
