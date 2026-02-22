@@ -42,7 +42,7 @@ function normalizeCategory(cat: string): string {
 export async function importInteriorsPriceList() {
   const csvPath = path.join(
     process.cwd(),
-    "attached_assets/replit_INTERIORS_CSV_OFFICAL_1771742928290.csv"
+    "attached_assets/replit_INTERIORS_CSV_OFFICAL_1771743126691.csv"
   );
 
   if (!fs.existsSync(csvPath)) {
@@ -102,10 +102,20 @@ export async function importInteriorsPriceList() {
     );
     const productByName = new Map<string, string>();
     const productBySku = new Map<string, string>();
+    const productByCleanName = new Map<string, string>();
     for (const p of productsResult.rows) {
       const key = `${p.name.trim().toUpperCase()}|||${(p.category || "").trim().toUpperCase()}`;
       productByName.set(key, p.id);
       if (p.sku) productBySku.set(p.sku.trim().toUpperCase(), p.id);
+      const cleanName = p.name.trim().toUpperCase()
+        .replace(/\s*\([^)]*\)\s*/g, " ")
+        .replace(/\s*-\s*-\s*/g, " - ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const cleanKey = `${cleanName}|||${(p.category || "").trim().toUpperCase()}`;
+      if (!productByCleanName.has(cleanKey)) {
+        productByCleanName.set(cleanKey, p.id);
+      }
     }
 
     let insertedCount = 0;
@@ -122,6 +132,30 @@ export async function importInteriorsPriceList() {
       const [name, category] = key.split("|||");
       const lookupKey = `${name.toUpperCase()}|||${category.toUpperCase()}`;
       let productId = productByName.get(lookupKey);
+
+      if (!productId) {
+        const cleanCsv = name.toUpperCase()
+          .replace(/\s*-\s*-\s*/g, " - ")
+          .replace(/\s+/g, " ")
+          .trim();
+        const cleanLookup = `${cleanCsv}|||${category.toUpperCase()}`;
+        productId = productByCleanName.get(cleanLookup);
+      }
+
+      if (!productId) {
+        const normalized = name.toUpperCase()
+          .replace(/\s*-\s*/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        for (const [ck, cid] of productByCleanName) {
+          const [cName] = ck.split("|||");
+          const cNorm = cName.replace(/\s*-\s*/g, " ").replace(/\s+/g, " ").trim();
+          if (cNorm === normalized && ck.endsWith(`|||${category.toUpperCase()}`)) {
+            productId = cid;
+            break;
+          }
+        }
+      }
 
       if (!productId) {
         const firstSku = groupRows[0].sku.toUpperCase();
