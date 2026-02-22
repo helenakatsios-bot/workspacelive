@@ -353,6 +353,73 @@ async function runStartupTasks() {
     console.error("BATCH merge error:", error);
   }
 
+  // Normalize product categories: merge SILVER/KHAKI BLANKET into BLANKETS, rename JACKETS category
+  try {
+    const blanketFix = await pool.query("UPDATE products SET category = 'BLANKETS' WHERE category IN ('SILVER BLANKET', 'KHAKI BLANKET', 'BLANKET')");
+    if (blanketFix.rowCount && blanketFix.rowCount > 0) {
+      console.log(`Normalized ${blanketFix.rowCount} blanket products into BLANKETS category`);
+    }
+
+    // Ensure FREIGHT, DROP SHIP FEE, SHOPIFY FEE exist in MISC category
+    const miscProducts = ['FREIGHT', 'DROP SHIP FEE', 'SHOPIFY FEE'];
+    for (const name of miscProducts) {
+      const exists = await pool.query("SELECT id FROM products WHERE name = $1", [name]);
+      if (exists.rows.length === 0) {
+        await pool.query(
+          "INSERT INTO products (id, sku, name, category, unit_price, active) VALUES (gen_random_uuid(), $1, $2, 'MISC', '0.00', true)",
+          [name.toLowerCase().replace(/\s+/g, '_'), name]
+        );
+        console.log(`Created MISC product: ${name}`);
+      } else {
+        await pool.query("UPDATE products SET category = 'MISC' WHERE name = $1 AND category != 'MISC'", [name]);
+      }
+    }
+
+    // Ensure JACKETS products exist for all price lists
+    const jacketNames = [
+      'EXTRA LARGE - MEN JACKET', 'LARGE - MEN JACKET', 'MEDIUM - MEN JACKET', 'SMALL - MEN JACKET',
+      'EXTRA LARGE - WOMAN JACKET', 'LARGE - WOMAN JACKET', 'MEDIUM - WOMAN JACKET', 'SMALL - WOMAN JACKET'
+    ];
+    const jacketCheck = await pool.query("SELECT COUNT(*) as cnt FROM products WHERE category = 'JACKETS'");
+    if (parseInt(jacketCheck.rows[0].cnt) < 8) {
+      // Ensure at least the base PFH jacket products exist
+      for (let i = 0; i < jacketNames.length; i++) {
+        const sku = `PFH${438 + i}`;
+        const existsJ = await pool.query("SELECT id FROM products WHERE sku = $1", [sku]);
+        if (existsJ.rows.length === 0) {
+          await pool.query(
+            "INSERT INTO products (id, sku, name, category, unit_price, active) VALUES (gen_random_uuid(), $1, $2, 'JACKETS', '0.00', true) ON CONFLICT (sku) DO NOTHING",
+            [sku, jacketNames[i]]
+          );
+        } else {
+          await pool.query("UPDATE products SET category = 'JACKETS' WHERE sku = $1", [sku]);
+        }
+      }
+      console.log("Ensured JACKETS category products exist");
+    }
+
+    // Ensure MISC, JACKETS, and BLANKETS products are in all price lists
+    const priceLists = await pool.query("SELECT id, name FROM price_lists WHERE name != 'Hotel Luxury Collection'");
+    const categoryProducts = await pool.query("SELECT id FROM products WHERE category IN ('MISC', 'JACKETS', 'BLANKETS')");
+    for (const pl of priceLists.rows) {
+      for (const prod of categoryProducts.rows) {
+        const exists = await pool.query(
+          "SELECT 1 FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 LIMIT 1",
+          [pl.id, prod.id]
+        );
+        if (exists.rows.length === 0) {
+          await pool.query(
+            "INSERT INTO price_list_prices (id, price_list_id, product_id, filling, weight, unit_price) VALUES (gen_random_uuid(), $1, $2, NULL, NULL, '0.00')",
+            [pl.id, prod.id]
+          );
+        }
+      }
+    }
+    console.log("Category normalization complete");
+  } catch (error) {
+    console.error("Category normalization error:", error);
+  }
+
   console.log("All startup tasks completed");
 }
 
