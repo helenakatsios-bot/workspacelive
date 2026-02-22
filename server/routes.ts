@@ -990,7 +990,7 @@ export async function registerRoutes(
   app.get("/api/price-lists/:priceListId/prices", requireAuth, async (req, res) => {
     try {
       const { rows } = await pool.query(
-        `SELECT plp.id, plp.product_id, plp.filling, plp.weight, plp.unit_price, p.name as product_name, p.category
+        `SELECT plp.id, plp.product_id, plp.sku, plp.filling, plp.weight, plp.unit_price, p.name as product_name, p.category
          FROM price_list_prices plp
          JOIN products p ON p.id = plp.product_id
          WHERE plp.price_list_id = $1

@@ -570,6 +570,7 @@ export const priceListPrices = pgTable("price_list_prices", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
   priceListId: varchar("price_list_id", { length: 36 }).notNull().references(() => priceLists.id, { onDelete: "cascade" }),
   productId: varchar("product_id", { length: 36 }).notNull().references(() => products.id, { onDelete: "cascade" }),
+  sku: text("sku"),
   filling: text("filling"),
   weight: text("weight"),
   unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),

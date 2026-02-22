@@ -25,6 +25,7 @@ interface PriceList {
 interface PriceListPrice {
   id: string;
   product_id: string;
+  sku: string | null;
   filling: string | null;
   weight: string | null;
   unit_price: string;
@@ -281,7 +282,14 @@ export default function ProductsPage() {
                                   {product.name}
                                 </span>
                                 <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                                  {product.sku}
+                                  {(() => {
+                                    const productPrices = pricesByProduct[product.id];
+                                    if (productPrices && productPrices.length > 0) {
+                                      const plSku = productPrices.find((p) => p.sku)?.sku;
+                                      if (plSku) return plSku;
+                                    }
+                                    return product.sku;
+                                  })()}
                                 </code>
                                 {!product.active && (
                                   <Badge variant="secondary" className="text-xs gap-1">
