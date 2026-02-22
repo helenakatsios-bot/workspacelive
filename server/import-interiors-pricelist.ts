@@ -82,20 +82,28 @@ export async function importInteriorsPriceList() {
   try {
     await client.query("BEGIN");
 
+    let priceListId: string;
     const priceListResult = await client.query(
       "SELECT id FROM price_lists WHERE name = 'Interiors'"
     );
     if (priceListResult.rows.length === 0) {
-      console.log("Interiors price list not found, skipping");
+      const newPL = await client.query(
+        `INSERT INTO price_lists (name, description, is_default) VALUES ('Interiors', 'Interiors pricing', false) RETURNING id`
+      );
+      priceListId = newPL.rows[0].id;
+    } else {
+      priceListId = priceListResult.rows[0].id;
+    }
+
+    const existingPrices = await client.query(
+      "SELECT COUNT(*) as cnt FROM price_list_prices WHERE price_list_id = $1",
+      [priceListId]
+    );
+    if (parseInt(existingPrices.rows[0].cnt) > 0) {
+      console.log("Interiors prices already imported, skipping");
       await client.query("ROLLBACK");
       return;
     }
-    const priceListId = priceListResult.rows[0].id;
-
-    await client.query(
-      "DELETE FROM price_list_prices WHERE price_list_id = $1",
-      [priceListId]
-    );
 
     const productsResult = await client.query(
       "SELECT id, name, category, sku FROM products"

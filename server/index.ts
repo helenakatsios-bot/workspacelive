@@ -11,6 +11,15 @@ import { startAutoXeroInvoiceSync } from "./xero";
 import { importPuradownPrices } from "./import-puradown-prices";
 import { seedPriceLists } from "./seed-price-lists";
 import { importStandardPriceList } from "./import-standard-pricelist";
+import { importInteriorsPriceList } from "./import-interiors-pricelist";
+import { importPoulosPriceList } from "./import-poulos-pricelist";
+import { importFrontlinePriceList } from "./import-frontline-pricelist";
+import { importHotelLuxuryPriceList } from "./import-hotelluxury-pricelist";
+import { importBedroomPriceList } from "./import-bedroom-pricelist";
+import { importSageClairePriceList } from "./import-sageclaire-pricelist";
+import { importLMPriceList } from "./import-lm-pricelist";
+import { importSpaceCraftPriceList } from "./import-spacecraft-pricelist";
+import { importWalterGPriceList } from "./import-walterg-pricelist";
 
 const app = express();
 const httpServer = createServer(app);
@@ -285,11 +294,31 @@ async function runStartupTasks() {
     console.error("Failed to seed database:", error);
   }
 
-  // Import Standard price list from CSV (only runs when products table is empty)
+  // Import all price lists from CSV (each checks if already imported)
   try {
     await importStandardPriceList();
   } catch (error) {
     console.error("Standard price list import error:", error);
+  }
+
+  const otherImports = [
+    { name: "Interiors", fn: importInteriorsPriceList },
+    { name: "Poulos", fn: importPoulosPriceList },
+    { name: "Frontline", fn: importFrontlinePriceList },
+    { name: "Hotel Luxury Collection", fn: importHotelLuxuryPriceList },
+    { name: "The Bedroom", fn: importBedroomPriceList },
+    { name: "Sage & Claire", fn: importSageClairePriceList },
+    { name: "L&M", fn: importLMPriceList },
+    { name: "Space Craft", fn: importSpaceCraftPriceList },
+    { name: "Walter G", fn: importWalterGPriceList },
+  ];
+
+  for (const { name, fn } of otherImports) {
+    try {
+      await fn();
+    } catch (error) {
+      console.error(`${name} price list import error:`, error);
+    }
   }
 
   console.log("All startup tasks completed");

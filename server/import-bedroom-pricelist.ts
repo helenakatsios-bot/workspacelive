@@ -84,10 +84,15 @@ export async function importBedroomPriceList() {
     );
     if (existingPL.rows.length > 0) {
       priceListId = existingPL.rows[0].id;
-      await client.query(
-        "DELETE FROM price_list_prices WHERE price_list_id = $1",
+      const existingPrices = await client.query(
+        "SELECT COUNT(*) as cnt FROM price_list_prices WHERE price_list_id = $1",
         [priceListId]
       );
+      if (parseInt(existingPrices.rows[0].cnt) > 0) {
+        console.log("The Bedroom prices already imported, skipping");
+        await client.query("ROLLBACK");
+        return;
+      }
     } else {
       const newPL = await client.query(
         `INSERT INTO price_lists (name, description, is_default) VALUES ('The Bedroom', 'The Bedroom pricing', false) RETURNING id`
