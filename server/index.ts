@@ -423,6 +423,43 @@ async function runStartupTasks() {
         }
       }
     }
+    // Normalize dimension-based product names to proper size names
+    const nameUpdates: [string, string][] = [
+      // PIPED PILLOWS: dimension → size
+      ['45X70CM - PIPED PILLOWS', 'STANDARD - PIPED PILLOWS'],
+      ['50X80CM - PIPED PILLOWS', 'QUEEN - PIPED PILLOWS'],
+      ['50X90CM - PIPED PILLOWS', 'KING - PIPED PILLOWS'],
+      ['65 X 65CM - PIPED PILLOWS', 'EURO - PIPED PILLOWS'],
+      // CHAMBER PILLOW: dimension → proper name
+      ['45X70CM 80 - CHAMBER PILLOW', 'STANDARD PILLOW - 80 DUCK DOWN CHAMBER PILLOW'],
+      ['45X70CM 50 - CHAMBER PILLOW', 'STANDARD PILLOW - 50 DUCK DOWN CHAMBER PILLOW'],
+      ['50X90CM 80 - CHAMBER PILLOW', 'KING PILLOW - 80 DUCK DOWN CHAMBER PILLOW'],
+      ['50X90CM 50 - CHAMBER PILLOW', 'KING PILLOW - 50 DUCK DOWN CHAMBER PILLOW'],
+      ['45X70CM - (48X73CM) 80 - CHAMBER PILLOW', 'STANDARD PILLOW - 80 DUCK DOWN CHAMBER PILLOW'],
+      ['45X70CM - (48X73CM) 50 - CHAMBER PILLOW', 'STANDARD PILLOW - 50 DUCK DOWN CHAMBER PILLOW'],
+      ['50X90CM - (53X93CM) 80 - CHAMBER PILLOW', 'KING PILLOW - 80 DUCK DOWN CHAMBER PILLOW'],
+      ['50X90CM - (53X93CM) 50 - CHAMBER PILLOW', 'KING PILLOW - 50 DUCK DOWN CHAMBER PILLOW'],
+      // STRIP PILLOW: dimension → proper name
+      ['45X70CM - STRIP PILLOW', 'STANDARD PILLOW - 80% HUNGARIAN PILLOW'],
+      ['50X90CM - STRIP PILLOW', 'KING PILLOW - 80% HUNGARIAN PILLOW'],
+      // MATTRESS TOPPER FILLED: strip dimensions
+      ['DOUBLE 184X214CM - MATTRESS TOPPER FILLED', 'DOUBLE - MATTRESS TOPPER FILLED'],
+      ['SINGLE 140X214CM - MATTRESS TOPPER FILLED', 'SINGLE - MATTRESS TOPPER FILLED'],
+      // MICROSOFT: strip dimensions
+      ['DOUBLE 184X214CM - MICROSOFT', 'DOUBLE - MICROSOFT'],
+      ['KING 244X214CM - MICROSOFT', 'KING - MICROSOFT'],
+      ['QUEEN 214X214CM - MICROSOFT', 'QUEEN - MICROSOFT'],
+      ['SINGLE 140X214CM - MICROSOFT', 'SINGLE - MICROSOFT'],
+    ];
+    let nameFixCount = 0;
+    for (const [oldName, newName] of nameUpdates) {
+      const result = await pool.query("UPDATE products SET name = $1 WHERE name = $2", [newName, oldName]);
+      if (result.rowCount && result.rowCount > 0) nameFixCount += result.rowCount;
+    }
+    if (nameFixCount > 0) {
+      console.log(`Normalized ${nameFixCount} dimension-based product names to proper size names`);
+    }
+
     console.log("Category normalization complete");
   } catch (error) {
     console.error("Category normalization error:", error);
