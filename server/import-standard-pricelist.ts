@@ -64,8 +64,16 @@ export async function importStandardPriceList() {
     const fields = parseCsvLine(lines[i]);
     if (fields.length < 6) continue;
     rows.push({
-      productName: (fields[0] || "").trim().replace(/\s*-?\s*\([^)]*\)/, "").trim(),
-      category: (fields[1] || "").trim(),
+      productName: (fields[0] || "").trim()
+        .replace(/\s*-?\s*\([^)]*\)/, "")
+        .replace(/ - KHAKI BLANKET$/, " - KHAKI")
+        .replace(/ - SILVER BLANKET$/, " - SILVER")
+        .trim(),
+      category: (() => {
+        const cat = (fields[1] || "").trim();
+        if (cat === "KHAKI BLANKET" || cat === "SILVER BLANKET") return "BLANKET";
+        return cat;
+      })(),
       sku: (fields[2] || "").trim(),
       filling: (fields[3] || "").trim(),
       weight: (fields[4] || "").trim(),
