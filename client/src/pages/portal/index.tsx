@@ -1002,19 +1002,35 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                         )}
                         {WEIGHT_CATEGORIES.includes(category) && (
                           <TableCell>
-                            <Select
-                              value={weights[product.id] || ""}
-                              onValueChange={(val) => setWeights((prev) => ({ ...prev, [product.id]: val }))}
-                            >
-                              <SelectTrigger className="w-[140px]" data-testid={`select-weight-${product.id}`}>
-                                <SelectValue placeholder="Select..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(weightOptions[category] || ['Normal']).map((opt) => (
-                                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            {(() => {
+                              const selectedFilling = fillings[product.id] || "";
+                              const availableWeights: string[] = selectedFilling && product.variantPrices
+                                ? Array.from(new Set<string>(
+                                    product.variantPrices
+                                      .filter((vp: any) => vp.filling === selectedFilling && vp.weight)
+                                      .map((vp: any) => vp.weight.trim())
+                                  )).sort()
+                                : (weightOptions[category] || ['Normal']);
+                              const currentWeight = weights[product.id] || "";
+                              if (currentWeight && !availableWeights.includes(currentWeight)) {
+                                setTimeout(() => setWeights((prev) => ({ ...prev, [product.id]: "" })), 0);
+                              }
+                              return (
+                                <Select
+                                  value={currentWeight && availableWeights.includes(currentWeight) ? currentWeight : ""}
+                                  onValueChange={(val) => setWeights((prev) => ({ ...prev, [product.id]: val }))}
+                                >
+                                  <SelectTrigger className="w-[140px]" data-testid={`select-weight-${product.id}`}>
+                                    <SelectValue placeholder="Select..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {availableWeights.map((opt: string) => (
+                                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              );
+                            })()}
                           </TableCell>
                         )}
                         <TableCell>
