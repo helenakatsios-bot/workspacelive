@@ -363,6 +363,10 @@ async function runStartupTasks() {
     if (quiltFix.rowCount && quiltFix.rowCount > 0) {
       console.log(`Renamed ${quiltFix.rowCount} STRIPPED QUILT products to HUNGARIAN`);
     }
+    const quiltNameFix = await pool.query("UPDATE products SET name = REPLACE(name, ' - HUNGARIAN STRIPPED QUILT', ' - HUNGARIAN') WHERE name LIKE '% - HUNGARIAN STRIPPED QUILT'");
+    if (quiltNameFix.rowCount && quiltNameFix.rowCount > 0) {
+      console.log(`Updated ${quiltNameFix.rowCount} product names from HUNGARIAN STRIPPED QUILT to HUNGARIAN`);
+    }
 
     // Ensure FREIGHT, DROP SHIP FEE, SHOPIFY FEE exist in MISC category
     const miscProducts = ['FREIGHT', 'DROP SHIP FEE', 'SHOPIFY FEE'];
