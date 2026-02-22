@@ -35,13 +35,16 @@ function parsePrice(raw: string): number | null {
 }
 
 export async function importStandardPriceList() {
-  const csvPath = path.join(
-    process.cwd(),
-    "attached_assets/PRICES_FOR_REPLIT_STANDARD_+_bulk_offical_1771740498750.csv"
-  );
+  const cwd = process.cwd();
+  const csvPaths = [
+    path.join(cwd, "dist/standard-pricelist.csv"),
+    path.join(cwd, "server/standard-pricelist.csv"),
+    path.join(cwd, "attached_assets/PRICES_FOR_REPLIT_STANDARD_+_bulk_offical_1771740498750.csv"),
+  ];
+  const csvPath = csvPaths.find((p) => fs.existsSync(p));
 
-  if (!fs.existsSync(csvPath)) {
-    console.log("Standard price list CSV not found, skipping import");
+  if (!csvPath) {
+    console.log("Standard price list CSV not found at any location, skipping import");
     return;
   }
 

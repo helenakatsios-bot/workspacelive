@@ -72,6 +72,14 @@ async function buildAll() {
   await copyFile("server/data/companies.json", "dist/data/companies.json");
   console.log("copied data files to dist/data/");
 
+  // Copy standard price list CSV for production import
+  try {
+    await copyFile("server/standard-pricelist.csv", "dist/standard-pricelist.csv");
+    console.log("copied standard-pricelist.csv to dist/");
+  } catch (e) {
+    console.log("standard-pricelist.csv not found, skipping");
+  }
+
   // Copy PDFKit font data files for production PDF generation
   const { readdirSync } = await import("fs");
   const pdfkitDataDir = "node_modules/pdfkit/js/data";
