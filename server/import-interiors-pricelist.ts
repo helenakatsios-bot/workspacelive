@@ -175,9 +175,9 @@ export async function importInteriorsPriceList() {
         }
 
         await client.query(
-          `INSERT INTO price_list_prices (id, price_list_id, product_id, filling, weight, unit_price)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)`,
-          [priceListId, productId, row.filling || null, row.weight || null, row.price.toFixed(2)]
+          `INSERT INTO price_list_prices (id, price_list_id, product_id, sku, filling, weight, unit_price)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)`,
+          [priceListId, productId, row.sku || null, row.filling || null, row.weight || null, row.price.toFixed(2)]
         );
         insertedCount++;
       }

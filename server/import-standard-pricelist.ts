@@ -151,9 +151,9 @@ export async function importStandardPriceList() {
           variantsCreated++;
 
           await client.query(
-            `INSERT INTO price_list_prices (price_list_id, product_id, filling, weight, unit_price) 
-             VALUES ($1, $2, $3, $4, $5)`,
-            [priceListId, productId, filling, weight, row.price.toFixed(2)]
+            `INSERT INTO price_list_prices (price_list_id, product_id, sku, filling, weight, unit_price) 
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [priceListId, productId, row.sku || null, filling, weight, row.price.toFixed(2)]
           );
           priceListEntriesCreated++;
         }
