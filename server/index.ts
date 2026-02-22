@@ -363,6 +363,10 @@ async function runStartupTasks() {
     if (quiltFix.rowCount && quiltFix.rowCount > 0) {
       console.log(`Renamed ${quiltFix.rowCount} STRIPPED QUILT products to HUNGARIAN`);
     }
+    const stripFix = await pool.query("UPDATE products SET category = 'HUNGARIAN PILLOW' WHERE category = 'STRIP PILLOW'");
+    if (stripFix.rowCount && stripFix.rowCount > 0) {
+      console.log(`Renamed ${stripFix.rowCount} STRIP PILLOW products to HUNGARIAN PILLOW`);
+    }
     const quiltNameFix = await pool.query("UPDATE products SET name = REPLACE(name, ' - HUNGARIAN STRIPPED QUILT', ' - HUNGARIAN') WHERE name LIKE '% - HUNGARIAN STRIPPED QUILT'");
     if (quiltNameFix.rowCount && quiltNameFix.rowCount > 0) {
       console.log(`Updated ${quiltNameFix.rowCount} product names from HUNGARIAN STRIPPED QUILT to HUNGARIAN`);
@@ -439,9 +443,11 @@ async function runStartupTasks() {
       ['45X70CM - (48X73CM) 50 - CHAMBER PILLOW', 'STANDARD PILLOW - 50 DUCK DOWN CHAMBER PILLOW'],
       ['50X90CM - (53X93CM) 80 - CHAMBER PILLOW', 'KING PILLOW - 80 DUCK DOWN CHAMBER PILLOW'],
       ['50X90CM - (53X93CM) 50 - CHAMBER PILLOW', 'KING PILLOW - 50 DUCK DOWN CHAMBER PILLOW'],
-      // STRIP PILLOW: dimension → proper name
+      // STRIP PILLOW / HUNGARIAN PILLOW: dimension → proper name
       ['45X70CM - STRIP PILLOW', 'STANDARD PILLOW - 80% HUNGARIAN PILLOW'],
       ['50X90CM - STRIP PILLOW', 'KING PILLOW - 80% HUNGARIAN PILLOW'],
+      ['45X70CM - HUNGARIAN PILLOW', 'STANDARD PILLOW - 80% HUNGARIAN PILLOW'],
+      ['50X90CM - HUNGARIAN PILLOW', 'KING PILLOW - 80% HUNGARIAN PILLOW'],
       // MATTRESS TOPPER FILLED: strip dimensions
       ['DOUBLE 184X214CM - MATTRESS TOPPER FILLED', 'DOUBLE - MATTRESS TOPPER FILLED'],
       ['SINGLE 140X214CM - MATTRESS TOPPER FILLED', 'SINGLE - MATTRESS TOPPER FILLED'],

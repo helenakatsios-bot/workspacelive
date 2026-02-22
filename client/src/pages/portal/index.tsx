@@ -714,7 +714,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     'PIPED PILLOWS',
     'PILLOW',
     'CHAMBER PILLOW',
-    'STRIP PILLOW',
+    'HUNGARIAN PILLOW',
     'MICROSOFT',
     'MICROSFT',
     'BLANKETS',

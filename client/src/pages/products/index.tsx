@@ -120,7 +120,7 @@ export default function ProductsPage() {
       "PIPED PILLOWS",
       "PILLOW",
       "CHAMBER PILLOW",
-      "STRIP PILLOW",
+      "HUNGARIAN PILLOW",
       "MICROSOFT",
       "MICROSFT",
       "BLANKETS",
