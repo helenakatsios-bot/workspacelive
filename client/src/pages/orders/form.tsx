@@ -163,7 +163,7 @@ export default function OrderFormPage() {
   const filteredProducts = useMemo(() => {
     if (!products) return [];
     const active = products.filter((p) => p.active);
-    if (!productSearch) return active.slice(0, 50);
+    if (!productSearch) return active;
     const q = productSearch.toLowerCase();
     return active
       .filter(
@@ -171,8 +171,7 @@ export default function OrderFormPage() {
           p.name.toLowerCase().includes(q) ||
           p.sku.toLowerCase().includes(q) ||
           (p.category || "").toLowerCase().includes(q)
-      )
-      .slice(0, 50);
+      );
   }, [products, productSearch]);
 
   const addProduct = (product: Product) => {

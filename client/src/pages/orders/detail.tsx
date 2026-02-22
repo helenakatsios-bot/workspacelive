@@ -207,12 +207,12 @@ export default function OrderDetailPage() {
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
-    if (!productSearch) return products.slice(0, 50);
+    if (!productSearch) return products;
     const q = productSearch.toLowerCase();
     return products.filter((p) =>
       p.name.toLowerCase().includes(q) ||
       p.sku.toLowerCase().includes(q)
-    ).slice(0, 50);
+    );
   }, [products, productSearch]);
 
   const selectedCompany = useMemo(
