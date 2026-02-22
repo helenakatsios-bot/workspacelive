@@ -36,7 +36,7 @@ function normalizeCategory(cat: string): string {
 export async function importFrontlinePriceList() {
   const csvPath = path.join(
     process.cwd(),
-    "attached_assets/Price_Replit_Frontline_CSV_OFFICAL_1771746633114.csv"
+    "attached_assets/Price_Replit_Frontline_CSV_OFFICAL_1771747120083.csv"
   );
 
   if (!fs.existsSync(csvPath)) {
@@ -53,25 +53,14 @@ export async function importFrontlinePriceList() {
     if (fields.length < 6) continue;
 
     const productName = (fields[0] || "").trim();
-    let col1 = (fields[1] || "").trim();
-    let col2 = (fields[2] || "").trim();
+    const category = normalizeCategory((fields[1] || "").trim());
+    const sku = (fields[2] || "").trim();
     const filling = (fields[3] || "").trim();
     const weight = (fields[4] || "").trim();
     const priceStr = (fields[5] || "").trim().replace(/[$,]/g, "").replace(/\.\./g, ".");
     const price = priceStr ? parseFloat(priceStr) : null;
 
     if (!productName) continue;
-
-    let sku: string;
-    let category: string;
-
-    if (col2.match(/^PFH\d+/) || col2 === "") {
-      category = normalizeCategory(col1);
-      sku = col2;
-    } else {
-      sku = col1;
-      category = normalizeCategory(col2);
-    }
 
     rows.push({
       productName,
