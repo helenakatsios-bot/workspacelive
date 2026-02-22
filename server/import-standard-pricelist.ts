@@ -61,7 +61,7 @@ export async function importStandardPriceList() {
     const fields = parseCsvLine(lines[i]);
     if (fields.length < 6) continue;
     rows.push({
-      productName: (fields[0] || "").trim(),
+      productName: (fields[0] || "").trim().replace(/\s*-?\s*\([^)]*\)/, "").trim(),
       category: (fields[1] || "").trim(),
       sku: (fields[2] || "").trim(),
       filling: (fields[3] || "").trim(),
