@@ -429,17 +429,12 @@ export async function registerRoutes(
         return res.status(400).json({ message: "priceListId is required" });
       }
 
-      const updated: string[] = [];
-      for (const id of ids) {
-        try {
-          await db.update(companies).set({ priceListId }).where(eq(companies.id, id));
-          updated.push(id);
-        } catch (err) {
-          console.error(`Failed to update company ${id}:`, err);
-        }
-      }
+      const result = await pool.query(
+        "UPDATE companies SET price_list_id = $1 WHERE id = ANY($2::varchar[])",
+        [priceListId, ids]
+      );
 
-      res.json({ updated: updated.length, total: ids.length });
+      res.json({ updated: result.rowCount, total: ids.length });
     } catch (error) {
       console.error("Bulk assign price list error:", error);
       res.status(500).json({ message: "Internal server error" });
