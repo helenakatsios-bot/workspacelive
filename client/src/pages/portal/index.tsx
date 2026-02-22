@@ -979,14 +979,18 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                       <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
                         <TableCell>
                           <p className="font-medium">{(() => {
-                            let name = product.name.replace(/\s*[\-–]\s*\(.*?\)\s*/g, '').replace(/\s*\(.*?\)\s*/g, '').trim();
-                            if (category === '50% WINTER FILLED') {
-                              name = name.replace(/\s*-?\s*50% WINTER FILLED/i, '').trim();
+                            let name = product.name;
+                            name = name.replace(/\s*[\-–]\s*\(.*?\)\s*/g, '').replace(/\s*\(.*?\)\s*/g, '').trim();
+                            if (category) {
+                              const escaped = category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                              name = name.replace(new RegExp(`\\s*[-–]?\\s*${escaped}`, 'i'), '').trim();
                             }
-                            if (category === '80% WINTER FILLED') {
-                              name = name.replace(/\s*-?\s*80% WINTER FILLED/i, '').trim();
-                            }
-                            return name;
+                            name = name.replace(/\s*[-–]?\s*ULTRA\s+WARM\s+\d+%\s+\w+\s+DOWN/i, '').trim();
+                            name = name.replace(/\s*[-–]?\s*\d+%\s+\w+\s+DOWN\s*\d*%?\s*\w*/i, '').trim();
+                            name = name.replace(/\s*[-–]?\s*KHAKI\s+BLANKET/i, '').trim();
+                            name = name.replace(/\s*[-–]?\s*SILVER\s+BLANKET/i, '').trim();
+                            name = name.replace(/\s*[-–]\s*$/, '').trim();
+                            return name || product.name;
                           })()}</p>
                           {product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
                         </TableCell>
