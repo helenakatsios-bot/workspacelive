@@ -339,6 +339,20 @@ async function runStartupTasks() {
     console.error("Luxe bedding merge error:", error);
   }
 
+  try {
+    const batchId = 'ad75ca3b-98cf-4552-9c7e-3b187b63b926';
+    const harveyId = '6c26b605-8d6d-44c9-8e40-7a917c7fd572';
+    const emailCheck = await pool.query("SELECT COUNT(*) as cnt FROM emails WHERE company_id = $1", [batchId]);
+    if (parseInt(emailCheck.rows[0].cnt) > 0) {
+      await pool.query("UPDATE orders SET company_id = $1 WHERE company_id = $2", [harveyId, batchId]);
+      await pool.query("UPDATE invoices SET company_id = $1 WHERE company_id = $2", [harveyId, batchId]);
+      await pool.query("UPDATE emails SET company_id = $1 WHERE company_id = $2", [harveyId, batchId]);
+      console.log("Merged BATCH records into CHARMELA/HARVEY NORMAN");
+    }
+  } catch (error) {
+    console.error("BATCH merge error:", error);
+  }
+
   console.log("All startup tasks completed");
 }
 
