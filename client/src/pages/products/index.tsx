@@ -15,6 +15,23 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Product } from "@shared/schema";
 
+interface PriceList {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  active: boolean;
+}
+
+interface PriceListPrice {
+  id: string;
+  product_id: string;
+  filling: string | null;
+  weight: string | null;
+  unit_price: string;
+  product_name: string;
+  category: string;
+}
+
 export default function ProductsPage() {
   const [, navigate] = useLocation();
   const { canEdit, canViewPricing } = useAuth();
@@ -23,10 +40,39 @@ export default function ProductsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [selectedPriceListId, setSelectedPriceListId] = useState<string>("");
 
   const { data: products, isLoading } = useQuery<Product[]>({
     queryKey: ["/api/products"],
   });
+
+  const { data: priceLists } = useQuery<PriceList[]>({
+    queryKey: ["/api/price-lists"],
+  });
+
+  const defaultPriceList = priceLists?.find((pl) => pl.isDefault);
+  const activePriceListId = selectedPriceListId || defaultPriceList?.id || "";
+
+  const { data: priceListPrices } = useQuery<PriceListPrice[]>({
+    queryKey: ["/api/price-lists", activePriceListId, "prices"],
+    queryFn: async () => {
+      if (!activePriceListId) return [];
+      const res = await fetch(`/api/price-lists/${activePriceListId}/prices`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!activePriceListId,
+  });
+
+  const pricesByProduct = useMemo(() => {
+    const map: Record<string, PriceListPrice[]> = {};
+    if (!priceListPrices) return map;
+    for (const p of priceListPrices) {
+      if (!map[p.product_id]) map[p.product_id] = [];
+      map[p.product_id].push(p);
+    }
+    return map;
+  }, [priceListPrices]);
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
@@ -72,8 +118,7 @@ export default function ProductsPage() {
       "CHAMBER PILLOW",
       "STRIP PILLOW",
       "MICROSOFT",
-      "KHAKI BLANKET",
-      "SILVER BLANKET",
+      "BLANKET",
       "BULK",
       "MEN JACKET",
       "WOMAN JACKET",
@@ -142,6 +187,23 @@ export default function ProductsPage() {
             : undefined
         }
       >
+        {canViewPricing && priceLists && priceLists.length > 0 && (
+          <Select
+            value={activePriceListId}
+            onValueChange={setSelectedPriceListId}
+          >
+            <SelectTrigger className="w-44" data-testid="select-price-list">
+              <SelectValue placeholder="Price List" />
+            </SelectTrigger>
+            <SelectContent>
+              {priceLists.filter((pl) => pl.active).map((pl) => (
+                <SelectItem key={pl.id} value={pl.id}>
+                  {pl.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-32" data-testid="select-status-filter">
             <SelectValue placeholder="Status" />
@@ -227,11 +289,33 @@ export default function ProductsPage() {
                                 )}
                               </div>
                             </div>
-                            {canViewPricing && (
-                              <span className="text-sm text-muted-foreground whitespace-nowrap">
-                                {formatCurrency(product.unitPrice)}
-                              </span>
-                            )}
+                            {canViewPricing && (() => {
+                              const productPrices = pricesByProduct[product.id];
+                              if (productPrices && productPrices.length > 0) {
+                                const hasVariants = productPrices.some((p) => p.filling || p.weight);
+                                if (hasVariants) {
+                                  const prices = productPrices.map((p) => parseFloat(p.unit_price)).filter((p) => !isNaN(p) && p > 0);
+                                  if (prices.length === 0) return null;
+                                  const min = Math.min(...prices);
+                                  const max = Math.max(...prices);
+                                  return (
+                                    <span className="text-sm text-muted-foreground whitespace-nowrap" data-testid={`text-price-${product.id}`}>
+                                      {min === max ? formatCurrency(min) : `${formatCurrency(min)} – ${formatCurrency(max)}`}
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <span className="text-sm text-muted-foreground whitespace-nowrap" data-testid={`text-price-${product.id}`}>
+                                    {formatCurrency(productPrices[0].unit_price)}
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="text-sm text-muted-foreground whitespace-nowrap" data-testid={`text-price-${product.id}`}>
+                                  {formatCurrency(product.unitPrice)}
+                                </span>
+                              );
+                            })()}
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                                 <Button variant="ghost" size="icon">
