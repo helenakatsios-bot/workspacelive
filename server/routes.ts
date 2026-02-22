@@ -5167,7 +5167,7 @@ Rules:
 
   app.post("/api/portal/orders", requirePortalAuth, async (req, res) => {
     try {
-      const { items, customItems, customerNotes, paymentTerms, shippingAddress: deliveryAddress } = req.body;
+      const { items, customItems, customerNotes, customerName: submittedCustomerName, shippingAddress: deliveryAddress } = req.body;
       const hasItems = items && Array.isArray(items) && items.length > 0;
       const hasCustomItems = customItems && Array.isArray(customItems) && customItems.length > 0;
       if (!hasItems && !hasCustomItems) {
@@ -5176,126 +5176,55 @@ Rules:
       const companyId = req.session.portalCompanyId!;
       const [portalUser] = await db.select().from(portalUsers).where(eq(portalUsers.id, req.session.portalUserId!));
 
-      let subtotal = 0;
-      const companyPricesList = await storage.getCompanyPrices(companyId);
-      const companyPriceMap = new Map(companyPricesList.map(cp => [cp.productId, cp.unitPrice]));
-      const variantResult = await pool.query(
-        `SELECT product_id, filling, weight, unit_price FROM company_variant_prices WHERE company_id = $1`,
-        [companyId]
-      );
-      const variantPrices = variantResult.rows;
+      const companyResult = await pool.query(`SELECT legal_name, trading_name FROM companies WHERE id = $1`, [companyId]);
+      const companyName = companyResult.rows[0]?.trading_name || companyResult.rows[0]?.legal_name || "Unknown";
+      const contactName = submittedCustomerName || portalUser?.name || "Portal Customer";
+      const contactEmail = portalUser?.email || "";
 
-      const companyRow = await pool.query(`SELECT price_list_id FROM companies WHERE id = $1`, [companyId]);
-      let orderPriceListId = companyRow.rows[0]?.price_list_id;
-      if (!orderPriceListId) {
-        const standardList = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
-        if (standardList.rows.length > 0) {
-          orderPriceListId = standardList.rows[0].id;
-        }
-      }
-      let priceListPrices: any[] = [];
-      const priceListBasePriceMap = new Map<string, string>();
-      if (orderPriceListId) {
-        const plResult = await pool.query(
-          `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`,
-          [orderPriceListId]
-        );
-        priceListPrices = plResult.rows;
-        for (const plp of plResult.rows) {
-          if (!plp.filling && !plp.weight) {
-            priceListBasePriceMap.set(plp.product_id, plp.unit_price);
-          }
-        }
-      }
-
-      const defaultVarResult = await pool.query(
-        `SELECT product_id, filling, weight, unit_price FROM default_variant_prices`
-      );
-      const defaultVariantPrices = defaultVarResult.rows;
-      const orderLines: Array<{ productId: string | null; quantity: number; unitPrice: number; lineTotal: number; descriptionOverride: string }> = [];
+      const orderItems: any[] = [];
       if (hasItems) {
         for (const item of items) {
-          const prodResult = await pool.query("SELECT id, name, unit_price FROM products WHERE id = $1 AND active = true", [item.productId]);
+          const prodResult = await pool.query("SELECT id, name, sku, unit_price FROM products WHERE id = $1 AND active = true", [item.productId]);
           if (prodResult.rows.length === 0) continue;
           const prod = prodResult.rows[0];
           const qty = Math.max(1, parseInt(item.quantity) || 1);
-          let price: number;
-          if (item.filling) {
-            const f = (item.filling || "").trim();
-            const w = (item.weight || "").trim() || null;
-            let prodVariants = variantPrices.filter((vp: any) => vp.product_id === prod.id && (vp.filling || "").trim() === f);
-            if (prodVariants.length === 0) {
-              prodVariants = priceListPrices.filter((vp: any) => vp.product_id === prod.id && (vp.filling || "").trim() === f);
-            }
-            if (prodVariants.length === 0) {
-              prodVariants = defaultVariantPrices.filter((vp: any) => vp.product_id === prod.id && (vp.filling || "").trim() === f);
-            }
-            let variantMatch = null;
-            if (w) {
-              variantMatch = prodVariants.find((vp: any) => (vp.weight || "").trim() === w);
-            }
-            if (!variantMatch) {
-              variantMatch = prodVariants.find((vp: any) => !vp.weight) || prodVariants.find((vp: any) => (vp.weight || "").trim() === "Normal") || prodVariants[0] || null;
-            }
-            price = variantMatch ? parseFloat(variantMatch.unit_price) : (companyPriceMap.has(prod.id) ? parseFloat(companyPriceMap.get(prod.id)!) : (priceListBasePriceMap.has(prod.id) ? parseFloat(priceListBasePriceMap.get(prod.id)!) : parseFloat(prod.unit_price)));
-          } else {
-            const customPrice = companyPriceMap.get(prod.id);
-            const plPrice = priceListBasePriceMap.get(prod.id);
-            price = customPrice ? parseFloat(customPrice) : (plPrice ? parseFloat(plPrice) : parseFloat(prod.unit_price));
-          }
-          const lineTotal = price * qty;
-          subtotal += lineTotal;
           const desc = item.filling ? `${prod.name} (${item.filling}${item.weight ? `, ${item.weight}` : ''})` : prod.name;
-          orderLines.push({
+          orderItems.push({
             productId: prod.id,
+            productName: desc,
+            sku: prod.sku,
             quantity: qty,
-            unitPrice: price,
-            lineTotal,
-            descriptionOverride: desc,
+            filling: item.filling || undefined,
+            weight: item.weight || undefined,
           });
         }
       }
       if (hasCustomItems) {
         for (const ci of customItems) {
           const qty = Math.max(1, parseInt(ci.quantity) || 1);
-          const desc = `CUSTOM INSERT: ${ci.size}${ci.filling ? ` (${ci.filling})` : ''}${ci.weight ? ` [${ci.weight}]` : ''}`;
-          orderLines.push({
+          orderItems.push({
             productId: null,
+            productName: `CUSTOM INSERT: ${ci.size}${ci.filling ? ` (${ci.filling})` : ''}${ci.weight ? ` [${ci.weight}]` : ''}`,
+            sku: "",
             quantity: qty,
-            unitPrice: 0,
-            lineTotal: 0,
-            descriptionOverride: desc,
           });
         }
       }
 
-      const tax = Math.round(subtotal * 10) / 100;
-      const total = subtotal + tax;
+      const orderRequest = await storage.createCustomerOrderRequest({
+        companyName: companyName,
+        contactName: contactName,
+        contactEmail: contactEmail,
+        contactPhone: null,
+        shippingAddress: deliveryAddress || null,
+        customerNotes: customerNotes || null,
+        items: orderItems,
+        status: "pending",
+        convertedOrderId: null,
+        reviewedBy: null,
+      });
 
-      const maxResult3 = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
-      const orderNumber = String((parseInt(maxResult3.rows[0].max_num) || 0) + 1);
-      const customerName = portalUser?.name || "Portal Order";
-
-      const orderResult = await pool.query(`
-        INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, customer_notes, customer_name, customer_email, customer_address)
-        VALUES (gen_random_uuid(), $1, $2, 'new', NOW(), $3, $4, $5, $6, $7, $8, $9)
-        RETURNING id, order_number
-      `, [orderNumber, companyId, subtotal.toFixed(2), tax.toFixed(2), total.toFixed(2),
-          customerNotes || `Order placed by ${customerName}`,
-          customerName, portalUser?.email || "", deliveryAddress || null]);
-
-      const orderId = orderResult.rows[0].id;
-
-      for (const line of orderLines) {
-        await pool.query(`
-          INSERT INTO order_lines (id, order_id, product_id, description_override, quantity, unit_price, discount, line_total)
-          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, '0', $6)
-        `, [orderId, line.productId, line.descriptionOverride, line.quantity, line.unitPrice.toFixed(2), line.lineTotal.toFixed(2)]);
-      }
-
-      await recalcCompanyRevenue(companyId);
-
-      res.json({ id: orderId, orderNumber: orderResult.rows[0].order_number });
+      res.json({ success: true, id: orderRequest.id, message: "Your order has been submitted for review. We will process it shortly." });
     } catch (error) {
       console.error("Portal create order error:", error);
       res.status(500).json({ message: "Failed to create order" });

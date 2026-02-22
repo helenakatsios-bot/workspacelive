@@ -661,6 +661,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const [weights, setWeights] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [customerName, setCustomerName] = useState("");
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -871,7 +872,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
           items: cartItems.map((item) => ({ productId: item.id, quantity: item.qty, filling: fillings[item.id] || undefined, weight: weights[item.id] || undefined })),
           customItems: activeCustomLines.map((l) => ({ size: l.size, filling: l.filling, weight: l.weight, quantity: l.qty })),
           customerNotes: fullNotes,
-          paymentTerms: company?.paymentTerms || "Net 30",
+          customerName: customerName || undefined,
           shippingAddress: deliveryAddress || undefined,
         }),
         credentials: "include",
@@ -880,7 +881,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       const data = await res.json();
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/orders"] });
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/dashboard"] });
-      toast({ title: "Order placed", description: `Order ${data.orderNumber} has been submitted` });
+      toast({ title: "Order submitted", description: data.message || "Your order has been submitted for review" });
       onNavigate("orders");
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -1211,6 +1212,20 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                   </div>
                 </div>
               )}
+
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  <Label htmlFor="customer-name" className="font-semibold">Customer Name</Label>
+                </div>
+                <Input
+                  id="customer-name"
+                  placeholder="Enter your name..."
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  data-testid="input-customer-name"
+                />
+              </div>
 
               <div className="border-t pt-4 space-y-2">
                 <div className="flex items-center gap-2">
