@@ -117,12 +117,12 @@ async function runStartupTasks() {
     console.error("Account sync error:", error);
   }
 
-  // Sync production data (products + companies)
-  try {
-    await syncProductionData();
-  } catch (error) {
-    console.error("Data sync error:", error);
-  }
+  // Product sync disabled - user managing products manually
+  // try {
+  //   await syncProductionData();
+  // } catch (error) {
+  //   console.error("Data sync error:", error);
+  // }
 
   // One-time deduplication of companies using bulk SQL
   try {
@@ -284,19 +284,18 @@ async function runStartupTasks() {
     console.error("Failed to seed database:", error);
   }
 
-  // Import Puradown variant prices from CSV
-  try {
-    await importPuradownPrices();
-  } catch (error) {
-    console.error("Puradown price import error:", error);
-  }
+  // Price imports disabled - user managing prices manually
+  // try {
+  //   await importPuradownPrices();
+  // } catch (error) {
+  //   console.error("Puradown price import error:", error);
+  // }
 
-  // Seed price lists from CSV files
-  try {
-    await seedPriceLists();
-  } catch (error) {
-    console.error("Price list seeding error:", error);
-  }
+  // try {
+  //   await seedPriceLists();
+  // } catch (error) {
+  //   console.error("Price list seeding error:", error);
+  // }
 
   console.log("All startup tasks completed");
 }
