@@ -664,30 +664,33 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const FILLING_OPTIONS: Record<string, string[]> = {
-    '4 SEASONS FILLED': ['Duck', 'Goose'],
-    'MATTRESS TOPPER FILLED': ['Duck', 'Goose'],
-    '80% WINTER FILLED': ['Duck', 'Goose'],
-    '80% MID WARM FILLED': ['Duck', 'Goose', 'Hungarian'],
-    'PIPED PILLOWS': ['100% Feather', '30% Down 70% Feather', '50% Down 50% Feather', '80% Down 20% Feather'],
-    'STRIP PILLOW': ['Hungarian'],
-    'CHAMBER PILLOW': ['Duck'],
-    'STRIPPED QUILT': ['Hungarian'],
-    'INSERTS': ['100% Feather', 'Duck Feather - Foam', 'Duck Feather - Fibre', '100% Polyester', '30% Down 70% Feather', '50% Down 50% Feather', '80% Down 20% Feather'],
-  };
-  const FILLING_CATEGORIES = Object.keys(FILLING_OPTIONS);
-
-  const WEIGHT_OPTIONS: Record<string, string[]> = {
-    '4 SEASONS FILLED': ['Normal'],
-    '80% WINTER FILLED': ['Normal'],
-    '80% MID WARM FILLED': ['Normal'],
-    'PIPED PILLOWS': ['Normal'],
-    'STRIP PILLOW': ['Normal'],
-    'CHAMBER PILLOW': ['Normal'],
-    'STRIPPED QUILT': ['Normal'],
-    'INSERTS': ['Normal', 'Firm Fill', 'Extra Firm Fill'],
-  };
-  const WEIGHT_CATEGORIES = Object.keys(WEIGHT_OPTIONS);
+  const { fillingOptions, weightOptions } = useMemo(() => {
+    if (!products) return { fillingOptions: {} as Record<string, string[]>, weightOptions: {} as Record<string, string[]> };
+    const fOpts: Record<string, Set<string>> = {};
+    const wOpts: Record<string, Set<string>> = {};
+    for (const p of products) {
+      const cat = p.category || "Other";
+      if (!p.variantPrices || p.variantPrices.length === 0) continue;
+      for (const vp of p.variantPrices) {
+        if (vp.filling) {
+          if (!fOpts[cat]) fOpts[cat] = new Set();
+          fOpts[cat].add(vp.filling.trim());
+        }
+        if (vp.weight) {
+          if (!wOpts[cat]) wOpts[cat] = new Set();
+          wOpts[cat].add(vp.weight.trim());
+        }
+      }
+    }
+    const toSorted = (s: Set<string>) => Array.from(s).sort();
+    const fillingOptions: Record<string, string[]> = {};
+    for (const [cat, set] of Object.entries(fOpts)) fillingOptions[cat] = toSorted(set);
+    const weightOptions: Record<string, string[]> = {};
+    for (const [cat, set] of Object.entries(wOpts)) weightOptions[cat] = toSorted(set);
+    return { fillingOptions, weightOptions };
+  }, [products]);
+  const FILLING_CATEGORIES = Object.keys(fillingOptions);
+  const WEIGHT_CATEGORIES = Object.keys(weightOptions);
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
@@ -699,19 +702,32 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const PORTAL_CATEGORY_ORDER = [
     'INSERTS',
     '80% WINTER FILLED',
+    '80% DUCK WINTER FILLED',
     '80% MID WARM FILLED',
-    '50% WINTER FILLED',
     '50% MID WARM FILLED',
+    '50% DUCK WINTER FILLED',
+    '50% GOOSE DOWN',
     '4 SEASONS FILLED',
     'STRIPPED QUILT',
     'MATTRESS TOPPER FILLED',
+    'MATTRESS TOPPER',
     'PIPED PILLOWS',
+    'PILLOW',
     'CHAMBER PILLOW',
     'STRIP PILLOW',
     'MICROSOFT',
+    'MICROSFT',
+    'BLANKET',
     'KHAKI BLANKET',
     'SILVER BLANKET',
     'BULK',
+    '80% DUCK COT FILLED',
+    '80% DUCK SUMMER FILLED',
+    '80% GOOSE SUMMER FILLED',
+    '80% GOOSE SUMMER',
+    '80% GOOSE DOWN',
+    '80% HUNGARIAN GOOSE',
+    'HUNGARIAN',
   ];
 
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -727,10 +743,8 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
 
   const grouped = useMemo(() => {
     const groups: Record<string, any[]> = {};
-    const HIDDEN_CATEGORIES = ['CASES', 'CASSETTES CASES', 'CHANNELLED CASES', 'WINTER'];
     for (const p of filteredProducts) {
       const cat = p.category || "Other";
-      if (HIDDEN_CATEGORIES.includes(cat)) continue;
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(p);
     }
@@ -986,7 +1000,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                                 <SelectValue placeholder="Select..." />
                               </SelectTrigger>
                               <SelectContent>
-                                {(FILLING_OPTIONS[category] || []).map((opt) => (
+                                {(fillingOptions[category] || []).map((opt) => (
                                   <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                                 ))}
                               </SelectContent>
@@ -1003,7 +1017,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                                 <SelectValue placeholder="Select..." />
                               </SelectTrigger>
                               <SelectContent>
-                                {(WEIGHT_OPTIONS[category] || ['Normal']).map((opt) => (
+                                {(weightOptions[category] || ['Normal']).map((opt) => (
                                   <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                                 ))}
                               </SelectContent>
@@ -1073,7 +1087,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                                   <SelectValue placeholder="Select..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {(FILLING_OPTIONS['INSERTS'] || []).map((opt) => (
+                                  {(fillingOptions['INSERTS'] || []).map((opt) => (
                                     <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                                   ))}
                                 </SelectContent>
@@ -1088,9 +1102,9 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                                   <SelectValue placeholder="Select..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="Normal">Normal</SelectItem>
-                                  <SelectItem value="Firm Fill">Firm Fill</SelectItem>
-                                  <SelectItem value="Extra Firm Fill">Extra Firm Fill</SelectItem>
+                                  {(weightOptions['INSERTS'] || ['Normal', 'Firm Fill', 'Extra Firm Fill']).map((opt) => (
+                                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
                             </TableCell>

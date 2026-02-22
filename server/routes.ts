@@ -5062,173 +5062,105 @@ Rules:
   app.get("/api/portal/products", requirePortalAuth, async (req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     try {
-      const hiddenCategories = [
-        '4 SEASONS CASE',
-        'CASSETTES CASES',
-        'CHANNELLED CASES',
-        'GOLD PILLOW CASE',
-        'GOLD QUILT CASE',
-        'MATTRESS TOPPER CASE',
-        'MEN JACKET',
-        'WOMAN JACKET',
-        'WINTER',
-      ];
-      const hiddenProductNames = ['Freight'];
-      const result = await pool.query(`
-        SELECT id, sku, name, description, category, unit_price
-        FROM products WHERE active = true
-        AND (category IS NULL OR category NOT IN (${hiddenCategories.map((_, i) => `$${i + 1}`).join(', ')}))
-        AND name NOT IN (${hiddenProductNames.map((_, i) => `$${hiddenCategories.length + i + 1}`).join(', ')})
-        ORDER BY category, name
-      `, [...hiddenCategories, ...hiddenProductNames]);
-
       const companyId = req.session.portalCompanyId;
-      let priceMap = new Map<string, string>();
-      let variantPriceMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
-      let priceListPriceMap = new Map<string, string>();
-      let priceListVariantMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
-
-      if (companyId) {
-        const companyPricesList = await storage.getCompanyPrices(companyId);
-        for (const cp of companyPricesList) {
-          priceMap.set(cp.productId, cp.unitPrice);
-        }
-        const variantResult = await pool.query(
-          `SELECT product_id, filling, weight, unit_price FROM company_variant_prices WHERE company_id = $1 ORDER BY filling, weight`,
-          [companyId]
-        );
-        for (const vp of variantResult.rows) {
-          const key = vp.product_id;
-          if (!variantPriceMap.has(key)) variantPriceMap.set(key, []);
-          variantPriceMap.get(key)!.push({ filling: vp.filling, weight: vp.weight, unitPrice: vp.unit_price });
-        }
-
-        const companyResult = await pool.query(`SELECT price_list_id FROM companies WHERE id = $1`, [companyId]);
-        let priceListId = companyResult.rows[0]?.price_list_id;
-        if (!priceListId) {
-          const standardList = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
-          if (standardList.rows.length > 0) {
-            priceListId = standardList.rows[0].id;
-          }
-        }
-        if (priceListId) {
-          const plPrices = await pool.query(
-            `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1 ORDER BY filling, weight`,
-            [priceListId]
-          );
-          for (const plp of plPrices.rows) {
-            if (!plp.filling && !plp.weight) {
-              priceListPriceMap.set(plp.product_id, plp.unit_price);
-            } else {
-              const key = plp.product_id;
-              if (!priceListVariantMap.has(key)) priceListVariantMap.set(key, []);
-              priceListVariantMap.get(key)!.push({ filling: plp.filling || "", weight: plp.weight, unitPrice: plp.unit_price });
-            }
-          }
-        }
+      if (!companyId) {
+        return res.json([]);
       }
 
-      const defaultVariantResult = await pool.query(
-        `SELECT product_id, filling, weight, unit_price FROM default_variant_prices ORDER BY filling, weight`
-      );
-      const defaultVariantMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
-      for (const dvp of defaultVariantResult.rows) {
-        const key = dvp.product_id;
-        if (!defaultVariantMap.has(key)) defaultVariantMap.set(key, []);
-        defaultVariantMap.get(key)!.push({ filling: dvp.filling, weight: dvp.weight, unitPrice: dvp.unit_price });
+      const companyResult = await pool.query(`SELECT price_list_id FROM companies WHERE id = $1`, [companyId]);
+      let priceListId = companyResult.rows[0]?.price_list_id;
+      if (!priceListId) {
+        const standardList = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
+        if (standardList.rows.length > 0) {
+          priceListId = standardList.rows[0].id;
+        }
+      }
+      if (!priceListId) {
+        return res.json([]);
       }
 
-      const anyPriceListResult = await pool.query(
-        `SELECT DISTINCT ON (product_id, filling, weight) product_id, filling, weight, unit_price 
-         FROM price_list_prices 
-         WHERE unit_price IS NOT NULL AND unit_price != '0.00' AND unit_price != '0'
-         ORDER BY product_id, filling, weight, unit_price`
+      const hiddenCategories = [
+        'CASES', '4 SEASONS CASE', 'CASSETTES CASES', 'CHANNELLED CASES',
+        'GOLD PILLOW CASE', 'GOLD QUILT CASE', 'MATTRESS TOPPER CASE',
+        'MEN JACKET', 'WOMAN JACKET', 'WINTER',
+      ];
+      const plPrices = await pool.query(
+        `SELECT plp.product_id, plp.filling, plp.weight, plp.unit_price,
+                p.id, p.sku, p.name, p.description, p.category
+         FROM price_list_prices plp
+         JOIN products p ON p.id = plp.product_id
+         WHERE plp.price_list_id = $1 AND p.active = true
+         AND (p.category IS NULL OR p.category NOT IN (${hiddenCategories.map((_, i) => `$${i + 2}`).join(', ')}))
+         AND p.name != 'Freight'
+         ORDER BY p.category, p.name, plp.filling, plp.weight`,
+        [priceListId, ...hiddenCategories]
       );
-      const anyPriceListVariantMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
-      const anyPriceListBaseMap = new Map<string, string>();
-      for (const row of anyPriceListResult.rows) {
-        if (!row.filling && !row.weight) {
-          if (!anyPriceListBaseMap.has(row.product_id)) {
-            anyPriceListBaseMap.set(row.product_id, row.unit_price);
-          }
+
+      const productMap = new Map<string, any>();
+      const variantMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
+
+      for (const row of plPrices.rows) {
+        if (!productMap.has(row.product_id)) {
+          productMap.set(row.product_id, {
+            id: row.product_id,
+            sku: row.sku,
+            name: row.name,
+            description: row.description,
+            category: row.category,
+            unitPrice: "0",
+          });
+        }
+        if (row.filling || row.weight) {
+          if (!variantMap.has(row.product_id)) variantMap.set(row.product_id, []);
+          variantMap.get(row.product_id)!.push({
+            filling: row.filling || "",
+            weight: row.weight,
+            unitPrice: row.unit_price,
+          });
         } else {
-          const key = row.product_id;
-          if (!anyPriceListVariantMap.has(key)) anyPriceListVariantMap.set(key, []);
-          anyPriceListVariantMap.get(key)!.push({ filling: row.filling || "", weight: row.weight, unitPrice: row.unit_price });
+          productMap.get(row.product_id)!.unitPrice = row.unit_price;
         }
+      }
+
+      const companyPricesList = await storage.getCompanyPrices(companyId);
+      const companyPriceMap = new Map<string, string>();
+      for (const cp of companyPricesList) {
+        companyPriceMap.set(cp.productId, cp.unitPrice);
+      }
+      const companyVariantResult = await pool.query(
+        `SELECT product_id, filling, weight, unit_price FROM company_variant_prices WHERE company_id = $1 ORDER BY filling, weight`,
+        [companyId]
+      );
+      const companyVariantMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
+      for (const vp of companyVariantResult.rows) {
+        if (!companyVariantMap.has(vp.product_id)) companyVariantMap.set(vp.product_id, []);
+        companyVariantMap.get(vp.product_id)!.push({ filling: vp.filling, weight: vp.weight, unitPrice: vp.unit_price });
       }
 
       const isNonZeroPrice = (p: string | null | undefined) => !!p && p !== "0.00" && p !== "0";
 
-      res.json(result.rows.map((r: any) => {
-        let variants = variantPriceMap.get(r.id) || priceListVariantMap.get(r.id) || defaultVariantMap.get(r.id) || anyPriceListVariantMap.get(r.id) || [];
-        const allVariantsZero = variants.length > 0 && variants.every((v: any) => !isNonZeroPrice(v.unitPrice));
-        if (allVariantsZero) {
-          const plVariants = priceListVariantMap.get(r.id);
-          if (plVariants && plVariants.some((v: any) => isNonZeroPrice(v.unitPrice))) {
-            variants = plVariants;
-          } else {
-            const defVariants = defaultVariantMap.get(r.id);
-            if (defVariants && defVariants.some((v: any) => isNonZeroPrice(v.unitPrice))) {
-              variants = defVariants;
-            } else {
-              const anyVariants = anyPriceListVariantMap.get(r.id);
-              if (anyVariants && anyVariants.some((v: any) => isNonZeroPrice(v.unitPrice))) {
-                variants = anyVariants;
-              }
-            }
-          }
-        }
-        let effectiveUnitPrice = priceMap.get(r.id) || priceListPriceMap.get(r.id) || r.unit_price;
-        if (!isNonZeroPrice(effectiveUnitPrice)) {
-          if (variants.length > 0) {
-            const nonZeroVariant = variants.find((v: any) => isNonZeroPrice(v.unitPrice));
-            if (nonZeroVariant) {
-              effectiveUnitPrice = nonZeroVariant.unitPrice;
-            }
-          }
-          if (!isNonZeroPrice(effectiveUnitPrice)) {
-            const plVariants = priceListVariantMap.get(r.id) || [];
-            const plNonZero = plVariants.find((v: any) => isNonZeroPrice(v.unitPrice));
-            if (plNonZero) {
-              effectiveUnitPrice = plNonZero.unitPrice;
-              if (variants.length === 0) variants = plVariants;
-            }
-          }
-          if (!isNonZeroPrice(effectiveUnitPrice)) {
-            const defVariants = defaultVariantMap.get(r.id) || [];
-            const defNonZero = defVariants.find((v: any) => isNonZeroPrice(v.unitPrice));
-            if (defNonZero) {
-              effectiveUnitPrice = defNonZero.unitPrice;
-              if (variants.length === 0) variants = defVariants;
-            }
-          }
-          if (!isNonZeroPrice(effectiveUnitPrice)) {
-            const fallbackBase = anyPriceListBaseMap.get(r.id);
-            if (fallbackBase) {
-              effectiveUnitPrice = fallbackBase;
-            } else {
-              const anyVariants = anyPriceListVariantMap.get(r.id) || [];
-              const anyNonZero = anyVariants.find((v: any) => isNonZeroPrice(v.unitPrice));
-              if (anyNonZero) {
-                effectiveUnitPrice = anyNonZero.unitPrice;
-                if (variants.length === 0) variants = anyVariants;
-              }
-            }
-          }
+      const products = Array.from(productMap.values()).map((product) => {
+        let variants = companyVariantMap.get(product.id) || variantMap.get(product.id) || [];
+        let effectiveUnitPrice = companyPriceMap.get(product.id) || product.unitPrice;
+        if (!isNonZeroPrice(effectiveUnitPrice) && variants.length > 0) {
+          const nonZero = variants.find((v: any) => isNonZeroPrice(v.unitPrice));
+          if (nonZero) effectiveUnitPrice = nonZero.unitPrice;
         }
         return {
-          id: r.id,
-          sku: r.sku,
-          name: r.name,
-          description: r.description,
-          category: r.category,
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          description: product.description,
+          category: product.category,
           unitPrice: effectiveUnitPrice,
-          hasCustomPrice: priceMap.has(r.id) || priceListPriceMap.has(r.id),
+          hasCustomPrice: companyPriceMap.has(product.id),
           variantPrices: variants,
         };
-      }));
+      });
+
+      res.json(products);
     } catch (error) {
+      console.error("Portal products error:", error);
       res.status(500).json({ message: "Failed to fetch products" });
     }
   });
