@@ -321,6 +321,24 @@ async function runStartupTasks() {
     }
   }
 
+  try {
+    const luxeResult = await pool.query("SELECT id FROM companies WHERE LOWER(legal_name) = 'luxe bedding' LIMIT 1");
+    const vinodResult = await pool.query("SELECT id FROM companies WHERE LOWER(legal_name) = 'vinod' LIMIT 1");
+    if (luxeResult.rows.length > 0 && vinodResult.rows.length > 0) {
+      const luxeId = luxeResult.rows[0].id;
+      const vinodId = vinodResult.rows[0].id;
+      const orderCheck = await pool.query("SELECT COUNT(*) as cnt FROM orders WHERE company_id = $1", [luxeId]);
+      if (parseInt(orderCheck.rows[0].cnt) > 0) {
+        await pool.query("UPDATE orders SET company_id = $1 WHERE company_id = $2", [vinodId, luxeId]);
+        await pool.query("UPDATE invoices SET company_id = $1 WHERE company_id = $2", [vinodId, luxeId]);
+        await pool.query("UPDATE emails SET company_id = $1 WHERE company_id = $2", [vinodId, luxeId]);
+        console.log("Merged luxe bedding records into VINOD");
+      }
+    }
+  } catch (error) {
+    console.error("Luxe bedding merge error:", error);
+  }
+
   console.log("All startup tasks completed");
 }
 

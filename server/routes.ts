@@ -378,6 +378,47 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/companies/merge-orders", requireAdmin, async (req, res) => {
+    try {
+      const { fromCompanyId, toCompanyId } = req.body;
+      if (!fromCompanyId || !toCompanyId) {
+        return res.status(400).json({ message: "fromCompanyId and toCompanyId are required" });
+      }
+
+      const fromCompany = await storage.getCompany(fromCompanyId);
+      const toCompany = await storage.getCompany(toCompanyId);
+      if (!fromCompany || !toCompany) {
+        return res.status(404).json({ message: "One or both companies not found" });
+      }
+
+      const orderResult = await pool.query(
+        "UPDATE orders SET company_id = $1 WHERE company_id = $2",
+        [toCompanyId, fromCompanyId]
+      );
+      const invoiceResult = await pool.query(
+        "UPDATE invoices SET company_id = $1 WHERE company_id = $2",
+        [toCompanyId, fromCompanyId]
+      );
+      const emailResult = await pool.query(
+        "UPDATE emails SET company_id = $1 WHERE company_id = $2",
+        [toCompanyId, fromCompanyId]
+      );
+
+      res.json({
+        merged: {
+          orders: orderResult.rowCount,
+          invoices: invoiceResult.rowCount,
+          emails: emailResult.rowCount,
+        },
+        from: fromCompany.tradingName || fromCompany.legalName,
+        to: toCompany.tradingName || toCompany.legalName,
+      });
+    } catch (error) {
+      console.error("Merge orders error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/companies/bulk-assign-price-list", requireAdmin, async (req, res) => {
     try {
       const { ids, priceListId } = req.body;
