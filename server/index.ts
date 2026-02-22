@@ -69,6 +69,24 @@ app.use((req, res, next) => {
 });
 
 async function runStartupTasks() {
+  // One-time cleanup: delete ALL products and prices (user wants fresh start)
+  try {
+    const productCount = await pool.query(`SELECT COUNT(*) as cnt FROM products`);
+    if (parseInt(productCount.rows[0].cnt) > 0) {
+      console.log("Clearing all products and prices for fresh start...");
+      await pool.query(`DELETE FROM price_list_prices`);
+      await pool.query(`DELETE FROM company_prices`);
+      await pool.query(`DELETE FROM company_variant_prices`);
+      await pool.query(`DELETE FROM default_variant_prices`);
+      await pool.query(`DELETE FROM order_lines`);
+      await pool.query(`DELETE FROM quote_lines`);
+      await pool.query(`DELETE FROM products`);
+      console.log("All products and prices cleared");
+    }
+  } catch (error) {
+    console.error("Product cleanup error:", error);
+  }
+
   // One-time cleanup: remove demo data, keep only purax accounts
   try {
     const demoCheck = await pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE legal_name ILIKE '%Acme%' OR legal_name ILIKE '%BuildRight%'`);
