@@ -10,6 +10,7 @@ import { startInactivityChecker } from "./inactivity-checker";
 import { startAutoXeroInvoiceSync } from "./xero";
 import { importPuradownPrices } from "./import-puradown-prices";
 import { seedPriceLists } from "./seed-price-lists";
+import { importStandardPriceList } from "./import-standard-pricelist";
 
 const app = express();
 const httpServer = createServer(app);
@@ -69,24 +70,6 @@ app.use((req, res, next) => {
 });
 
 async function runStartupTasks() {
-  // One-time cleanup: delete ALL products and prices (user wants fresh start)
-  try {
-    const productCount = await pool.query(`SELECT COUNT(*) as cnt FROM products`);
-    if (parseInt(productCount.rows[0].cnt) > 0) {
-      console.log("Clearing all products and prices for fresh start...");
-      await pool.query(`DELETE FROM price_list_prices`);
-      await pool.query(`DELETE FROM company_prices`);
-      await pool.query(`DELETE FROM company_variant_prices`);
-      await pool.query(`DELETE FROM default_variant_prices`);
-      await pool.query(`DELETE FROM order_lines`);
-      await pool.query(`DELETE FROM quote_lines`);
-      await pool.query(`DELETE FROM products`);
-      console.log("All products and prices cleared");
-    }
-  } catch (error) {
-    console.error("Product cleanup error:", error);
-  }
-
   // One-time cleanup: remove demo data, keep only purax accounts
   try {
     const demoCheck = await pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE legal_name ILIKE '%Acme%' OR legal_name ILIKE '%BuildRight%'`);
@@ -302,18 +285,12 @@ async function runStartupTasks() {
     console.error("Failed to seed database:", error);
   }
 
-  // Price imports disabled - user managing prices manually
-  // try {
-  //   await importPuradownPrices();
-  // } catch (error) {
-  //   console.error("Puradown price import error:", error);
-  // }
-
-  // try {
-  //   await seedPriceLists();
-  // } catch (error) {
-  //   console.error("Price list seeding error:", error);
-  // }
+  // Import Standard price list from CSV (only runs when products table is empty)
+  try {
+    await importStandardPriceList();
+  } catch (error) {
+    console.error("Standard price list import error:", error);
+  }
 
   console.log("All startup tasks completed");
 }
