@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { format } from "date-fns";
-import { Building2, MoreHorizontal, Eye, Edit, AlertCircle, Trash2, ArrowUpDown, DollarSign, RefreshCw, CheckSquare, X } from "lucide-react";
+import { Building2, MoreHorizontal, Eye, Edit, AlertCircle, Trash2, ArrowUpDown, DollarSign, RefreshCw, CheckSquare, X, Tag } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -57,11 +60,17 @@ export default function CompaniesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleteResults, setBulkDeleteResults] = useState<{ deleted: string[]; skipped: { id: string; name: string; reason: string }[] } | null>(null);
+  const [assignPriceListOpen, setAssignPriceListOpen] = useState(false);
+  const [selectedPriceListId, setSelectedPriceListId] = useState<string>("");
   const { toast } = useToast();
   const { isAdmin } = useAuth();
 
   const { data: companies, isLoading } = useQuery<Company[]>({
     queryKey: ["/api/companies"],
+  });
+
+  const { data: priceLists } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/price-lists"],
   });
 
   const recalcMutation = useMutation({
@@ -110,6 +119,25 @@ export default function CompaniesPage() {
     },
     onError: (error: Error) => {
       toast({ title: "Bulk delete failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const bulkAssignPriceListMutation = useMutation({
+    mutationFn: async ({ ids, priceListId }: { ids: string[]; priceListId: string }) => {
+      const res = await apiRequest("POST", "/api/companies/bulk-assign-price-list", { ids, priceListId });
+      return res.json();
+    },
+    onSuccess: (data: { updated: number; total: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      const priceListName = priceLists?.find((pl) => pl.id === selectedPriceListId)?.name || "selected price list";
+      toast({ title: "Price list assigned", description: `${data.updated} company(s) assigned to ${priceListName}.` });
+      setAssignPriceListOpen(false);
+      setSelectedPriceListId("");
+      setSelectedIds(new Set());
+      setSelectMode(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to assign price list", description: error.message, variant: "destructive" });
     },
   });
 
@@ -275,15 +303,26 @@ export default function CompaniesPage() {
                 {selectedIds.size} company{selectedIds.size !== 1 ? "ies" : "y"} selected
               </span>
               {selectedIds.size > 0 && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setBulkDeleteOpen(true)}
-                  data-testid="button-bulk-delete"
-                >
-                  <Trash2 className="w-4 h-4 mr-1" />
-                  Delete Selected
-                </Button>
+                <>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => setAssignPriceListOpen(true)}
+                    data-testid="button-bulk-assign-price-list"
+                  >
+                    <Tag className="w-4 h-4 mr-1" />
+                    Assign Price List
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setBulkDeleteOpen(true)}
+                    data-testid="button-bulk-delete"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Delete Selected
+                  </Button>
+                </>
               )}
               <Button
                 variant="ghost"
@@ -568,6 +607,43 @@ export default function CompaniesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={assignPriceListOpen} onOpenChange={(open) => { if (!open) { setAssignPriceListOpen(false); setSelectedPriceListId(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Price List</DialogTitle>
+            <DialogDescription>
+              Choose a price list to assign to {selectedIds.size} selected company{selectedIds.size !== 1 ? "ies" : "y"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Select value={selectedPriceListId} onValueChange={setSelectedPriceListId}>
+              <SelectTrigger data-testid="select-price-list-assign">
+                <SelectValue placeholder="Select a price list..." />
+              </SelectTrigger>
+              <SelectContent>
+                {priceLists?.map((pl) => (
+                  <SelectItem key={pl.id} value={pl.id} data-testid={`option-price-list-${pl.id}`}>
+                    {pl.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAssignPriceListOpen(false); setSelectedPriceListId(""); }} data-testid="button-cancel-assign-price-list">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => bulkAssignPriceListMutation.mutate({ ids: Array.from(selectedIds), priceListId: selectedPriceListId })}
+              disabled={!selectedPriceListId || bulkAssignPriceListMutation.isPending}
+              data-testid="button-confirm-assign-price-list"
+            >
+              {bulkAssignPriceListMutation.isPending ? "Assigning..." : "Assign Price List"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

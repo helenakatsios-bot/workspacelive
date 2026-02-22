@@ -378,6 +378,33 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/companies/bulk-assign-price-list", requireAdmin, async (req, res) => {
+    try {
+      const { ids, priceListId } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "ids array is required" });
+      }
+      if (!priceListId) {
+        return res.status(400).json({ message: "priceListId is required" });
+      }
+
+      const updated: string[] = [];
+      for (const id of ids) {
+        try {
+          await db.update(companies).set({ priceListId }).where(eq(companies.id, id));
+          updated.push(id);
+        } catch (err) {
+          console.error(`Failed to update company ${id}:`, err);
+        }
+      }
+
+      res.json({ updated: updated.length, total: ids.length });
+    } catch (error) {
+      console.error("Bulk assign price list error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/companies/deduplicate", requireAdmin, async (req, res) => {
     try {
       const result = await pool.query(`
