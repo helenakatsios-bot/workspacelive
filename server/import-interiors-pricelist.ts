@@ -42,7 +42,7 @@ function normalizeCategory(cat: string): string {
 export async function importInteriorsPriceList() {
   const csvPath = path.join(
     process.cwd(),
-    "attached_assets/replit_INTERIORS_CSV_OFFICAL_1771743126691.csv"
+    "attached_assets/replit_INTERIORS_CSV_OFFICAL_1771743869054.csv"
   );
 
   if (!fs.existsSync(csvPath)) {
