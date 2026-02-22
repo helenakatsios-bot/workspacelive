@@ -5277,13 +5277,12 @@ Rules:
       const customerName = portalUser?.name || "Portal Order";
 
       const orderResult = await pool.query(`
-        INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, customer_notes, customer_name, customer_email, customer_address, payment_terms)
-        VALUES (gen_random_uuid(), $1, $2, 'new', NOW(), $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, customer_notes, customer_name, customer_email, customer_address)
+        VALUES (gen_random_uuid(), $1, $2, 'new', NOW(), $3, $4, $5, $6, $7, $8, $9)
         RETURNING id, order_number
       `, [orderNumber, companyId, subtotal.toFixed(2), tax.toFixed(2), total.toFixed(2),
           customerNotes || `Order placed by ${customerName}`,
-          customerName, portalUser?.email || "", deliveryAddress || null,
-          paymentTerms || "Net 30"]);
+          customerName, portalUser?.email || "", deliveryAddress || null]);
 
       const orderId = orderResult.rows[0].id;
 
