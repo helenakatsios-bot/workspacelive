@@ -5311,10 +5311,12 @@ Rules:
       const legalName = companyResult.rows[0]?.legal_name || "";
       const tradingName = companyResult.rows[0]?.trading_name || "";
       const result = await pool.query(`
-        SELECT id, company_name, contact_name, items, status, customer_notes, shipping_address, created_at, converted_order_id
-        FROM customer_order_requests
-        WHERE company_name = $1 OR ($2 != '' AND company_name = $2)
-        ORDER BY created_at DESC
+        SELECT cor.id, cor.company_name, cor.contact_name, cor.items, cor.status, cor.customer_notes, cor.shipping_address, cor.created_at, cor.converted_order_id,
+          COALESCE(att.attachment_count, 0) AS attachment_count
+        FROM customer_order_requests cor
+        LEFT JOIN (SELECT entity_id, COUNT(*)::int AS attachment_count FROM attachments WHERE entity_type = 'order_request' GROUP BY entity_id) att ON att.entity_id = cor.id::text
+        WHERE cor.company_name = $1 OR ($2 != '' AND cor.company_name = $2)
+        ORDER BY cor.created_at DESC
       `, [legalName, tradingName]);
       res.json(result.rows.map((r: any) => ({
         id: r.id,
@@ -5326,6 +5328,7 @@ Rules:
         shippingAddress: r.shipping_address,
         createdAt: r.created_at,
         convertedOrderId: r.converted_order_id,
+        attachmentCount: parseInt(r.attachment_count) || 0,
       })));
     } catch (error) {
       console.error("Portal order requests error:", error);

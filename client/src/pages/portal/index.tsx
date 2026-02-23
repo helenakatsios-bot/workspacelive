@@ -448,7 +448,14 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
                       <TableCell className="text-sm">{totalQty} item{totalQty !== 1 ? "s" : ""}</TableCell>
                       <TableCell><OrderRequestStatusBadge status={req.status} /></TableCell>
                       <TableCell className="text-right text-sm">{estTotal > 0 ? `$${estTotal.toLocaleString("en-AU", { minimumFractionDigits: 2 })}` : "-"}</TableCell>
-                      <TableCell className="w-8"><AttachmentIndicator requestId={req.id} /></TableCell>
+                      <TableCell className="w-8">
+                        {req.attachmentCount > 0 && (
+                          <span className="flex items-center gap-1 text-muted-foreground" title={`${req.attachmentCount} attachment(s)`}>
+                            <Paperclip className="w-3.5 h-3.5" />
+                            <span className="text-xs">{req.attachmentCount}</span>
+                          </span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -951,13 +958,20 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       if (!res.ok) throw new Error((await res.json()).message || "Failed to place order");
       const data = await res.json();
       if (attachedFiles.length > 0 && data.id) {
-        const formData = new FormData();
-        attachedFiles.forEach((file) => formData.append("files", file));
-        await fetch(`/api/portal/order-requests/${data.id}/attachments`, {
-          method: "POST",
-          body: formData,
-          credentials: "include",
-        });
+        try {
+          const formData = new FormData();
+          attachedFiles.forEach((file) => formData.append("files", file));
+          const uploadRes = await fetch(`/api/portal/order-requests/${data.id}/attachments`, {
+            method: "POST",
+            body: formData,
+            credentials: "include",
+          });
+          if (!uploadRes.ok) {
+            toast({ title: "Warning", description: "Order submitted but file attachments failed to upload. Please contact us.", variant: "destructive" });
+          }
+        } catch {
+          toast({ title: "Warning", description: "Order submitted but file attachments failed to upload. Please contact us.", variant: "destructive" });
+        }
       }
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/orders"] });
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/order-requests"] });
