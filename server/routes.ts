@@ -4577,6 +4577,7 @@ Rules:
   });
 
   app.post("/api/customer-order-requests/:id/convert", requireEdit, async (req, res) => {
+    const client = await pool.connect();
     try {
       const orderRequest = await storage.getCustomerOrderRequest(req.params.id);
       if (!orderRequest) return res.status(404).json({ message: "Order request not found" });
@@ -4601,7 +4602,7 @@ Rules:
 
       const convertPriceMap = new Map<string, number>();
       if (company.priceListId) {
-        const priceRows = await pool.query(
+        const priceRows = await client.query(
           `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`,
           [company.priceListId]
         );
@@ -4629,39 +4630,32 @@ Rules:
       const tax = Math.round(subtotal * 0.1 * 100) / 100;
       const total = Math.round((subtotal + tax) * 100) / 100;
 
-      const maxResult2 = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
+      await client.query('BEGIN');
+
+      const maxResult2 = await client.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
       const orderNumber = String((parseInt(maxResult2.rows[0].max_num) || 0) + 1);
 
-      const order = await storage.createOrder({
-        orderNumber,
-        companyId: company.id,
-        status: "new",
-        orderDate: new Date(),
-        subtotal: subtotal.toFixed(2),
-        tax: tax.toFixed(2),
-        total: total.toFixed(2),
-        customerNotes: orderRequest.customerNotes || undefined,
-        createdBy: req.session.userId,
-      });
+      const orderResult = await client.query(
+        `INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, customer_notes, created_by, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'new', NOW(), $3, $4, $5, $6, $7, NOW()) RETURNING *`,
+        [orderNumber, company.id, subtotal.toFixed(2), tax.toFixed(2), total.toFixed(2), orderRequest.customerNotes || null, req.session.userId]
+      );
+      const order = orderResult.rows[0];
 
       for (const item of resolvedItems) {
-        await storage.createOrderLine({
-          orderId: order.id,
-          productId: item.productId || null,
-          descriptionOverride: item.description || item.productName || "Item",
-          quantity: item.quantity || 1,
-          unitPrice: String(item.unitPrice || "0"),
-          discount: "0",
-          lineTotal: String(item.lineTotal || "0"),
-        });
+        await client.query(
+          `INSERT INTO order_lines (id, order_id, product_id, description_override, quantity, unit_price, discount, line_total)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, '0', $6)`,
+          [order.id, item.productId || null, item.description || item.productName || "Item", item.quantity || 1, String(item.unitPrice || "0"), String(item.lineTotal || "0")]
+        );
       }
 
-      await storage.updateCustomerOrderRequest(req.params.id, {
-        status: "converted",
-        convertedOrderId: order.id,
-        reviewedBy: req.session.userId,
-        reviewedAt: new Date(),
-      });
+      await client.query(
+        `UPDATE customer_order_requests SET status = 'converted', converted_order_id = $1, reviewed_by = $2, reviewed_at = NOW() WHERE id = $3`,
+        [order.id, req.session.userId, req.params.id]
+      );
+
+      await client.query('COMMIT');
 
       await storage.createAuditLog({
         userId: req.session.userId,
@@ -4678,10 +4672,19 @@ Rules:
         createdBy: req.session.userId,
       });
 
-      res.status(201).json(order);
+      res.status(201).json({
+        id: order.id,
+        orderNumber: order.order_number,
+        companyId: order.company_id,
+        status: order.status,
+        total: order.total,
+      });
     } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
       console.error("Convert order request error:", error);
       res.status(500).json({ message: "Failed to convert order request" });
+    } finally {
+      client.release();
     }
   });
 
