@@ -27,6 +27,8 @@ import {
   ChevronDown,
   ExternalLink,
   ClipboardList,
+  Paperclip,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -446,6 +448,7 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
                       <TableCell className="text-sm">{totalQty} item{totalQty !== 1 ? "s" : ""}</TableCell>
                       <TableCell><OrderRequestStatusBadge status={req.status} /></TableCell>
                       <TableCell className="text-right text-sm">{estTotal > 0 ? `$${estTotal.toLocaleString("en-AU", { minimumFractionDigits: 2 })}` : "-"}</TableCell>
+                      <TableCell className="w-8"><AttachmentIndicator requestId={req.id} /></TableCell>
                     </TableRow>
                   );
                 })}
@@ -728,6 +731,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerOrderNumber, setCustomerOrderNumber] = useState("");
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -946,6 +950,15 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       });
       if (!res.ok) throw new Error((await res.json()).message || "Failed to place order");
       const data = await res.json();
+      if (attachedFiles.length > 0 && data.id) {
+        const formData = new FormData();
+        attachedFiles.forEach((file) => formData.append("files", file));
+        await fetch(`/api/portal/order-requests/${data.id}/attachments`, {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+      }
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/orders"] });
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/order-requests"] });
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/dashboard"] });
@@ -1311,6 +1324,56 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                   rows={3}
                   data-testid="input-delivery-address"
                 />
+              </div>
+
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="w-4 h-4 text-muted-foreground" />
+                  <Label className="font-semibold">Attachments</Label>
+                  <span className="text-xs text-muted-foreground">(optional)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Attach shipping labels, purchase orders, or other documents</p>
+                <div className="space-y-2">
+                  {attachedFiles.map((file, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-sm bg-muted/50 rounded px-2 py-1" data-testid={`attached-file-${idx}`}>
+                      <Paperclip className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate flex-1">{file.name}</span>
+                      <span className="text-xs text-muted-foreground flex-shrink-0">{(file.size / 1024).toFixed(0)}KB</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 w-5 p-0"
+                        onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))}
+                        data-testid={`button-remove-file-${idx}`}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => document.getElementById("portal-file-input")?.click()}
+                    data-testid="button-attach-files"
+                  >
+                    <Plus className="w-4 h-4 mr-1" /> Add Files
+                  </Button>
+                  <input
+                    id="portal-file-input"
+                    type="file"
+                    multiple
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.csv,.txt"
+                    onChange={(e) => {
+                      if (e.target.files) {
+                        setAttachedFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+                        e.target.value = "";
+                      }
+                    }}
+                    data-testid="input-file-upload"
+                  />
+                </div>
               </div>
 
               <Button className="w-full" disabled={cartItems.length === 0 || submitting} onClick={handleSubmit} data-testid="button-submit-order">
