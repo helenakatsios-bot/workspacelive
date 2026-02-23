@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   Building2,
   Users,
@@ -73,6 +74,7 @@ import { useTheme } from "@/components/theme-provider";
 const mainNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Orders", url: "/orders", icon: ShoppingCart },
+  { title: "Order Requests", url: "/orders/requests", icon: ClipboardCheck },
   { title: "Products", url: "/products", icon: Package },
   { title: "Email", url: "/marketing/email", icon: Mail },
 ];
@@ -83,7 +85,6 @@ const crmItems = [
   { title: "Deals", url: "/deals", icon: Target },
   { title: "Tickets", url: "/crm/tickets", icon: Ticket },
   { title: "Orders", url: "/orders", icon: ShoppingCart },
-  { title: "Order Requests", url: "/orders/requests", icon: ClipboardCheck },
   { title: "Projects", url: "/crm/projects", icon: FolderKanban, badge: "BETA" },
   { title: "Segments (Lists)", url: "/crm/segments", icon: ListFilter },
   { title: "Inbox", url: "/crm/inbox", icon: Inbox },
@@ -129,6 +130,11 @@ export function AppSidebar() {
   const { user, logout, isAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
+  const { data: pendingRequestCount } = useQuery<{ count: number }>({
+    queryKey: ["/api/customer-order-requests/pending-count"],
+    refetchInterval: 30000,
+  });
+
   const isActive = (url: string) => {
     if (url === "/") return location === "/";
     return location.startsWith(url);
@@ -171,9 +177,12 @@ export function AppSidebar() {
                     data-active={isActive(item.url)}
                     className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
                   >
-                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase()}`}>
+                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
                       <item.icon className="w-4 h-4" />
-                      <span>{item.title}</span>
+                      <span className="flex-1">{item.title}</span>
+                      {item.title === "Order Requests" && pendingRequestCount?.count ? (
+                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[20px] justify-center">{pendingRequestCount.count}</Badge>
+                      ) : null}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

@@ -4531,6 +4531,15 @@ Rules:
   });
 
   // ==================== CUSTOMER ORDER REQUESTS (ADMIN) ====================
+  app.get("/api/customer-order-requests/pending-count", requireAuth, async (_req, res) => {
+    try {
+      const result = await pool.query(`SELECT COUNT(*) as count FROM customer_order_requests WHERE status = 'pending'`);
+      res.json({ count: parseInt(result.rows[0].count) || 0 });
+    } catch (error) {
+      res.status(500).json({ count: 0 });
+    }
+  });
+
   app.get("/api/customer-order-requests", requireAuth, async (_req, res) => {
     try {
       const requests = await storage.getAllCustomerOrderRequests();
