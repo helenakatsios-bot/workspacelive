@@ -5,7 +5,7 @@ import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { pool } from "./db";
 import { syncProductionData } from "./data-sync";
-import { startAutoEmailSync } from "./outlook";
+import { startAutoEmailSync, backfillEmailCompanyLinks } from "./outlook";
 import { startInactivityChecker } from "./inactivity-checker";
 import { startAutoXeroInvoiceSync } from "./xero";
 import { importPuradownPrices } from "./import-puradown-prices";
@@ -469,6 +469,14 @@ async function runStartupTasks() {
     console.log("Category normalization complete");
   } catch (error) {
     console.error("Category normalization error:", error);
+  }
+
+  try {
+    console.log("Running email-to-company backfill...");
+    const emailsUpdated = await backfillEmailCompanyLinks();
+    console.log(`Email backfill complete: ${emailsUpdated} emails linked to companies`);
+  } catch (error) {
+    console.error("Email backfill error:", error);
   }
 
   console.log("All startup tasks completed");
