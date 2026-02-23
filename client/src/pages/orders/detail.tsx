@@ -210,21 +210,32 @@ export default function OrderDetailPage() {
     [companies, editCompanyId]
   );
 
-  const { data: priceListProducts } = useQuery<any[]>({
+  const { data: priceListProducts, isLoading: priceListLoading } = useQuery<any[]>({
     queryKey: ["/api/price-lists", selectedCompany?.priceListId, "prices"],
     enabled: !!selectedCompany?.priceListId && isEditing,
   });
 
-  const priceListProductIds = useMemo(() => {
+  const priceListPending = !!selectedCompany?.priceListId && !priceListProducts && priceListLoading;
+
+  const priceListPriceMap = useMemo(() => {
     if (!priceListProducts) return null;
-    return new Set(priceListProducts.map((p: any) => p.productId || p.product_id));
+    const map = new Map<string, number>();
+    for (const p of priceListProducts) {
+      const pid = p.productId || p.product_id;
+      const price = parseFloat(String(p.unit_price || p.unitPrice || "0"));
+      if (!map.has(pid) || price > 0) {
+        map.set(pid, price);
+      }
+    }
+    return map;
   }, [priceListProducts]);
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
+    if (priceListPending) return [];
     let available = products.filter((p) => p.active);
-    if (priceListProductIds) {
-      available = available.filter((p) => priceListProductIds.has(p.id));
+    if (priceListPriceMap) {
+      available = available.filter((p) => priceListPriceMap.has(p.id));
     }
     if (!productSearch) return available;
     const q = productSearch.toLowerCase();
@@ -232,7 +243,7 @@ export default function OrderDetailPage() {
       p.name.toLowerCase().includes(q) ||
       p.sku.toLowerCase().includes(q)
     );
-  }, [products, productSearch, priceListProductIds]);
+  }, [products, productSearch, priceListPriceMap, priceListPending]);
 
   const editSubtotal = useMemo(() => editLines.reduce((sum, l) => sum + l.lineTotal, 0), [editLines]);
   const editTax = editSubtotal * 0.1;
@@ -253,16 +264,24 @@ export default function OrderDetailPage() {
     });
   };
 
+  const getProductPrice = (product: Product) => {
+    if (priceListPriceMap && priceListPriceMap.has(product.id)) {
+      return priceListPriceMap.get(product.id)!;
+    }
+    return parseFloat(String(product.unitPrice || "0"));
+  };
+
   const addLine = (product?: Product) => {
+    const price = product ? getProductPrice(product) : 0;
     setEditLines((prev) => [
       ...prev,
       {
         productId: product?.id || null,
         descriptionOverride: product?.name || "",
         quantity: 1,
-        unitPrice: product ? parseFloat(String(product.unitPrice || "0")) : 0,
+        unitPrice: price,
         discount: 0,
-        lineTotal: product ? parseFloat(String(product.unitPrice || "0")) : 0,
+        lineTotal: price,
       },
     ]);
     setProductOpen(false);
@@ -627,9 +646,9 @@ export default function OrderDetailPage() {
                     <Command>
                       <CommandInput placeholder="Search products..." value={productSearch} onValueChange={setProductSearch} data-testid="input-product-search" />
                       <CommandList>
-                        <CommandEmpty>No products found</CommandEmpty>
+                        <CommandEmpty>{priceListPending ? "Loading price list products..." : "No products found"}</CommandEmpty>
                         <CommandGroup>
-                          {filteredProducts.map((p) => (
+                          {priceListPending ? null : filteredProducts.map((p) => (
                             <CommandItem
                               key={p.id}
                               onSelect={() => addLine(p)}
@@ -640,7 +659,7 @@ export default function OrderDetailPage() {
                                   <p className="font-medium truncate">{p.name}</p>
                                   <p className="text-xs text-muted-foreground">{p.sku}</p>
                                 </div>
-                                <span className="text-sm flex-shrink-0">${parseFloat(String(p.unitPrice || "0")).toFixed(2)}</span>
+                                <span className="text-sm flex-shrink-0">${getProductPrice(p).toFixed(2)}</span>
                               </div>
                             </CommandItem>
                           ))}
