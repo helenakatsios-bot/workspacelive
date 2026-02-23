@@ -423,6 +423,7 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Ref #</TableHead>
                   <TableHead>Submitted</TableHead>
                   <TableHead>Submitted By</TableHead>
                   <TableHead>Items</TableHead>
@@ -431,12 +432,14 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pendingRequests.map((req: any) => {
+                {pendingRequests.map((req: any, idx: number) => {
                   const items = Array.isArray(req.items) ? req.items : [];
                   const totalQty = items.reduce((sum: number, i: any) => sum + (i.quantity || 0), 0);
                   const estTotal = items.reduce((sum: number, i: any) => sum + parseFloat(i.lineTotal || "0"), 0);
+                  const refNum = `REQ-${String(pendingRequests.length - idx).padStart(3, "0")}`;
                   return (
                     <TableRow key={req.id} data-testid={`row-request-${req.id}`}>
+                      <TableCell className="font-medium text-sm" data-testid={`text-ref-${req.id}`}>{refNum}</TableCell>
                       <TableCell className="text-sm">{req.createdAt ? format(new Date(req.createdAt), "MMM d, yyyy h:mm a") : "-"}</TableCell>
                       <TableCell className="text-sm">{req.contactName || "-"}</TableCell>
                       <TableCell className="text-sm">{totalQty} item{totalQty !== 1 ? "s" : ""}</TableCell>
