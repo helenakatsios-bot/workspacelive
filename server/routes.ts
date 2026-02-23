@@ -5333,6 +5333,102 @@ Rules:
     }
   });
 
+  app.post("/api/portal/order-requests/:id/attachments", requirePortalAuth, async (req, res) => {
+    try {
+      const requestId = req.params.id;
+      const companyId = req.session.portalCompanyId!;
+      const companyResult = await pool.query(`SELECT legal_name, trading_name FROM companies WHERE id = $1`, [companyId]);
+      const legalName = companyResult.rows[0]?.legal_name || "";
+      const tradingName = companyResult.rows[0]?.trading_name || "";
+      const reqResult = await pool.query(
+        `SELECT id FROM customer_order_requests WHERE id = $1 AND (company_name = $2 OR ($3 != '' AND company_name = $3))`,
+        [requestId, legalName, tradingName]
+      );
+      if (reqResult.rows.length === 0) return res.status(404).json({ message: "Order request not found" });
+
+      const contentType = req.headers["content-type"] || "";
+      if (!contentType.includes("multipart/form-data")) {
+        return res.status(400).json({ message: "Expected multipart/form-data" });
+      }
+
+      const busboy = await import("busboy");
+      const path = await import("path");
+      const fs = await import("fs");
+      const bb = busboy.default({ headers: req.headers });
+      const uploadsDir = path.default.join(process.cwd(), "uploads", "order-requests", requestId);
+      await fs.promises.mkdir(uploadsDir, { recursive: true });
+
+      const filePromises: Promise<any>[] = [];
+
+      bb.on("file", (_fieldname: string, file: any, info: any) => {
+        const { filename, mimeType } = info;
+        const safeFileName = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        const filePath = path.default.join(uploadsDir, safeFileName);
+        let fileSize = 0;
+        file.on("data", (data: Buffer) => { fileSize += data.length; });
+        const writeStream = fs.createWriteStream(filePath);
+        file.pipe(writeStream);
+        const filePromise = new Promise<any>((resolve, reject) => {
+          writeStream.on("finish", () => {
+            resolve({ entityType: "order_request", entityId: requestId, fileName: filename, fileType: mimeType, fileSize, storagePath: filePath, uploadedBy: null });
+          });
+          writeStream.on("error", reject);
+          file.on("error", reject);
+        });
+        filePromises.push(filePromise);
+      });
+
+      bb.on("finish", async () => {
+        try {
+          const uploadedFiles = await Promise.all(filePromises);
+          for (const fileData of uploadedFiles) {
+            await storage.createAttachment(fileData);
+          }
+          const result = await storage.getAttachmentsByEntity("order_request", requestId);
+          res.json(result);
+        } catch (err) {
+          console.error("Portal file write error:", err);
+          res.status(500).json({ message: "Failed to save files" });
+        }
+      });
+
+      bb.on("error", (err: any) => {
+        console.error("Portal busboy error:", err);
+        res.status(500).json({ message: "Upload processing error" });
+      });
+
+      req.pipe(bb);
+    } catch (error) {
+      console.error("Portal upload attachment error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/portal/order-requests/:id/attachments", requirePortalAuth, async (req, res) => {
+    try {
+      const result = await storage.getAttachmentsByEntity("order_request", req.params.id);
+      res.json(result);
+    } catch (error) {
+      console.error("Portal get attachments error:", error);
+      res.status(500).json({ message: "Failed to get attachments" });
+    }
+  });
+
+  app.get("/api/portal/attachments/:id/download", requirePortalAuth, async (req, res) => {
+    try {
+      const [attachment] = await db.select().from(attachments).where(eq(attachments.id, req.params.id));
+      if (!attachment) return res.status(404).json({ message: "Attachment not found" });
+      const fs = await import("fs");
+      if (!fs.existsSync(attachment.storagePath)) return res.status(404).json({ message: "File not found" });
+      res.setHeader("Content-Type", attachment.fileType);
+      res.setHeader("Content-Disposition", `attachment; filename="${attachment.fileName}"`);
+      fs.createReadStream(attachment.storagePath).pipe(res);
+    } catch (error) {
+      console.error("Portal download attachment error:", error);
+      res.status(500).json({ message: "Failed to download" });
+    }
+  });
+
   app.put("/api/portal/account/password", requirePortalAuth, async (req, res) => {
     try {
       const { currentPassword, newPassword } = req.body;
