@@ -4635,10 +4635,15 @@ Rules:
       const maxResult2 = await client.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
       const orderNumber = String((parseInt(maxResult2.rows[0].max_num) || 0) + 1);
 
+      const customerName = orderRequest.contactName || company.tradingName || company.legalName;
+      const customerEmail = orderRequest.contactEmail || (company.emailAddresses && company.emailAddresses.length > 0 ? company.emailAddresses[0] : null);
+      const customerPhone = orderRequest.contactPhone || company.phone || null;
+      const customerAddress = orderRequest.shippingAddress || company.shippingAddress || company.billingAddress || null;
+
       const orderResult = await client.query(
-        `INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, customer_notes, created_by, created_at)
-         VALUES (gen_random_uuid(), $1, $2, 'new', NOW(), $3, $4, $5, $6, $7, NOW()) RETURNING *`,
-        [orderNumber, company.id, subtotal.toFixed(2), tax.toFixed(2), total.toFixed(2), orderRequest.customerNotes || null, req.session.userId]
+        `INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, customer_notes, customer_name, customer_email, customer_phone, customer_address, created_by, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'new', NOW(), $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()) RETURNING *`,
+        [orderNumber, company.id, subtotal.toFixed(2), tax.toFixed(2), total.toFixed(2), orderRequest.customerNotes || null, customerName, customerEmail, customerPhone, customerAddress, req.session.userId]
       );
       const order = orderResult.rows[0];
 
@@ -5215,11 +5220,14 @@ Rules:
       const companyId = req.session.portalCompanyId!;
       const [portalUser] = await db.select().from(portalUsers).where(eq(portalUsers.id, req.session.portalUserId!));
 
-      const companyResult = await pool.query(`SELECT legal_name, trading_name, price_list_id FROM companies WHERE id = $1`, [companyId]);
-      const companyName = companyResult.rows[0]?.trading_name || companyResult.rows[0]?.legal_name || "Unknown";
-      const companyPriceListId = companyResult.rows[0]?.price_list_id;
+      const companyResult = await pool.query(`SELECT legal_name, trading_name, price_list_id, shipping_address, billing_address, phone FROM companies WHERE id = $1`, [companyId]);
+      const companyRow = companyResult.rows[0];
+      const companyName = companyRow?.trading_name || companyRow?.legal_name || "Unknown";
+      const companyPriceListId = companyRow?.price_list_id;
       const contactName = submittedCustomerName || portalUser?.name || "Portal Customer";
       const contactEmail = portalUser?.email || "";
+      const resolvedShippingAddress = deliveryAddress || companyRow?.shipping_address || companyRow?.billing_address || null;
+      const resolvedPhone = companyRow?.phone || null;
 
       const priceMap = new Map<string, number>();
       if (companyPriceListId) {
@@ -5275,8 +5283,8 @@ Rules:
         companyName: companyName,
         contactName: contactName,
         contactEmail: contactEmail,
-        contactPhone: null,
-        shippingAddress: deliveryAddress || null,
+        contactPhone: resolvedPhone,
+        shippingAddress: resolvedShippingAddress,
         customerNotes: customerNotes || null,
         items: orderItems,
         status: "pending",
