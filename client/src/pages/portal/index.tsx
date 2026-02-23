@@ -25,6 +25,7 @@ import {
   ChevronRight,
   ChevronDown,
   ExternalLink,
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -359,9 +360,24 @@ function PortalDashboard({ onNavigate }: { onNavigate: (page: string) => void })
   );
 }
 
+function OrderRequestStatusBadge({ status }: { status: string }) {
+  const config: Record<string, { label: string; className: string }> = {
+    pending: { label: "Pending Review", className: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700" },
+    reviewed: { label: "Reviewed", className: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border-blue-300 dark:border-blue-700" },
+    converted: { label: "Confirmed", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700" },
+    rejected: { label: "Declined", className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 border-red-300 dark:border-red-700" },
+  };
+  const c = config[status] || config.pending;
+  return <Badge className={c.className} data-testid={`badge-request-status-${status}`}>{c.label}</Badge>;
+}
+
 function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
   const { data: orders, isLoading } = useQuery<any[]>({
     queryKey: ["/api/portal/orders"],
+  });
+
+  const { data: orderRequests, isLoading: requestsLoading } = useQuery<any[]>({
+    queryKey: ["/api/portal/order-requests"],
   });
 
   const [statusFilter, setStatusFilter] = useState("all");
@@ -372,7 +388,12 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
     return orders.filter((o) => o.status === statusFilter);
   }, [orders, statusFilter]);
 
-  if (isLoading) {
+  const pendingRequests = useMemo(() => {
+    if (!orderRequests) return [];
+    return orderRequests.filter((r) => r.status === "pending" || r.status === "reviewed");
+  }, [orderRequests]);
+
+  if (isLoading || requestsLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -389,6 +410,46 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
           New Order
         </Button>
       </div>
+
+      {pendingRequests.length > 0 && (
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ClipboardList className="w-4 h-4 text-amber-600" />
+              Submitted Orders
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Submitted</TableHead>
+                  <TableHead>Submitted By</TableHead>
+                  <TableHead>Items</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Est. Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingRequests.map((req: any) => {
+                  const items = Array.isArray(req.items) ? req.items : [];
+                  const totalQty = items.reduce((sum: number, i: any) => sum + (i.quantity || 0), 0);
+                  const estTotal = items.reduce((sum: number, i: any) => sum + parseFloat(i.lineTotal || "0"), 0);
+                  return (
+                    <TableRow key={req.id} data-testid={`row-request-${req.id}`}>
+                      <TableCell className="text-sm">{req.createdAt ? format(new Date(req.createdAt), "MMM d, yyyy h:mm a") : "-"}</TableCell>
+                      <TableCell className="text-sm">{req.contactName || "-"}</TableCell>
+                      <TableCell className="text-sm">{totalQty} item{totalQty !== 1 ? "s" : ""}</TableCell>
+                      <TableCell><OrderRequestStatusBadge status={req.status} /></TableCell>
+                      <TableCell className="text-right text-sm">{estTotal > 0 ? `$${estTotal.toLocaleString("en-AU", { minimumFractionDigits: 2 })}` : "-"}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex gap-2 flex-wrap">
         {["all", "new", "confirmed", "in_production", "ready", "dispatched", "completed"].map((s) => (
@@ -880,8 +941,9 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       if (!res.ok) throw new Error((await res.json()).message || "Failed to place order");
       const data = await res.json();
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/orders"] });
+      portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/order-requests"] });
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/dashboard"] });
-      toast({ title: "Order submitted", description: data.message || "Your order has been submitted for review" });
+      toast({ title: "Order submitted", description: "Your order has been submitted and is pending review. You can track it on your Orders page." });
       onNavigate("orders");
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });

@@ -5288,6 +5288,35 @@ Rules:
     }
   });
 
+  app.get("/api/portal/order-requests", requirePortalAuth, async (req, res) => {
+    try {
+      const companyId = req.session.portalCompanyId!;
+      const companyResult = await pool.query(`SELECT legal_name, trading_name FROM companies WHERE id = $1`, [companyId]);
+      const legalName = companyResult.rows[0]?.legal_name || "";
+      const tradingName = companyResult.rows[0]?.trading_name || "";
+      const result = await pool.query(`
+        SELECT id, company_name, contact_name, items, status, customer_notes, shipping_address, created_at, converted_order_id
+        FROM customer_order_requests
+        WHERE company_name = $1 OR ($2 != '' AND company_name = $2)
+        ORDER BY created_at DESC
+      `, [legalName, tradingName]);
+      res.json(result.rows.map((r: any) => ({
+        id: r.id,
+        companyName: r.company_name,
+        contactName: r.contact_name,
+        items: r.items,
+        status: r.status,
+        customerNotes: r.customer_notes,
+        shippingAddress: r.shipping_address,
+        createdAt: r.created_at,
+        convertedOrderId: r.converted_order_id,
+      })));
+    } catch (error) {
+      console.error("Portal order requests error:", error);
+      res.status(500).json({ message: "Failed to fetch order requests" });
+    }
+  });
+
   app.put("/api/portal/account/password", requirePortalAuth, async (req, res) => {
     try {
       const { currentPassword, newPassword } = req.body;
