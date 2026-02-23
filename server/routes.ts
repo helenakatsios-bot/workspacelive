@@ -4589,7 +4589,34 @@ Rules:
       }
 
       const items = (orderRequest.items as any[]) || [];
-      const subtotal = items.reduce((sum: number, item: any) => sum + (Number(item.lineTotal) || 0), 0);
+
+      const convertPriceMap = new Map<string, number>();
+      if (company.priceListId) {
+        const priceRows = await pool.query(
+          `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`,
+          [company.priceListId]
+        );
+        for (const row of priceRows.rows) {
+          const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
+          convertPriceMap.set(key, parseFloat(row.unit_price));
+          if (!convertPriceMap.has(row.product_id)) {
+            convertPriceMap.set(row.product_id, parseFloat(row.unit_price));
+          }
+        }
+      }
+
+      const resolvedItems = items.map((item: any) => {
+        let unitPrice = Number(item.unitPrice) || 0;
+        if (unitPrice === 0 && item.productId && convertPriceMap.size > 0) {
+          const variantKey = `${item.productId}|${item.filling || ''}|${item.weight || ''}`;
+          unitPrice = convertPriceMap.get(variantKey) ?? convertPriceMap.get(item.productId) ?? 0;
+        }
+        const qty = item.quantity || 1;
+        const lineTotal = Number(item.lineTotal) || Math.round(qty * unitPrice * 100) / 100;
+        return { ...item, unitPrice, lineTotal };
+      });
+
+      const subtotal = resolvedItems.reduce((sum: number, item: any) => sum + (Number(item.lineTotal) || 0), 0);
       const tax = Math.round(subtotal * 0.1 * 100) / 100;
       const total = Math.round((subtotal + tax) * 100) / 100;
 
@@ -4608,7 +4635,7 @@ Rules:
         createdBy: req.session.userId,
       });
 
-      for (const item of items) {
+      for (const item of resolvedItems) {
         await storage.createOrderLine({
           orderId: order.id,
           productId: item.productId || null,
@@ -5176,10 +5203,26 @@ Rules:
       const companyId = req.session.portalCompanyId!;
       const [portalUser] = await db.select().from(portalUsers).where(eq(portalUsers.id, req.session.portalUserId!));
 
-      const companyResult = await pool.query(`SELECT legal_name, trading_name FROM companies WHERE id = $1`, [companyId]);
+      const companyResult = await pool.query(`SELECT legal_name, trading_name, price_list_id FROM companies WHERE id = $1`, [companyId]);
       const companyName = companyResult.rows[0]?.trading_name || companyResult.rows[0]?.legal_name || "Unknown";
+      const companyPriceListId = companyResult.rows[0]?.price_list_id;
       const contactName = submittedCustomerName || portalUser?.name || "Portal Customer";
       const contactEmail = portalUser?.email || "";
+
+      const priceMap = new Map<string, number>();
+      if (companyPriceListId) {
+        const priceRows = await pool.query(
+          `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`,
+          [companyPriceListId]
+        );
+        for (const row of priceRows.rows) {
+          const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
+          priceMap.set(key, parseFloat(row.unit_price));
+          if (!priceMap.has(row.product_id)) {
+            priceMap.set(row.product_id, parseFloat(row.unit_price));
+          }
+        }
+      }
 
       const orderItems: any[] = [];
       if (hasItems) {
@@ -5189,11 +5232,16 @@ Rules:
           const prod = prodResult.rows[0];
           const qty = Math.max(1, parseInt(item.quantity) || 1);
           const desc = item.filling ? `${prod.name} (${item.filling}${item.weight ? `, ${item.weight}` : ''})` : prod.name;
+          const variantKey = `${prod.id}|${item.filling || ''}|${item.weight || ''}`;
+          const unitPrice = priceMap.get(variantKey) ?? priceMap.get(prod.id) ?? parseFloat(prod.unit_price || "0");
+          const lineTotal = Math.round(qty * unitPrice * 100) / 100;
           orderItems.push({
             productId: prod.id,
             productName: desc,
             sku: prod.sku,
             quantity: qty,
+            unitPrice: unitPrice.toFixed(2),
+            lineTotal: lineTotal.toFixed(2),
             filling: item.filling || undefined,
             weight: item.weight || undefined,
           });
