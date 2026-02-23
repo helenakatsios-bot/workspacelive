@@ -23,6 +23,7 @@ import {
   Eye,
   EyeOff,
   ChevronRight,
+  Hash,
   ChevronDown,
   ExternalLink,
   ClipboardList,
@@ -726,6 +727,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const [notes, setNotes] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [customerOrderNumber, setCustomerOrderNumber] = useState("");
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -938,6 +940,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
           customerNotes: fullNotes,
           customerName: customerName || undefined,
           shippingAddress: deliveryAddress || undefined,
+          customerOrderNumber: customerOrderNumber || undefined,
         }),
         credentials: "include",
       });
@@ -1257,6 +1260,21 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                   </div>
                 </div>
               )}
+
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Hash className="w-4 h-4 text-muted-foreground" />
+                  <Label htmlFor="order-number" className="font-semibold">Your Order / PO Number</Label>
+                  <span className="text-xs text-muted-foreground">(optional)</span>
+                </div>
+                <Input
+                  id="order-number"
+                  placeholder="e.g. PO-12345"
+                  value={customerOrderNumber}
+                  onChange={(e) => setCustomerOrderNumber(e.target.value)}
+                  data-testid="input-customer-order-number"
+                />
+              </div>
 
               <div className="border-t pt-4 space-y-2">
                 <div className="flex items-center gap-2">

@@ -5211,7 +5211,7 @@ Rules:
 
   app.post("/api/portal/orders", requirePortalAuth, async (req, res) => {
     try {
-      const { items, customItems, customerNotes, customerName: submittedCustomerName, shippingAddress: deliveryAddress } = req.body;
+      const { items, customItems, customerNotes, customerName: submittedCustomerName, shippingAddress: deliveryAddress, customerOrderNumber } = req.body;
       const hasItems = items && Array.isArray(items) && items.length > 0;
       const hasCustomItems = customItems && Array.isArray(customItems) && customItems.length > 0;
       if (!hasItems && !hasCustomItems) {
@@ -5279,13 +5279,18 @@ Rules:
         }
       }
 
+      const notesWithPO = [
+        customerOrderNumber ? `PO/Order #: ${customerOrderNumber}` : "",
+        customerNotes || "",
+      ].filter(Boolean).join("\n\n") || null;
+
       const orderRequest = await storage.createCustomerOrderRequest({
         companyName: companyName,
         contactName: contactName,
         contactEmail: contactEmail,
         contactPhone: resolvedPhone,
         shippingAddress: resolvedShippingAddress,
-        customerNotes: customerNotes || null,
+        customerNotes: notesWithPO,
         items: orderItems,
         status: "pending",
         convertedOrderId: null,
