@@ -124,6 +124,9 @@ export default function OrderDetailPage() {
   const [companyOpen, setCompanyOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [productOpen, setProductOpen] = useState(false);
+  const [pendingProduct, setPendingProduct] = useState<Product | null>(null);
+  const [selectedFilling, setSelectedFilling] = useState("");
+  const [selectedWeight, setSelectedWeight] = useState("");
 
   const { data: order, isLoading } = useQuery<OrderDetail>({
     queryKey: ["/api/orders", params?.id],
@@ -230,6 +233,33 @@ export default function OrderDetailPage() {
     return map;
   }, [priceListProducts]);
 
+  const productVariantMap = useMemo(() => {
+    if (!priceListProducts) return new Map<string, { fillings: string[]; weights: string[]; prices: Map<string, number> }>();
+    const map = new Map<string, { fillings: Set<string>; weights: Set<string>; prices: Map<string, number> }>();
+    for (const p of priceListProducts) {
+      const pid = p.productId || p.product_id;
+      const filling = (p.filling || "").trim();
+      const weight = (p.weight || "").trim();
+      const price = parseFloat(String(p.unit_price || p.unitPrice || "0"));
+      if (!filling && !weight) continue;
+      if (!map.has(pid)) map.set(pid, { fillings: new Set(), weights: new Set(), prices: new Map() });
+      const entry = map.get(pid)!;
+      if (filling) entry.fillings.add(filling);
+      if (weight) entry.weights.add(weight);
+      const key = `${filling}|${weight}`;
+      entry.prices.set(key, price);
+    }
+    const result = new Map<string, { fillings: string[]; weights: string[]; prices: Map<string, number> }>();
+    for (const [pid, entry] of map) {
+      result.set(pid, {
+        fillings: Array.from(entry.fillings).sort(),
+        weights: Array.from(entry.weights).sort(),
+        prices: entry.prices,
+      });
+    }
+    return result;
+  }, [priceListProducts]);
+
   const filteredProducts = useMemo(() => {
     if (!products) return [];
     if (priceListPending) return [];
@@ -269,6 +299,56 @@ export default function OrderDetailPage() {
       return priceListPriceMap.get(product.id)!;
     }
     return parseFloat(String(product.unitPrice || "0"));
+  };
+
+  const handleProductSelect = (product: Product) => {
+    const variants = productVariantMap.get(product.id);
+    if (variants && (variants.fillings.length > 0 || variants.weights.length > 0)) {
+      setPendingProduct(product);
+      setSelectedFilling(variants.fillings.length > 0 ? variants.fillings[0] : "");
+      setSelectedWeight(variants.weights.length > 0 ? variants.weights[0] : "");
+      setProductOpen(false);
+      setProductSearch("");
+    } else {
+      addLine(product);
+    }
+  };
+
+  const getVariantPrice = (productId: string, filling: string, weight: string) => {
+    const variants = productVariantMap.get(productId);
+    if (!variants) return null;
+    const key = `${filling}|${weight}`;
+    if (variants.prices.has(key)) return variants.prices.get(key)!;
+    const fillingOnly = `${filling}|`;
+    if (variants.prices.has(fillingOnly)) return variants.prices.get(fillingOnly)!;
+    const weightOnly = `|${weight}`;
+    if (variants.prices.has(weightOnly)) return variants.prices.get(weightOnly)!;
+    return null;
+  };
+
+  const addLineWithVariant = () => {
+    if (!pendingProduct) return;
+    const variantPrice = getVariantPrice(pendingProduct.id, selectedFilling, selectedWeight);
+    const basePrice = getProductPrice(pendingProduct);
+    const price = variantPrice !== null ? variantPrice : basePrice;
+    const parts = [pendingProduct.name];
+    if (selectedFilling) parts.push(selectedFilling);
+    if (selectedWeight) parts.push(selectedWeight);
+    const desc = parts.join(" - ");
+    setEditLines((prev) => [
+      ...prev,
+      {
+        productId: pendingProduct.id,
+        descriptionOverride: desc,
+        quantity: 1,
+        unitPrice: price,
+        discount: 0,
+        lineTotal: price,
+      },
+    ]);
+    setPendingProduct(null);
+    setSelectedFilling("");
+    setSelectedWeight("");
   };
 
   const addLine = (product?: Product) => {
@@ -651,7 +731,7 @@ export default function OrderDetailPage() {
                           {priceListPending ? null : filteredProducts.map((p) => (
                             <CommandItem
                               key={p.id}
-                              onSelect={() => addLine(p)}
+                              onSelect={() => handleProductSelect(p)}
                               data-testid={`option-product-${p.id}`}
                             >
                               <div className="flex items-center justify-between w-full gap-2">
@@ -669,6 +749,56 @@ export default function OrderDetailPage() {
                   </PopoverContent>
                 </Popover>
               </CardHeader>
+              {pendingProduct && (
+                <div className="mx-6 mb-4 p-4 border rounded-lg bg-muted/50" data-testid="variant-selector">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="font-medium text-sm">{pendingProduct.name} - Select Options</p>
+                    <Button variant="ghost" size="sm" onClick={() => setPendingProduct(null)} data-testid="button-cancel-variant">
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {productVariantMap.get(pendingProduct.id)?.fillings && productVariantMap.get(pendingProduct.id)!.fillings.length > 0 && (
+                      <div>
+                        <Label className="text-xs mb-1 block">Filling</Label>
+                        <Select value={selectedFilling} onValueChange={setSelectedFilling}>
+                          <SelectTrigger data-testid="select-filling">
+                            <SelectValue placeholder="Select filling" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {productVariantMap.get(pendingProduct.id)!.fillings.map((f) => (
+                              <SelectItem key={f} value={f} data-testid={`option-filling-${f}`}>{f}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {productVariantMap.get(pendingProduct.id)?.weights && productVariantMap.get(pendingProduct.id)!.weights.length > 0 && (
+                      <div>
+                        <Label className="text-xs mb-1 block">Weight</Label>
+                        <Select value={selectedWeight} onValueChange={setSelectedWeight}>
+                          <SelectTrigger data-testid="select-weight">
+                            <SelectValue placeholder="Select weight" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {productVariantMap.get(pendingProduct.id)!.weights.map((w) => (
+                              <SelectItem key={w} value={w} data-testid={`option-weight-${w}`}>{w}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between mt-3">
+                    <span className="text-sm text-muted-foreground">
+                      Price: ${(getVariantPrice(pendingProduct.id, selectedFilling, selectedWeight) ?? getProductPrice(pendingProduct)).toFixed(2)}
+                    </span>
+                    <Button size="sm" onClick={addLineWithVariant} data-testid="button-confirm-variant">
+                      <Plus className="w-4 h-4 mr-1" /> Add to Order
+                    </Button>
+                  </div>
+                </div>
+              )}
               <CardContent className="p-0">
                 {editLines.length > 0 ? (
                   <Table>
