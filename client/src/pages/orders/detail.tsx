@@ -805,7 +805,7 @@ export default function OrderDetailPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Item</TableHead>
-                        <TableHead className="w-[80px]">Qty</TableHead>
+                        <TableHead className="w-[100px]">Qty</TableHead>
                         <TableHead className="w-[110px]">Unit Price</TableHead>
                         <TableHead className="w-[90px]">Discount</TableHead>
                         <TableHead className="w-[100px] text-right">Total</TableHead>
@@ -829,7 +829,7 @@ export default function OrderDetailPage() {
                               min={1}
                               value={line.quantity}
                               onChange={(e) => updateLine(index, "quantity", parseInt(e.target.value) || 1)}
-                              className="h-8"
+                              className="h-8 w-[80px] text-center"
                               data-testid={`input-line-qty-${index}`}
                             />
                           </TableCell>
