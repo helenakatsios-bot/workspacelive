@@ -1097,30 +1097,24 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                           </TableCell>
                         )}
                         <TableCell>
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => updateQty(product.id, -1)}
-                              disabled={!cart[product.id]}
-                              data-testid={`button-decrease-${product.id}`}
-                            >
-                              <Minus className="w-3 h-3" />
-                            </Button>
-                            <span className="w-8 text-center text-sm font-medium" data-testid={`text-qty-${product.id}`}>
-                              {cart[product.id] || 0}
-                            </span>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => updateQty(product.id, 1)}
-                              data-testid={`button-increase-${product.id}`}
-                            >
-                              <Plus className="w-3 h-3" />
-                            </Button>
-                          </div>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={cart[product.id] || ""}
+                            placeholder="0"
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              setCart((prev) => {
+                                if (val <= 0) {
+                                  const { [product.id]: _, ...rest } = prev;
+                                  return rest;
+                                }
+                                return { ...prev, [product.id]: val };
+                              });
+                            }}
+                            className="h-8 w-[70px] text-center mx-auto"
+                            data-testid={`input-qty-${product.id}`}
+                          />
                         </TableCell>
                         <TableCell className="text-right">
                           {(() => {
@@ -1182,28 +1176,14 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center justify-center gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => updateCustomLine(line.id, "qty", Math.max(1, line.qty - 1))}
-                                  disabled={line.qty <= 1}
-                                  data-testid={`button-decrease-custom-${line.id}`}
-                                >
-                                  <Minus className="w-3 h-3" />
-                                </Button>
-                                <span className="w-8 text-center text-sm font-medium" data-testid={`text-qty-custom-${line.id}`}>
-                                  {line.qty}
-                                </span>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => updateCustomLine(line.id, "qty", line.qty + 1)}
-                                  data-testid={`button-increase-custom-${line.id}`}
-                                >
-                                  <Plus className="w-3 h-3" />
-                                </Button>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={line.qty}
+                                  onChange={(e) => updateCustomLine(line.id, "qty", Math.max(1, parseInt(e.target.value) || 1))}
+                                  className="h-8 w-[70px] text-center"
+                                  data-testid={`input-qty-custom-${line.id}`}
+                                />
                                 <Button
                                   variant="ghost"
                                   size="icon"
