@@ -513,17 +513,110 @@ export async function getAllEmails(userId: string, folder?: string, limit: numbe
 }
 
 export async function backfillEmailCompanyLinks(): Promise<number> {
-  const unlinkedEmails = await db.select().from(emails).where(isNull(emails.companyId));
+  const allEmails = await db.select().from(emails);
   let updated = 0;
 
-  for (const email of unlinkedEmails) {
-    const toAddresses = (email.toAddresses || []) as string[];
-    const match = await matchEmailToCompany(email.fromAddress || "", toAddresses);
+  const allContacts = await db.select().from(contacts);
+  const allCompanies = await db.select().from(companies);
+  const puraxDomains = ["purax.com.au", "puradown.com", "puradown.com.au"];
+  const genericDomains = [
+    "gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com",
+    "live.com", "msn.com", "aol.com", "mail.com", "protonmail.com",
+    "bigpond.com", "optusnet.com.au", "tpg.com.au",
+  ];
 
-    if (match.companyId) {
+  const emailToContact = new Map<string, { id: string; companyId: string | null }>();
+  for (const c of allContacts) {
+    if (c.email) emailToContact.set(c.email.toLowerCase(), { id: c.id, companyId: c.companyId });
+  }
+
+  const emailToCompany = new Map<string, string>();
+  for (const co of allCompanies) {
+    if (co.emailAddresses && Array.isArray(co.emailAddresses)) {
+      for (const ea of co.emailAddresses as string[]) {
+        emailToCompany.set(ea.toLowerCase(), co.id);
+      }
+    }
+  }
+
+  const domainToCompany = new Map<string, string>();
+  for (const c of allContacts) {
+    if (c.email && c.companyId) {
+      const domain = c.email.split("@")[1]?.toLowerCase() || "";
+      if (domain && !genericDomains.includes(domain) && !puraxDomains.includes(domain)) {
+        domainToCompany.set(domain, c.companyId);
+      }
+    }
+  }
+  for (const co of allCompanies) {
+    if (co.emailAddresses && Array.isArray(co.emailAddresses)) {
+      for (const ea of co.emailAddresses as string[]) {
+        const domain = ea.split("@")[1]?.toLowerCase() || "";
+        if (domain && !genericDomains.includes(domain) && !puraxDomains.includes(domain)) {
+          if (!domainToCompany.has(domain)) domainToCompany.set(domain, co.id);
+        }
+      }
+    }
+  }
+
+  const nameMap = allCompanies.map(c => ({
+    id: c.id,
+    normalized: (c.tradingName || c.legalName || "").toLowerCase().replace(/[\/\s\-\(\)]+/g, ""),
+  }));
+
+  for (const email of allEmails) {
+    const toAddresses = (email.toAddresses || []) as string[];
+    const allAddresses = [email.fromAddress || "", ...toAddresses].filter(Boolean);
+    const externalAddresses = allAddresses.filter(a => {
+      const domain = a.split("@")[1]?.toLowerCase() || "";
+      return domain && !puraxDomains.includes(domain) && a !== "unknown";
+    });
+
+    let matchCompanyId: string | null = null;
+    let matchContactId: string | null = null;
+
+    for (const addr of externalAddresses) {
+      const contact = emailToContact.get(addr.toLowerCase());
+      if (contact) {
+        matchCompanyId = contact.companyId;
+        matchContactId = contact.id;
+        break;
+      }
+    }
+
+    if (!matchCompanyId) {
+      for (const addr of externalAddresses) {
+        const companyId = emailToCompany.get(addr.toLowerCase());
+        if (companyId) { matchCompanyId = companyId; break; }
+      }
+    }
+
+    if (!matchCompanyId) {
+      for (const addr of externalAddresses) {
+        const domain = addr.split("@")[1]?.toLowerCase() || "";
+        if (domain && !genericDomains.includes(domain)) {
+          const companyId = domainToCompany.get(domain);
+          if (companyId) { matchCompanyId = companyId; break; }
+        }
+      }
+    }
+
+    if (!matchCompanyId) {
+      for (const addr of externalAddresses) {
+        const domain = addr.split("@")[1]?.toLowerCase() || "";
+        if (!domain || genericDomains.includes(domain)) continue;
+        const domainBase = domain.split(".")[0].toLowerCase();
+        if (domainBase.length > 2) {
+          const match = nameMap.find(n => n.normalized.includes(domainBase));
+          if (match) { matchCompanyId = match.id; break; }
+        }
+      }
+    }
+
+    if (matchCompanyId && matchCompanyId !== email.companyId) {
       await db.update(emails).set({
-        companyId: match.companyId,
-        contactId: match.contactId || email.contactId,
+        companyId: matchCompanyId,
+        contactId: matchContactId || email.contactId,
       }).where(eq(emails.id, email.id));
       updated++;
     }
