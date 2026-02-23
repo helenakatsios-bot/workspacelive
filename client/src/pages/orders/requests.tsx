@@ -104,7 +104,7 @@ export default function OrderRequestsPage() {
   const itemTotal = (items: any[]) => {
     if (!Array.isArray(items)) return 0;
     return items.reduce((sum: number, item: any) => {
-      const lt = item.lineTotal || (item.quantity * (item.unitPrice || 0));
+      const lt = parseFloat(item.lineTotal) || (parseInt(item.quantity) * (parseFloat(item.unitPrice) || 0));
       return sum + lt;
     }, 0);
   };
@@ -259,11 +259,11 @@ export default function OrderRequestsPage() {
                         </TableCell>
                         <TableCell className="text-right text-sm">{item.quantity}</TableCell>
                         <TableCell className="text-right text-sm">
-                          {item.unitPrice > 0 ? `$${Number(item.unitPrice).toFixed(2)}` : "-"}
+                          {parseFloat(item.unitPrice) > 0 ? `$${parseFloat(item.unitPrice).toFixed(2)}` : "-"}
                         </TableCell>
                         <TableCell className="text-right text-sm font-medium">
-                          {(item.lineTotal || (item.quantity * (item.unitPrice || 0))) > 0
-                            ? `$${Number(item.lineTotal || (item.quantity * (item.unitPrice || 0))).toFixed(2)}`
+                          {(parseFloat(item.lineTotal) || (parseInt(item.quantity) * (parseFloat(item.unitPrice) || 0))) > 0
+                            ? `$${(parseFloat(item.lineTotal) || (parseInt(item.quantity) * (parseFloat(item.unitPrice) || 0))).toFixed(2)}`
                             : "-"}
                         </TableCell>
                       </TableRow>
