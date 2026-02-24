@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 interface ChatflowTemplate {
   id: string;
@@ -14,7 +15,7 @@ interface ChatflowTemplate {
   steps: string[];
 }
 
-const chatflowTemplates: ChatflowTemplate[] = [
+const initialTemplates: ChatflowTemplate[] = [
   {
     id: "welcome",
     name: "Welcome Flow",
@@ -59,8 +60,24 @@ const chatflowTemplates: ChatflowTemplate[] = [
 
 export default function ChatflowsPage() {
   const [search, setSearch] = useState("");
+  const [flows, setFlows] = useState<ChatflowTemplate[]>(initialTemplates);
+  const { toast } = useToast();
 
-  const filtered = chatflowTemplates.filter(
+  const toggleStatus = (id: string) => {
+    setFlows((prev) =>
+      prev.map((f) => {
+        if (f.id !== id) return f;
+        const newStatus = f.status === "Active" ? "Draft" : "Active";
+        toast({
+          title: newStatus === "Active" ? "Flow Activated" : "Flow Paused",
+          description: `"${f.name}" is now ${newStatus === "Active" ? "active" : "paused"}.`,
+        });
+        return { ...f, status: newStatus };
+      })
+    );
+  };
+
+  const filtered = flows.filter(
     (f) =>
       f.name.toLowerCase().includes(search.toLowerCase()) ||
       f.description.toLowerCase().includes(search.toLowerCase())
@@ -128,13 +145,19 @@ export default function ChatflowsPage() {
               </div>
 
               <div className="flex justify-end gap-2">
-                <Button variant="outline" size="sm" data-testid={`button-edit-${flow.id}`}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid={`button-edit-${flow.id}`}
+                  onClick={() => toast({ title: "Edit Flow", description: `Editing "${flow.name}" - flow editor coming soon.` })}
+                >
                   Edit Flow
                 </Button>
                 <Button
                   variant={flow.status === "Active" ? "secondary" : "default"}
                   size="sm"
                   data-testid={`button-toggle-${flow.id}`}
+                  onClick={() => toggleStatus(flow.id)}
                 >
                   {flow.status === "Active" ? (
                     <>
