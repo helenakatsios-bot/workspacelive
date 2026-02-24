@@ -501,6 +501,27 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/activities", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT a.*, u.name as user_name FROM activities a LEFT JOIN users u ON a.created_by = u.id ORDER BY a.created_at DESC LIMIT 100`
+      );
+      res.json(result.rows.map((r: any) => ({
+        id: r.id,
+        entityType: r.entity_type,
+        entityId: r.entity_id,
+        action: r.activity_type,
+        content: r.content,
+        userName: r.user_name || "System",
+        details: r.content,
+        createdAt: r.created_at,
+      })));
+    } catch (error) {
+      console.error("Get all activities error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/companies/:id/activities", requireAuth, async (req, res) => {
     try {
       const activities = await storage.getActivitiesByEntity("company", req.params.id);

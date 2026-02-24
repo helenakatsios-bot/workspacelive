@@ -4,7 +4,7 @@ import { Activity, Building2, ShoppingCart, Target, FileText, User } from "lucid
 import { format } from "date-fns";
 
 export default function ActivityFeedPage() {
-  const { data: auditLogs } = useQuery<any[]>({ queryKey: ["/api/audit-logs"] });
+  const { data: auditLogs } = useQuery<any[]>({ queryKey: ["/api/activities"] });
 
   const iconMap: Record<string, any> = {
     company: Building2,
