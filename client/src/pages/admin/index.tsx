@@ -1260,6 +1260,8 @@ function PortalUsersManagement() {
   const [editUser, setEditUser] = useState<any>(null);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
+  const [portalSearch, setPortalSearch] = useState("");
+  const [portalPage, setPortalPage] = useState(0);
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -1413,12 +1415,39 @@ function PortalUsersManagement() {
             </Button>
           </div>
 
-          {isLoading ? (
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, email, or company..."
+                value={portalSearch}
+                onChange={(e) => { setPortalSearch(e.target.value); setPortalPage(0); }}
+                className="pl-8"
+                data-testid="input-search-portal-users"
+              />
+            </div>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">
+              {portalUsers?.length || 0} total users
+            </span>
+          </div>
+
+          {(() => {
+            const PAGE_SIZE = 50;
+            const filtered = (portalUsers || []).filter((pu: any) => {
+              if (!portalSearch) return true;
+              const q = portalSearch.toLowerCase();
+              return pu.name.toLowerCase().includes(q) || pu.email.toLowerCase().includes(q) || (pu.companyName || "").toLowerCase().includes(q);
+            });
+            const paged = filtered.slice(portalPage * PAGE_SIZE, (portalPage + 1) * PAGE_SIZE);
+            const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+
+            return isLoading ? (
             <div className="space-y-2">
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
             </div>
-          ) : portalUsers && portalUsers.length > 0 ? (
+          ) : paged.length > 0 ? (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1433,7 +1462,7 @@ function PortalUsersManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {portalUsers.map((pu: any) => (
+                {paged.map((pu: any) => (
                   <TableRow key={pu.id} data-testid={`row-portal-user-${pu.id}`}>
                     <TableCell className="font-medium">{pu.name}</TableCell>
                     <TableCell className="text-sm">{pu.email}</TableCell>
@@ -1502,13 +1531,43 @@ function PortalUsersManagement() {
                 ))}
               </TableBody>
             </Table>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-4">
+                <p className="text-sm text-muted-foreground">
+                  Showing {portalPage * PAGE_SIZE + 1}–{Math.min((portalPage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length} users
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={portalPage === 0}
+                    onClick={() => setPortalPage(p => p - 1)}
+                    data-testid="button-portal-prev"
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">Page {portalPage + 1} of {totalPages}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={portalPage >= totalPages - 1}
+                    onClick={() => setPortalPage(p => p + 1)}
+                    data-testid="button-portal-next"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+            </>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p>No portal users yet</p>
-              <p className="text-xs mt-1">Add portal users to give your customers access to view orders and invoices</p>
+              <p>{portalSearch ? "No matching portal users" : "No portal users yet"}</p>
+              <p className="text-xs mt-1">{portalSearch ? "Try a different search term" : "Add portal users to give your customers access to view orders and invoices"}</p>
             </div>
-          )}
+          );
+          })()}
         </CardContent>
       </Card>
 
