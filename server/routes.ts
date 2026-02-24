@@ -5148,14 +5148,20 @@ Rules:
       const productMap = new Map<string, any>();
       const variantMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
 
+      const categoryRenames: Record<string, string> = {};
+      if (portalCategories.map(c => c.toUpperCase()).includes('CASES')) {
+        categoryRenames['CASES'] = 'RAW MATERIAL';
+      }
+
       for (const row of plPrices.rows) {
+        const displayCategory = categoryRenames[row.category] || row.category;
         if (!productMap.has(row.product_id)) {
           productMap.set(row.product_id, {
             id: row.product_id,
             sku: row.sku,
             name: row.name,
             description: row.description,
-            category: row.category,
+            category: displayCategory,
             unitPrice: "0",
           });
         }
