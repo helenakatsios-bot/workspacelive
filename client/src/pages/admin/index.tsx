@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2, Webhook, Key, Globe, Building2 } from "lucide-react";
+import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2, Webhook, Key, Globe, Building2, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1257,6 +1257,9 @@ function PortalUsersManagement() {
   const { toast } = useToast();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [editUser, setEditUser] = useState<any>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -1327,6 +1330,20 @@ function PortalUsersManagement() {
     },
   });
 
+  const editMutation = useMutation({
+    mutationFn: async ({ id, name, email }: { id: string; name: string; email: string }) => {
+      return apiRequest("PATCH", `/api/admin/portal-users/${id}`, { name, email });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-users"] });
+      toast({ title: "Portal user updated" });
+      setEditUser(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error?.message || "Failed to update portal user", variant: "destructive" });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       return apiRequest("DELETE", `/api/admin/portal-users/${id}`);
@@ -1351,10 +1368,20 @@ function PortalUsersManagement() {
             <CardTitle>Customer Portal</CardTitle>
             <CardDescription>Manage portal access for your B2B customers</CardDescription>
           </div>
-          <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-create-portal-user">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Portal User
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => window.open("/api/admin/portal-users/export-csv", "_blank")}
+              data-testid="button-export-portal-csv"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export CSV
+            </Button>
+            <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-create-portal-user">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Portal User
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-2 p-3 rounded-md border bg-muted/30">
@@ -1447,14 +1474,29 @@ function PortalUsersManagement() {
                       {format(new Date(pu.createdAt), "MMM d, yyyy")}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setDeleteUserId(pu.id)}
-                        data-testid={`button-delete-portal-user-${pu.id}`}
-                      >
-                        <Trash2 className="w-4 h-4 text-muted-foreground" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setEditUser(pu);
+                            setEditName(pu.name);
+                            setEditEmail(pu.email);
+                          }}
+                          title="Edit name/email"
+                          data-testid={`button-edit-portal-user-${pu.id}`}
+                        >
+                          <Pencil className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleteUserId(pu.id)}
+                          data-testid={`button-delete-portal-user-${pu.id}`}
+                        >
+                          <Trash2 className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1556,6 +1598,56 @@ function PortalUsersManagement() {
               <Button type="submit" disabled={createMutation.isPending} data-testid="button-save-portal-user">
                 {createMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 Create User
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Portal User</DialogTitle>
+            <DialogDescription>Update the name or email for this portal user.</DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (editUser) {
+                editMutation.mutate({ id: editUser.id, name: editName, email: editEmail });
+              }
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                required
+                data-testid="input-edit-portal-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email (Login)</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                required
+                data-testid="input-edit-portal-email"
+              />
+              <p className="text-xs text-muted-foreground">This is the email they use to log in to the portal</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setEditUser(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={editMutation.isPending} data-testid="button-save-edit-portal">
+                {editMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Save Changes
               </Button>
             </div>
           </form>
