@@ -5687,6 +5687,45 @@ Rules:
     }
   });
 
+  app.get("/api/admin/portal-users/export-csv", requireAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT pu.name, pu.email, c.first_name, c.last_name,
+          COALESCE(co.trading_name, co.legal_name, '') as company_name
+        FROM portal_users pu
+        LEFT JOIN contacts c ON c.id = pu.contact_id
+        LEFT JOIN companies co ON co.id = pu.company_id
+        ORDER BY pu.name
+      `);
+
+      let csv = 'Name,Email (Login),Password,Company\n';
+      for (const row of result.rows) {
+        let password = '(unknown)';
+        if (row.first_name || row.last_name) {
+          const firstName = (row.first_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+          const lastName = (row.last_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+          if (firstName.length >= 3) {
+            password = firstName.substring(0, 9);
+          } else if (lastName.length >= 3) {
+            password = lastName.substring(0, 9);
+          } else if ((firstName + lastName).length >= 3) {
+            password = (firstName + lastName).substring(0, 9);
+          } else {
+            password = 'purax1';
+          }
+        }
+        const escapeCsv = (s: string) => '"' + s.replace(/"/g, '""') + '"';
+        csv += [escapeCsv(row.name), escapeCsv(row.email), escapeCsv(password), escapeCsv(row.company_name)].join(',') + '\n';
+      }
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="portal_accounts.csv"');
+      res.send(csv);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to export portal users" });
+    }
+  });
+
   app.delete("/api/admin/portal-users/:id", requireAdmin, async (req, res) => {
     try {
       await db.delete(portalUsers).where(eq(portalUsers.id, req.params.id));

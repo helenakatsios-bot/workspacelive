@@ -24,6 +24,7 @@ import {
   Package,
   FileText,
   DollarSign,
+  Download,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -288,6 +289,14 @@ export default function CustomerPortalPage() {
                 data-testid="input-search-portal-users"
               />
             </div>
+            <Button
+              variant="outline"
+              onClick={() => window.open("/api/admin/portal-users/export-csv", "_blank")}
+              data-testid="button-export-portal-users"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export CSV
+            </Button>
             <Button onClick={() => setShowCreateDialog(true)} data-testid="button-add-portal-user">
               <Plus className="w-4 h-4 mr-2" />
               Add Portal User
