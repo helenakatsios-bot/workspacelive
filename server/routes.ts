@@ -5731,6 +5731,314 @@ Rules:
     }
   });
 
+  // ==================== CRM TASKS ROUTES ====================
+  app.get("/api/crm/tasks", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT t.*, u.name as assigned_to_name, c.trading_name as company_name
+        FROM crm_tasks t
+        LEFT JOIN users u ON u.id = t.assigned_to
+        LEFT JOIN companies c ON c.id = t.company_id
+        ORDER BY t.created_at DESC
+      `);
+      res.json(result.rows);
+    } catch (error) {
+      console.error("Error fetching tasks:", error);
+      res.status(500).json({ message: "Failed to fetch tasks" });
+    }
+  });
+
+  app.post("/api/crm/tasks", requireEdit, async (req, res) => {
+    try {
+      const { title, description, status, priority, dueDate, assignedTo, companyId, contactId, dealId, completedAt } = req.body;
+      const result = await pool.query(
+        `INSERT INTO crm_tasks (id, title, description, status, priority, due_date, assigned_to, company_id, contact_id, deal_id, created_by, completed_at, created_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+         RETURNING *`,
+        [title, description || null, status || 'todo', priority || 'medium', dueDate || null, assignedTo || null, companyId || null, contactId || null, dealId || null, req.session.userId, completedAt || null]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      console.error("Error creating task:", error);
+      res.status(500).json({ message: "Failed to create task" });
+    }
+  });
+
+  app.patch("/api/crm/tasks/:id", requireEdit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { title, description, status, priority, dueDate, assignedTo, companyId, contactId, dealId, completedAt } = req.body;
+      const result = await pool.query(
+        `UPDATE crm_tasks SET title = COALESCE($1, title), description = COALESCE($2, description), status = COALESCE($3, status), priority = COALESCE($4, priority), due_date = $5, assigned_to = $6, company_id = $7, contact_id = $8, deal_id = $9, completed_at = $10
+         WHERE id = $11 RETURNING *`,
+        [title, description, status, priority, dueDate !== undefined ? dueDate : null, assignedTo !== undefined ? assignedTo : null, companyId !== undefined ? companyId : null, contactId !== undefined ? contactId : null, dealId !== undefined ? dealId : null, completedAt !== undefined ? completedAt : null, id]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error("Error updating task:", error);
+      res.status(500).json({ message: "Failed to update task" });
+    }
+  });
+
+  app.delete("/api/crm/tasks/:id", requireEdit, async (req, res) => {
+    try {
+      const result = await pool.query("DELETE FROM crm_tasks WHERE id = $1 RETURNING id", [req.params.id]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      res.json({ message: "Task deleted" });
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      res.status(500).json({ message: "Failed to delete task" });
+    }
+  });
+
+  // ==================== CRM TICKETS ROUTES ====================
+  app.get("/api/crm/tickets", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT t.*, c.trading_name as company_name, u.name as assigned_to_name, u2.name as created_by_name
+        FROM crm_tickets t
+        LEFT JOIN companies c ON c.id = t.company_id
+        LEFT JOIN users u ON u.id = t.assigned_to
+        LEFT JOIN users u2 ON u2.id = t.created_by
+        ORDER BY t.created_at DESC
+      `);
+      res.json(result.rows);
+    } catch (error) {
+      console.error("Error fetching tickets:", error);
+      res.status(500).json({ message: "Failed to fetch tickets" });
+    }
+  });
+
+  app.post("/api/crm/tickets", requireEdit, async (req, res) => {
+    try {
+      const { subject, description, status, priority, category, companyId, contactId, assignedTo } = req.body;
+      const countResult = await pool.query("SELECT COUNT(*) as cnt FROM crm_tickets");
+      const ticketNumber = "TKT-" + (parseInt(countResult.rows[0].cnt) + 1);
+      const result = await pool.query(
+        `INSERT INTO crm_tickets (id, ticket_number, subject, description, status, priority, category, company_id, contact_id, assigned_to, created_by, created_at, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+         RETURNING *`,
+        [ticketNumber, subject, description || null, status || 'open', priority || 'medium', category || 'general', companyId || null, contactId || null, assignedTo || null, req.session.userId]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      console.error("Error creating ticket:", error);
+      res.status(500).json({ message: "Failed to create ticket" });
+    }
+  });
+
+  app.patch("/api/crm/tickets/:id", requireEdit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { subject, description, status, priority, category, companyId, contactId, assignedTo, resolvedAt } = req.body;
+      const result = await pool.query(
+        `UPDATE crm_tickets SET subject = COALESCE($1, subject), description = COALESCE($2, description), status = COALESCE($3, status), priority = COALESCE($4, priority), category = COALESCE($5, category), company_id = $6, contact_id = $7, assigned_to = $8, resolved_at = $9, updated_at = NOW()
+         WHERE id = $10 RETURNING *`,
+        [subject, description, status, priority, category, companyId !== undefined ? companyId : null, contactId !== undefined ? contactId : null, assignedTo !== undefined ? assignedTo : null, resolvedAt !== undefined ? resolvedAt : null, id]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error("Error updating ticket:", error);
+      res.status(500).json({ message: "Failed to update ticket" });
+    }
+  });
+
+  app.delete("/api/crm/tickets/:id", requireEdit, async (req, res) => {
+    try {
+      const result = await pool.query("DELETE FROM crm_tickets WHERE id = $1 RETURNING id", [req.params.id]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
+      res.json({ message: "Ticket deleted" });
+    } catch (error) {
+      console.error("Error deleting ticket:", error);
+      res.status(500).json({ message: "Failed to delete ticket" });
+    }
+  });
+
+  // ==================== CRM CALLS ROUTES ====================
+  app.get("/api/crm/calls", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT cl.*, c.trading_name as company_name, ct.first_name || ' ' || ct.last_name as contact_name, u.name as called_by_name
+        FROM crm_calls cl
+        LEFT JOIN companies c ON c.id = cl.company_id
+        LEFT JOIN contacts ct ON ct.id = cl.contact_id
+        LEFT JOIN users u ON u.id = cl.called_by
+        ORDER BY cl.called_at DESC
+      `);
+      res.json(result.rows);
+    } catch (error) {
+      console.error("Error fetching calls:", error);
+      res.status(500).json({ message: "Failed to fetch calls" });
+    }
+  });
+
+  app.post("/api/crm/calls", requireEdit, async (req, res) => {
+    try {
+      const { direction, status, companyId, contactId, dealId, duration, notes, outcome, calledAt } = req.body;
+      const result = await pool.query(
+        `INSERT INTO crm_calls (id, direction, status, company_id, contact_id, deal_id, duration, notes, outcome, called_by, called_at, created_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+         RETURNING *`,
+        [direction || 'outbound', status || 'completed', companyId || null, contactId || null, dealId || null, duration || null, notes || null, outcome || null, req.session.userId, calledAt || new Date()]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      console.error("Error creating call:", error);
+      res.status(500).json({ message: "Failed to create call" });
+    }
+  });
+
+  app.delete("/api/crm/calls/:id", requireEdit, async (req, res) => {
+    try {
+      const result = await pool.query("DELETE FROM crm_calls WHERE id = $1 RETURNING id", [req.params.id]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: "Call not found" });
+      }
+      res.json({ message: "Call deleted" });
+    } catch (error) {
+      console.error("Error deleting call:", error);
+      res.status(500).json({ message: "Failed to delete call" });
+    }
+  });
+
+  // ==================== CRM MESSAGE TEMPLATES ROUTES ====================
+  app.get("/api/crm/message-templates", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT mt.*, u.name as created_by_name
+        FROM crm_message_templates mt
+        LEFT JOIN users u ON u.id = mt.created_by
+        ORDER BY mt.created_at DESC
+      `);
+      res.json(result.rows);
+    } catch (error) {
+      console.error("Error fetching message templates:", error);
+      res.status(500).json({ message: "Failed to fetch message templates" });
+    }
+  });
+
+  app.post("/api/crm/message-templates", requireEdit, async (req, res) => {
+    try {
+      const { name, subject, body, category } = req.body;
+      const result = await pool.query(
+        `INSERT INTO crm_message_templates (id, name, subject, body, category, created_by, created_at, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())
+         RETURNING *`,
+        [name, subject || null, body, category || 'general', req.session.userId]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      console.error("Error creating message template:", error);
+      res.status(500).json({ message: "Failed to create message template" });
+    }
+  });
+
+  app.patch("/api/crm/message-templates/:id", requireEdit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, subject, body, category } = req.body;
+      const result = await pool.query(
+        `UPDATE crm_message_templates SET name = COALESCE($1, name), subject = COALESCE($2, subject), body = COALESCE($3, body), category = COALESCE($4, category), updated_at = NOW()
+         WHERE id = $5 RETURNING *`,
+        [name, subject, body, category, id]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: "Message template not found" });
+      }
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error("Error updating message template:", error);
+      res.status(500).json({ message: "Failed to update message template" });
+    }
+  });
+
+  app.delete("/api/crm/message-templates/:id", requireEdit, async (req, res) => {
+    try {
+      const result = await pool.query("DELETE FROM crm_message_templates WHERE id = $1 RETURNING id", [req.params.id]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: "Message template not found" });
+      }
+      res.json({ message: "Message template deleted" });
+    } catch (error) {
+      console.error("Error deleting message template:", error);
+      res.status(500).json({ message: "Failed to delete message template" });
+    }
+  });
+
+  // ==================== CRM SNIPPETS ROUTES ====================
+  app.get("/api/crm/snippets", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT s.*, u.name as created_by_name
+        FROM crm_snippets s
+        LEFT JOIN users u ON u.id = s.created_by
+        ORDER BY s.created_at DESC
+      `);
+      res.json(result.rows);
+    } catch (error) {
+      console.error("Error fetching snippets:", error);
+      res.status(500).json({ message: "Failed to fetch snippets" });
+    }
+  });
+
+  app.post("/api/crm/snippets", requireEdit, async (req, res) => {
+    try {
+      const { shortcut, content, category } = req.body;
+      const result = await pool.query(
+        `INSERT INTO crm_snippets (id, shortcut, content, category, created_by, created_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW())
+         RETURNING *`,
+        [shortcut, content, category || 'general', req.session.userId]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      console.error("Error creating snippet:", error);
+      res.status(500).json({ message: "Failed to create snippet" });
+    }
+  });
+
+  app.patch("/api/crm/snippets/:id", requireEdit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { shortcut, content, category } = req.body;
+      const result = await pool.query(
+        `UPDATE crm_snippets SET shortcut = COALESCE($1, shortcut), content = COALESCE($2, content), category = COALESCE($3, category)
+         WHERE id = $4 RETURNING *`,
+        [shortcut, content, category, id]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: "Snippet not found" });
+      }
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error("Error updating snippet:", error);
+      res.status(500).json({ message: "Failed to update snippet" });
+    }
+  });
+
+  app.delete("/api/crm/snippets/:id", requireEdit, async (req, res) => {
+    try {
+      const result = await pool.query("DELETE FROM crm_snippets WHERE id = $1 RETURNING id", [req.params.id]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: "Snippet not found" });
+      }
+      res.json({ message: "Snippet deleted" });
+    } catch (error) {
+      console.error("Error deleting snippet:", error);
+      res.status(500).json({ message: "Failed to delete snippet" });
+    }
+  });
+
   registerChatRoutes(app);
 
   return httpServer;

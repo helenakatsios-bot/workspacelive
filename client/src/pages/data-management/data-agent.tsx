@@ -1,109 +1,151 @@
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Search, MessageSquare, Database } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/page-header";
+import { Sparkles, AlertTriangle, CheckCircle2, TrendingUp, Bot } from "lucide-react";
+import { Link } from "wouter";
+import type { Company, Contact, Order } from "@shared/schema";
+
+function StatCard({ title, value, icon: Icon, isLoading }: {
+  title: string;
+  value: string | number;
+  icon: any;
+  isLoading: boolean;
+}) {
+  return (
+    <Card data-testid={`stat-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
+          <Icon className="w-4 h-4 text-primary" />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? <Skeleton className="h-8 w-20" /> : <div className="text-2xl font-bold">{value}</div>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function InsightCard({ title, count, type, isLoading }: {
+  title: string;
+  count: number;
+  type: "warning" | "success";
+  isLoading: boolean;
+}) {
+  const Icon = type === "warning" ? AlertTriangle : CheckCircle2;
+  const color = type === "warning" ? "text-amber-500" : "text-green-500";
+
+  return (
+    <Card data-testid={`insight-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+      <CardContent className="flex items-center gap-4 pt-6">
+        <div className={`w-10 h-10 rounded-md flex items-center justify-center flex-shrink-0 ${type === "warning" ? "bg-amber-500/10" : "bg-green-500/10"}`}>
+          <Icon className={`w-5 h-5 ${color}`} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{title}</p>
+          {isLoading ? (
+            <Skeleton className="h-4 w-16 mt-1" />
+          ) : (
+            <p className={`text-lg font-bold ${color}`}>{count}</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function DataAgentPage() {
-  const capabilities = [
-    {
-      title: "Web research",
-      description: "Data Agent works like a BDR to scour the web for company information, contact data, news, and business intelligence.",
-      icon: Search,
-    },
-    {
-      title: "Calls, transcripts, engagements",
-      description: "Ask Data Agent questions about any customer interaction to unlock insights from every customer touchpoint.",
-      icon: MessageSquare,
-    },
-    {
-      title: "Property data",
-      description: "Use Data Agent to reference, extract or summarize data from another property on the same record.",
-      icon: Database,
-    },
-  ];
+  const { data: companies, isLoading: loadingCompanies } = useQuery<Company[]>({
+    queryKey: ["/api/companies"],
+  });
+
+  const { data: contacts, isLoading: loadingContacts } = useQuery<Contact[]>({
+    queryKey: ["/api/contacts"],
+  });
+
+  const { data: orders, isLoading: loadingOrders } = useQuery<Order[]>({
+    queryKey: ["/api/orders"],
+  });
+
+  const isLoading = loadingCompanies || loadingContacts || loadingOrders;
+
+  const totalRevenue = orders?.reduce((sum, o) => sum + parseFloat(o.total || "0"), 0) ?? 0;
+
+  const now = new Date();
+  const cutoff180 = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+
+  const missingEmail = companies?.filter(c => !c.emailAddresses || c.emailAddresses.length === 0).length ?? 0;
+  const contactsNoPhone = contacts?.filter(c => !c.phone).length ?? 0;
+
+  const companiesWithRecentOrders = new Set(
+    orders?.filter(o => o.orderDate && new Date(o.orderDate) > cutoff180).map(o => o.companyId) ?? []
+  );
+  const inactiveCompanies = companies?.filter(c => !companiesWithRecentOrders.has(c.id)).length ?? 0;
+
+  const noGrade = companies?.filter(c => !c.clientGrade).length ?? 0;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 flex-wrap">
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Data Agent</h1>
-        <Badge variant="secondary">AI-Powered</Badge>
+      <PageHeader
+        title="Data Agent"
+        description="AI-powered data analysis and insights"
+      >
+        <Link href="/service/customer-agent">
+          <Button data-testid="button-ask-millie">
+            <Bot className="w-4 h-4 mr-2" />
+            Get Help from Millie
+          </Button>
+        </Link>
+      </PageHeader>
+
+      <div>
+        <h2 className="text-lg font-semibold mb-3" data-testid="text-data-overview">Data Overview</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard title="Total Companies" value={companies?.length ?? 0} icon={TrendingUp} isLoading={isLoading} />
+          <StatCard title="Total Contacts" value={contacts?.length ?? 0} icon={TrendingUp} isLoading={isLoading} />
+          <StatCard title="Total Orders" value={orders?.length ?? 0} icon={TrendingUp} isLoading={isLoading} />
+          <StatCard title="Total Revenue" value={`$${totalRevenue.toLocaleString("en-AU", { minimumFractionDigits: 2 })}`} icon={TrendingUp} isLoading={isLoading} />
+        </div>
       </div>
 
-      <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-          <TabsTrigger value="prompt-library" data-testid="tab-prompt-library">Prompt Library</TabsTrigger>
-          <TabsTrigger value="manage" data-testid="tab-manage">Manage</TabsTrigger>
-        </TabsList>
+      <div>
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <h2 className="text-lg font-semibold" data-testid="text-quick-insights">Quick Insights</h2>
+          <Badge variant="secondary">
+            <Sparkles className="w-3 h-3 mr-1" />
+            Auto-computed
+          </Badge>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <InsightCard title="Companies Missing Email" count={missingEmail} type={missingEmail > 0 ? "warning" : "success"} isLoading={isLoading} />
+          <InsightCard title="Contacts Without Phone" count={contactsNoPhone} type={contactsNoPhone > 0 ? "warning" : "success"} isLoading={isLoading} />
+          <InsightCard title="Inactive Companies (180+ days)" count={inactiveCompanies} type={inactiveCompanies > 0 ? "warning" : "success"} isLoading={isLoading} />
+          <InsightCard title="Companies Without Grade" count={noGrade} type={noGrade > 0 ? "warning" : "success"} isLoading={isLoading} />
+        </div>
+      </div>
 
-        <TabsContent value="overview" className="mt-6 space-y-8">
-          <div>
-            <h2 className="text-xl font-bold mb-2">Welcome to Data Agent</h2>
-            <p className="text-muted-foreground max-w-2xl">
-              Your personal data operations professional. Use AI to answer questions, transform your data, and enhance your workflows.
+      <Card data-testid="card-millie-cta">
+        <CardContent className="flex flex-col sm:flex-row items-center gap-4 pt-6">
+          <div className="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <Bot className="w-6 h-6 text-primary" />
+          </div>
+          <div className="flex-1 text-center sm:text-left">
+            <h3 className="font-semibold">Need deeper analysis?</h3>
+            <p className="text-sm text-muted-foreground">
+              Ask Millie to analyze trends, find patterns, or generate reports from your CRM data.
             </p>
           </div>
-
-          <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">Powered by Data Agent</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {capabilities.map((cap) => (
-                <Card key={cap.title} data-testid={`card-capability-${cap.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                  <CardContent className="pt-6 space-y-3">
-                    <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
-                      <cap.icon className="w-4 h-4 text-primary" />
-                    </div>
-                    <h3 className="font-semibold text-sm">{cap.title}</h3>
-                    <p className="text-xs text-muted-foreground">{cap.description}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <h2 className="text-lg font-bold mb-4">Data Agent quick actions for your CRM</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card>
-                <CardContent className="pt-6 space-y-2">
-                  <h3 className="font-semibold text-sm">Enrich company records</h3>
-                  <p className="text-xs text-muted-foreground">Automatically fill in missing company details like industry, size, and website.</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6 space-y-2">
-                  <h3 className="font-semibold text-sm">Find contact information</h3>
-                  <p className="text-xs text-muted-foreground">Research and add missing phone numbers, emails, and job titles for contacts.</p>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="prompt-library" className="mt-6">
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16 gap-3">
-              <Sparkles className="w-10 h-10 text-muted-foreground" />
-              <p className="text-muted-foreground">Prompt library coming soon</p>
-              <p className="text-sm text-muted-foreground text-center max-w-md">
-                Save and reuse prompts to streamline your data operations.
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="manage" className="mt-6">
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16 gap-3">
-              <Sparkles className="w-10 h-10 text-muted-foreground" />
-              <p className="text-muted-foreground">Management settings coming soon</p>
-              <p className="text-sm text-muted-foreground text-center max-w-md">
-                Configure Data Agent permissions and usage settings.
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          <Link href="/service/customer-agent">
+            <Button variant="outline" data-testid="button-ask-millie-card">
+              <Sparkles className="w-4 h-4 mr-2" />
+              Ask Millie
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
     </div>
   );
 }

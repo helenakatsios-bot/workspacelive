@@ -586,6 +586,99 @@ export const insertPriceListPriceSchema = createInsertSchema(priceListPrices).om
 export type InsertPriceListPrice = z.infer<typeof insertPriceListPriceSchema>;
 export type PriceListPrice = typeof priceListPrices.$inferSelect;
 
+// ============ CRM TASKS ============
+export const crmTasks = pgTable("crm_tasks", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("todo"),
+  priority: text("priority").notNull().default("medium"),
+  dueDate: timestamp("due_date"),
+  assignedTo: varchar("assigned_to", { length: 36 }).references(() => users.id),
+  companyId: varchar("company_id", { length: 36 }).references(() => companies.id),
+  contactId: varchar("contact_id", { length: 36 }).references(() => contacts.id),
+  dealId: varchar("deal_id", { length: 36 }).references(() => deals.id),
+  createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertCrmTaskSchema = createInsertSchema(crmTasks).omit({ id: true, createdAt: true });
+export type InsertCrmTask = z.infer<typeof insertCrmTaskSchema>;
+export type CrmTask = typeof crmTasks.$inferSelect;
+
+// ============ CRM TICKETS ============
+export const crmTickets = pgTable("crm_tickets", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  ticketNumber: text("ticket_number").notNull(),
+  subject: text("subject").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("open"),
+  priority: text("priority").notNull().default("medium"),
+  category: text("category").default("general"),
+  companyId: varchar("company_id", { length: 36 }).references(() => companies.id),
+  contactId: varchar("contact_id", { length: 36 }).references(() => contacts.id),
+  assignedTo: varchar("assigned_to", { length: 36 }).references(() => users.id),
+  createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertCrmTicketSchema = createInsertSchema(crmTickets).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCrmTicket = z.infer<typeof insertCrmTicketSchema>;
+export type CrmTicket = typeof crmTickets.$inferSelect;
+
+// ============ CRM CALLS ============
+export const crmCalls = pgTable("crm_calls", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  direction: text("direction").notNull().default("outbound"),
+  status: text("status").notNull().default("completed"),
+  companyId: varchar("company_id", { length: 36 }).references(() => companies.id),
+  contactId: varchar("contact_id", { length: 36 }).references(() => contacts.id),
+  dealId: varchar("deal_id", { length: 36 }).references(() => deals.id),
+  duration: integer("duration"),
+  notes: text("notes"),
+  outcome: text("outcome"),
+  calledBy: varchar("called_by", { length: 36 }).references(() => users.id),
+  calledAt: timestamp("called_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertCrmCallSchema = createInsertSchema(crmCalls).omit({ id: true, createdAt: true });
+export type InsertCrmCall = z.infer<typeof insertCrmCallSchema>;
+export type CrmCall = typeof crmCalls.$inferSelect;
+
+// ============ CRM MESSAGE TEMPLATES ============
+export const crmMessageTemplates = pgTable("crm_message_templates", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  subject: text("subject"),
+  body: text("body").notNull(),
+  category: text("category").default("general"),
+  createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertCrmMessageTemplateSchema = createInsertSchema(crmMessageTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCrmMessageTemplate = z.infer<typeof insertCrmMessageTemplateSchema>;
+export type CrmMessageTemplate = typeof crmMessageTemplates.$inferSelect;
+
+// ============ CRM SNIPPETS ============
+export const crmSnippets = pgTable("crm_snippets", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  shortcut: text("shortcut").notNull(),
+  content: text("content").notNull(),
+  category: text("category").default("general"),
+  createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertCrmSnippetSchema = createInsertSchema(crmSnippets).omit({ id: true, createdAt: true });
+export type InsertCrmSnippet = z.infer<typeof insertCrmSnippetSchema>;
+export type CrmSnippet = typeof crmSnippets.$inferSelect;
+
 // ============ VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),

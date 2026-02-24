@@ -1,98 +1,145 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Upload, RefreshCw, ArrowRightLeft, Zap, Plug } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/page-header";
+import { Plug, CheckCircle2, ExternalLink, RefreshCw, Mail, Receipt, ShoppingCart, Users, Globe, FileText } from "lucide-react";
 
-export default function DataIntegrationPage() {
-  const integrationOptions = [
-    {
-      title: "Import a file",
-      description: "One-time import from a file — directly into your CRM.",
-      action: "Import data",
-      icon: Upload,
-    },
-    {
-      title: "Sync from apps",
-      description: "Keep data synced between your CRM and external apps.",
-      action: "Connect an app",
-      icon: RefreshCw,
-    },
-    {
-      title: "Transfer your data",
-      description: "Seamlessly transfer your data using the Smart Transfer tool.",
-      action: "Transfer data",
-      icon: ArrowRightLeft,
-    },
-    {
-      title: "Make sense of intent data",
-      description: "Aggregate and score cross-channel engagement to uncover who's ready to buy.",
-      action: "Learn more",
-      icon: Zap,
-    },
-  ];
+interface Integration {
+  name: string;
+  description: string;
+  icon: any;
+  status: "Connected" | "Active" | "Not Connected";
+  lastSync?: string;
+}
+
+const connectedIntegrations: Integration[] = [
+  {
+    name: "Xero Accounting",
+    description: "Syncs invoices, payments, and company data between your CRM and Xero accounting software.",
+    icon: Receipt,
+    status: "Connected",
+    lastSync: "Automatic sync on invoice creation",
+  },
+  {
+    name: "Outlook Email",
+    description: "Syncs emails from Outlook to automatically link communications with companies and contacts.",
+    icon: Mail,
+    status: "Connected",
+    lastSync: "Periodic email sync",
+  },
+  {
+    name: "Purax App",
+    description: "Pushes confirmed orders to the Purax warehouse management system for fulfillment.",
+    icon: ShoppingCart,
+    status: "Connected",
+    lastSync: "On order confirmation",
+  },
+  {
+    name: "Customer Portal",
+    description: "Self-service portal for customers to browse products, place orders, and view order history.",
+    icon: Globe,
+    status: "Active",
+    lastSync: "Real-time",
+  },
+];
+
+const availableIntegrations: Integration[] = [
+  {
+    name: "Shopify",
+    description: "Sync products, orders, and customer data from your Shopify store.",
+    icon: ShoppingCart,
+    status: "Not Connected",
+  },
+  {
+    name: "Mailchimp",
+    description: "Sync contacts for email marketing campaigns and audience management.",
+    icon: Mail,
+    status: "Not Connected",
+  },
+  {
+    name: "Google Sheets",
+    description: "Export and sync CRM data with Google Sheets for custom reporting.",
+    icon: FileText,
+    status: "Not Connected",
+  },
+];
+
+function IntegrationCard({ integration }: { integration: Integration }) {
+  const statusColor = integration.status === "Connected"
+    ? "bg-green-500/10 text-green-700 dark:text-green-400"
+    : integration.status === "Active"
+      ? "bg-blue-500/10 text-blue-700 dark:text-blue-400"
+      : "bg-muted text-muted-foreground";
 
   return (
+    <Card data-testid={`card-integration-${integration.name.toLowerCase().replace(/\s+/g, "-")}`}>
+      <CardContent className="pt-6 space-y-4">
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <integration.icon className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm">{integration.name}</h3>
+              <Badge variant="secondary" className={`mt-1 ${statusColor}`}>
+                {integration.status === "Connected" || integration.status === "Active" ? (
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                ) : null}
+                {integration.status}
+              </Badge>
+            </div>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">{integration.description}</p>
+        {integration.lastSync && (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <RefreshCw className="w-3 h-3" />
+            <span>{integration.lastSync}</span>
+          </div>
+        )}
+        <div>
+          {integration.status !== "Not Connected" ? (
+            <Button variant="outline" size="sm" data-testid={`button-manage-${integration.name.toLowerCase().replace(/\s+/g, "-")}`}>
+              <ExternalLink className="w-3 h-3 mr-1" />
+              Manage
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" data-testid={`button-connect-${integration.name.toLowerCase().replace(/\s+/g, "-")}`}>
+              <Plug className="w-3 h-3 mr-1" />
+              Connect
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function DataIntegrationPage() {
+  return (
     <div className="space-y-6">
+      <PageHeader
+        title="Data Integration"
+        description="Manage data connections and integrations"
+      />
+
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Data Integration</h1>
-        <p className="text-muted-foreground">Connect, import, and sync data across your systems</p>
+        <h2 className="text-lg font-semibold mb-3" data-testid="text-connected-systems">Connected Systems</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {connectedIntegrations.map((integration) => (
+            <IntegrationCard key={integration.name} integration={integration} />
+          ))}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {integrationOptions.map((option) => (
-          <Card key={option.title} data-testid={`card-${option.title.toLowerCase().replace(/\s+/g, "-")}`}>
-            <CardContent className="pt-6 space-y-4">
-              <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
-                <option.icon className="w-5 h-5 text-primary" />
-              </div>
-              <h3 className="font-semibold text-sm">{option.title}</h3>
-              <p className="text-xs text-muted-foreground">{option.description}</p>
-              <Button variant="outline" size="sm" data-testid={`button-${option.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                {option.action}
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="space-y-4">
-        <h2 className="text-lg font-bold">Monitor your imports & syncs</h2>
-        <Tabs defaultValue="file-imports">
-          <TabsList>
-            <TabsTrigger value="file-imports" data-testid="tab-file-imports">File Imports</TabsTrigger>
-            <TabsTrigger value="app-syncs" data-testid="tab-app-syncs">App Syncs</TabsTrigger>
-            <TabsTrigger value="data-studio-syncs" data-testid="tab-data-studio-syncs">Data Studio Syncs</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="file-imports" className="mt-4">
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12 gap-3">
-                <Upload className="w-10 h-10 text-muted-foreground" />
-                <p className="text-muted-foreground">No file imports yet</p>
-                <Button variant="outline" data-testid="button-import-file">Import a file</Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="app-syncs" className="mt-4">
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12 gap-3">
-                <Plug className="w-10 h-10 text-muted-foreground" />
-                <p className="text-muted-foreground">No app syncs configured</p>
-                <p className="text-sm text-muted-foreground text-center">Connect Xero or Outlook from Admin Settings to sync data.</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="data-studio-syncs" className="mt-4">
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12 gap-3">
-                <RefreshCw className="w-10 h-10 text-muted-foreground" />
-                <p className="text-muted-foreground">No data studio syncs yet</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+      <div>
+        <h2 className="text-lg font-semibold mb-3" data-testid="text-available-integrations">Available Integrations</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {availableIntegrations.map((integration) => (
+            <IntegrationCard key={integration.name} integration={integration} />
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -1,121 +1,265 @@
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Blocks, Building2, Users, Target, ShoppingCart, Receipt, FileText, Package } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/page-header";
+import { Blocks, Database, ArrowRight, Link2 } from "lucide-react";
+import type { Company, Contact, Deal, Order, Product, Invoice, Quote } from "@shared/schema";
+
+interface EntityField {
+  name: string;
+  type: string;
+  key?: boolean;
+}
+
+interface EntityDef {
+  name: string;
+  queryKey: string;
+  fields: EntityField[];
+  relationships: string[];
+}
+
+const entities: EntityDef[] = [
+  {
+    name: "Companies",
+    queryKey: "/api/companies",
+    fields: [
+      { name: "legalName", type: "text", key: true },
+      { name: "tradingName", type: "text" },
+      { name: "abn", type: "text" },
+      { name: "creditStatus", type: "enum" },
+      { name: "clientGrade", type: "text" },
+      { name: "priceListId", type: "fk" },
+      { name: "emailAddresses", type: "text[]" },
+      { name: "phone", type: "text" },
+      { name: "billingAddress", type: "text" },
+      { name: "shippingAddress", type: "text" },
+      { name: "totalRevenue", type: "decimal" },
+      { name: "lastOrderDate", type: "timestamp" },
+    ],
+    relationships: [
+      "Has many Contacts",
+      "Has many Orders",
+      "Has many Deals",
+      "Has many Invoices",
+      "Has many Quotes",
+    ],
+  },
+  {
+    name: "Contacts",
+    queryKey: "/api/contacts",
+    fields: [
+      { name: "firstName", type: "text", key: true },
+      { name: "lastName", type: "text" },
+      { name: "email", type: "text" },
+      { name: "phone", type: "text" },
+      { name: "companyId", type: "fk" },
+      { name: "position", type: "text" },
+    ],
+    relationships: [
+      "Belongs to Company",
+    ],
+  },
+  {
+    name: "Deals",
+    queryKey: "/api/deals",
+    fields: [
+      { name: "dealName", type: "text", key: true },
+      { name: "pipelineStage", type: "enum" },
+      { name: "estimatedValue", type: "decimal" },
+      { name: "probability", type: "integer" },
+      { name: "companyId", type: "fk" },
+      { name: "expectedCloseDate", type: "timestamp" },
+    ],
+    relationships: [
+      "Belongs to Company",
+      "Optionally linked to Contact",
+    ],
+  },
+  {
+    name: "Orders",
+    queryKey: "/api/orders",
+    fields: [
+      { name: "orderNumber", type: "text", key: true },
+      { name: "status", type: "enum" },
+      { name: "total", type: "decimal" },
+      { name: "companyId", type: "fk" },
+      { name: "orderDate", type: "timestamp" },
+      { name: "shippingMethod", type: "text" },
+    ],
+    relationships: [
+      "Belongs to Company",
+      "Has many Order Lines",
+      "Can generate Invoice",
+    ],
+  },
+  {
+    name: "Products",
+    queryKey: "/api/products",
+    fields: [
+      { name: "sku", type: "text", key: true },
+      { name: "name", type: "text" },
+      { name: "category", type: "text" },
+      { name: "unitPrice", type: "decimal" },
+      { name: "active", type: "boolean" },
+    ],
+    relationships: [
+      "Referenced in Order Lines",
+      "Referenced in Quote Lines",
+    ],
+  },
+  {
+    name: "Invoices",
+    queryKey: "/api/invoices",
+    fields: [
+      { name: "invoiceNumber", type: "text", key: true },
+      { name: "status", type: "enum" },
+      { name: "total", type: "decimal" },
+      { name: "companyId", type: "fk" },
+      { name: "issueDate", type: "timestamp" },
+      { name: "xeroInvoiceId", type: "text" },
+    ],
+    relationships: [
+      "Belongs to Company",
+      "Linked to Order",
+    ],
+  },
+  {
+    name: "Quotes",
+    queryKey: "/api/quotes",
+    fields: [
+      { name: "quoteNumber", type: "text", key: true },
+      { name: "status", type: "enum" },
+      { name: "total", type: "decimal" },
+      { name: "companyId", type: "fk" },
+      { name: "issueDate", type: "timestamp" },
+    ],
+    relationships: [
+      "Belongs to Company",
+      "Has many Quote Lines",
+      "Can convert to Order",
+    ],
+  },
+];
+
+function getTypeColor(type: string) {
+  switch (type) {
+    case "fk": return "bg-purple-500/10 text-purple-700 dark:text-purple-400";
+    case "enum": return "bg-amber-500/10 text-amber-700 dark:text-amber-400";
+    case "decimal": return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
+    case "timestamp": return "bg-blue-500/10 text-blue-700 dark:text-blue-400";
+    case "boolean": return "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400";
+    case "text[]": return "bg-rose-500/10 text-rose-700 dark:text-rose-400";
+    default: return "";
+  }
+}
+
+function EntityCard({ entity, recordCount, isLoading }: {
+  entity: EntityDef;
+  recordCount: number | undefined;
+  isLoading: boolean;
+}) {
+  return (
+    <Card data-testid={`card-entity-${entity.name.toLowerCase()}`}>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
+            <Database className="w-4 h-4 text-primary" />
+          </div>
+          <CardTitle className="text-base">{entity.name}</CardTitle>
+        </div>
+        {isLoading ? (
+          <Skeleton className="h-5 w-16" />
+        ) : (
+          <Badge variant="secondary">{recordCount ?? 0} records</Badge>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Fields</p>
+          <div className="space-y-1">
+            {entity.fields.map(field => (
+              <div key={field.name} className="flex items-center justify-between gap-2 text-sm py-1 border-b border-dashed last:border-0">
+                <div className="flex items-center gap-2">
+                  {field.key && <Blocks className="w-3 h-3 text-primary" />}
+                  <span className={field.key ? "font-medium" : ""}>{field.name}</span>
+                </div>
+                <Badge variant="secondary" className={`text-[10px] ${getTypeColor(field.type)}`}>
+                  {field.type}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Relationships</p>
+          <div className="space-y-1">
+            {entity.relationships.map(rel => (
+              <div key={rel} className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Link2 className="w-3 h-3 flex-shrink-0" />
+                <span>{rel}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function DataModelPage() {
-  const objects = [
-    { name: "Companies", icon: Building2, fields: 15, records: "—" },
-    { name: "Contacts", icon: Users, fields: 12, records: "—" },
-    { name: "Deals", icon: Target, fields: 10, records: "—" },
-    { name: "Orders", icon: ShoppingCart, fields: 14, records: "—" },
-    { name: "Invoices", icon: Receipt, fields: 12, records: "—" },
-    { name: "Quotes", icon: FileText, fields: 10, records: "—" },
-    { name: "Products", icon: Package, fields: 8, records: "—" },
-  ];
+  const { data: companies, isLoading: lc } = useQuery<Company[]>({ queryKey: ["/api/companies"] });
+  const { data: contacts, isLoading: lco } = useQuery<Contact[]>({ queryKey: ["/api/contacts"] });
+  const { data: deals, isLoading: ld } = useQuery<Deal[]>({ queryKey: ["/api/deals"] });
+  const { data: orders, isLoading: lo } = useQuery<Order[]>({ queryKey: ["/api/orders"] });
+  const { data: products, isLoading: lp } = useQuery<Product[]>({ queryKey: ["/api/products"] });
+  const { data: invoices, isLoading: li } = useQuery<Invoice[]>({ queryKey: ["/api/invoices"] });
+  const { data: quotes, isLoading: lq } = useQuery<Quote[]>({ queryKey: ["/api/quotes"] });
+
+  const counts: Record<string, number | undefined> = {
+    Companies: companies?.length,
+    Contacts: contacts?.length,
+    Deals: deals?.length,
+    Orders: orders?.length,
+    Products: products?.length,
+    Invoices: invoices?.length,
+    Quotes: quotes?.length,
+  };
+
+  const loadingMap: Record<string, boolean> = {
+    Companies: lc,
+    Contacts: lco,
+    Deals: ld,
+    Orders: lo,
+    Products: lp,
+    Invoices: li,
+    Quotes: lq,
+  };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Data Model</h1>
-        <p className="text-muted-foreground">The blueprint for how all your customer data is structured</p>
+      <PageHeader
+        title="Data Model"
+        description="CRM data structure and relationships"
+      />
+
+      <div className="flex items-center gap-2 flex-wrap mb-2">
+        <ArrowRight className="w-4 h-4 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">
+          Below is the entity relationship structure of your CRM. Each card shows the entity fields and how they connect to other entities.
+        </p>
       </div>
 
-      <Tabs defaultValue="intro">
-        <TabsList>
-          <TabsTrigger value="intro" data-testid="tab-intro">Intro</TabsTrigger>
-          <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-          <TabsTrigger value="limits" data-testid="tab-limits">Limits</TabsTrigger>
-          <TabsTrigger value="analysis" data-testid="tab-analysis">Analysis</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="intro" className="mt-6 space-y-6">
-          <div>
-            <h2 className="text-xl font-bold mb-2">Structure your data to grow ambitiously</h2>
-            <p className="text-muted-foreground max-w-2xl mb-4">
-              A data model is the blueprint for how all your customer data is structured, connected, and made usable across our tools. A good data model helps you:
-            </p>
-            <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground ml-2">
-              <li>Report on what matters</li>
-              <li>Segment your customers effectively</li>
-              <li>Automate work</li>
-            </ul>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardContent className="pt-6 space-y-3">
-                <h3 className="font-semibold">Build your data model with AI</h3>
-                <p className="text-sm text-muted-foreground">
-                  Let AI analyze your existing data and suggest improvements to your data structure for better reporting and automation.
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6 space-y-3">
-                <h3 className="font-semibold">Apply quick suggestions</h3>
-                <p className="text-sm text-muted-foreground">
-                  Review and apply suggested properties and relationships to improve your data model.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="overview" className="mt-6">
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold">CRM Objects</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {objects.map((obj) => (
-                <Card key={obj.name} data-testid={`card-object-${obj.name.toLowerCase()}`}>
-                  <CardContent className="flex items-center gap-4 pt-6">
-                    <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <obj.icon className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-sm">{obj.name}</h3>
-                      <p className="text-xs text-muted-foreground">{obj.fields} properties</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="limits" className="mt-6">
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <h3 className="font-semibold">Object Limits</h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2 p-3 rounded-md border">
-                  <span className="text-sm">Custom objects</span>
-                  <span className="text-sm text-muted-foreground">7 / unlimited</span>
-                </div>
-                <div className="flex items-center justify-between gap-2 p-3 rounded-md border">
-                  <span className="text-sm">Properties per object</span>
-                  <span className="text-sm text-muted-foreground">Up to 1,000</span>
-                </div>
-                <div className="flex items-center justify-between gap-2 p-3 rounded-md border">
-                  <span className="text-sm">Associations</span>
-                  <span className="text-sm text-muted-foreground">Unlimited</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="analysis" className="mt-6">
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16 gap-3">
-              <Blocks className="w-10 h-10 text-muted-foreground" />
-              <p className="text-muted-foreground">Data model analysis coming soon</p>
-              <p className="text-sm text-muted-foreground text-center max-w-md">
-                Get AI-powered suggestions to optimize your data structure and improve data quality.
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {entities.map(entity => (
+          <EntityCard
+            key={entity.name}
+            entity={entity}
+            recordCount={counts[entity.name]}
+            isLoading={loadingMap[entity.name]}
+          />
+        ))}
+      </div>
     </div>
   );
 }
