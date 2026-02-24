@@ -154,6 +154,18 @@ export default function CompanyDetailPage() {
     },
   });
 
+  const updatePortalCategoriesMutation = useMutation({
+    mutationFn: (portalCategories: string[]) =>
+      apiRequest("PATCH", `/api/companies/${params?.id}`, { portalCategories }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id] });
+      toast({ title: "Portal categories updated", description: "Extra portal categories saved." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update portal categories.", variant: "destructive" });
+    },
+  });
+
   const [emailsOpen, setEmailsOpen] = useState(true);
   const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
   const [expandedEmailBody, setExpandedEmailBody] = useState<string | null>(null);
@@ -753,6 +765,39 @@ export default function CompanyDetailPage() {
                     </p>
                   )}
                 </div>
+                {canEdit && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Portal Extra Categories</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {(company.portalCategories || []).map((cat: string) => (
+                        <Badge key={cat} variant="secondary" className="text-xs cursor-pointer" onClick={() => {
+                          const updated = (company.portalCategories || []).filter((c: string) => c !== cat);
+                          updatePortalCategoriesMutation.mutate(updated);
+                        }}>
+                          {cat} ×
+                        </Badge>
+                      ))}
+                    </div>
+                    <Select
+                      value=""
+                      onValueChange={(value) => {
+                        const current = company.portalCategories || [];
+                        if (!current.includes(value)) {
+                          updatePortalCategoriesMutation.mutate([...current, value]);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full mt-1 h-7 text-xs" data-testid="select-portal-categories">
+                        <SelectValue placeholder="Add category..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {['CASES', 'JACKETS', 'WINTER', 'BLANKETS'].filter(c => !(company.portalCategories || []).includes(c)).map((cat) => (
+                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-muted-foreground">Total Orders</p>
                   <p className="text-sm" data-testid="text-total-orders">{orders?.length || 0}</p>

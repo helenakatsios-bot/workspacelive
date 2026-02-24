@@ -5123,11 +5123,16 @@ Rules:
         return res.json([]);
       }
 
-      const hiddenCategories = [
+      const allHiddenCategories = [
         'CASES', '4 SEASONS CASE', 'CASSETTES CASES', 'CHANNELLED CASES',
         'GOLD PILLOW CASE', 'GOLD QUILT CASE', 'MATTRESS TOPPER CASE',
         'MEN JACKET', 'WOMAN JACKET', 'WINTER',
       ];
+      const portalCatsResult = await pool.query(`SELECT portal_categories FROM companies WHERE id = $1`, [companyId]);
+      const portalCategories = (portalCatsResult.rows[0]?.portal_categories || []) as string[];
+      const hiddenCategories = allHiddenCategories.filter(
+        cat => !portalCategories.map(pc => pc.toUpperCase()).includes(cat.toUpperCase())
+      );
       const plPrices = await pool.query(
         `SELECT plp.product_id, plp.filling, plp.weight, plp.unit_price,
                 p.id, p.sku, p.name, p.description, p.category

@@ -472,6 +472,21 @@ async function runStartupTasks() {
   }
 
   try {
+    await pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS portal_categories text[]`);
+    const interiorsResult = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'interiors' LIMIT 1`);
+    if (interiorsResult.rows.length > 0) {
+      const interiorsId = interiorsResult.rows[0].id;
+      await pool.query(
+        `UPDATE companies SET portal_categories = $1, price_list_id = COALESCE(price_list_id, $2)
+         WHERE LOWER(legal_name) = 'dyne' AND (portal_categories IS NULL OR portal_categories = '{}')`,
+        [['CASES'], interiorsId]
+      );
+    }
+  } catch (error) {
+    console.error("Portal categories column error:", error);
+  }
+
+  try {
     console.log("Running email-to-company backfill...");
     const emailsUpdated = await backfillEmailCompanyLinks();
     console.log(`Email backfill complete: ${emailsUpdated} emails linked to companies`);

@@ -37,6 +37,7 @@ export const companies = pgTable("companies", {
   clientGrade: text("client_grade"), // A (>500k), B (100k-500k), C (<100k)
   lastOrderDate: timestamp("last_order_date"),
   priceListId: varchar("price_list_id", { length: 36 }),
+  portalCategories: text("portal_categories").array(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [
