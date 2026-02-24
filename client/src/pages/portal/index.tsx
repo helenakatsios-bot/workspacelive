@@ -767,7 +767,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     for (const [cat, set] of Object.entries(wOpts)) weightOptions[cat] = toSorted(set);
     return { fillingOptions, weightOptions };
   }, [products]);
-  const FILLING_CATEGORIES = Object.keys(fillingOptions).filter(c => c !== 'RAW MATERIAL');
+  const FILLING_CATEGORIES = Object.keys(fillingOptions).filter(c => c !== 'RAW MATERIAL' && c !== 'BULK');
   const WEIGHT_CATEGORIES = Object.keys(weightOptions);
 
   const filteredProducts = useMemo(() => {
