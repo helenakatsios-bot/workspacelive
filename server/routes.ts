@@ -5748,23 +5748,43 @@ Rules:
     try {
       const result = await pool.query(`
         SELECT pu.id, pu.company_id, pu.contact_id, pu.name, pu.email, pu.active, pu.created_at, pu.last_login,
-          c.legal_name as company_name, c.payment_terms
+          COALESCE(co.trading_name, co.legal_name, '') as company_name, co.payment_terms,
+          ct.first_name, ct.last_name
         FROM portal_users pu
-        LEFT JOIN companies c ON c.id = pu.company_id
+        LEFT JOIN companies co ON co.id = pu.company_id
+        LEFT JOIN contacts ct ON ct.id = pu.contact_id
         ORDER BY pu.created_at DESC
       `);
-      res.json(result.rows.map((r: any) => ({
-        id: r.id,
-        companyId: r.company_id,
-        contactId: r.contact_id,
-        name: r.name,
-        email: r.email,
-        active: r.active,
-        createdAt: r.created_at,
-        lastLogin: r.last_login,
-        companyName: r.company_name,
-        paymentTerms: r.payment_terms,
-      })));
+      res.json(result.rows.map((r: any) => {
+        const firstName = (r.first_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+        const lastName = (r.last_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+        const nameParts = (r.name || '').trim().split(/\s+/);
+        const fallbackFirst = (nameParts[0] || '').toLowerCase().replace(/[^a-z]/g, '');
+        const fallbackLast = (nameParts.slice(1).join('') || '').toLowerCase().replace(/[^a-z]/g, '');
+        const fn = firstName || fallbackFirst;
+        const ln = lastName || fallbackLast;
+        let derivedPassword = 'purax1';
+        if (fn.length >= 3) {
+          derivedPassword = fn.substring(0, 9);
+        } else if (ln.length >= 3) {
+          derivedPassword = ln.substring(0, 9);
+        } else if ((fn + ln).length >= 3) {
+          derivedPassword = (fn + ln).substring(0, 9);
+        }
+        return {
+          id: r.id,
+          companyId: r.company_id,
+          contactId: r.contact_id,
+          name: r.name,
+          email: r.email,
+          active: r.active,
+          createdAt: r.created_at,
+          lastLogin: r.last_login,
+          companyName: r.company_name,
+          paymentTerms: r.payment_terms,
+          derivedPassword,
+        };
+      }));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch portal users" });
     }
