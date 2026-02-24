@@ -478,7 +478,8 @@ async function runStartupTasks() {
       const interiorsId = interiorsResult.rows[0].id;
       await pool.query(
         `UPDATE companies SET portal_categories = $1, price_list_id = COALESCE(price_list_id, $2)
-         WHERE LOWER(legal_name) = 'dyne' AND (portal_categories IS NULL OR portal_categories = '{}')`,
+         WHERE (LOWER(legal_name) = 'dyne' OR LOWER(legal_name) LIKE 'dyne manu%')
+         AND (portal_categories IS NULL OR portal_categories = '{}')`,
         [['CASES'], interiorsId]
       );
     }
