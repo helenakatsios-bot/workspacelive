@@ -483,6 +483,44 @@ async function runStartupTasks() {
         [['CASES'], interiorsId]
       );
     }
+
+    const pillowProducts = [
+      { sku: 'PFH-STDPILLOW', name: 'STANDARD PILLOW', category: 'PILLOW', defaultPrice: '15.00' },
+      { sku: 'PFH-QNPILLOW', name: 'QUEEN PILLOW', category: 'PILLOW', defaultPrice: '22.00' },
+      { sku: 'PFH-KGPILLOW', name: 'KING PILLOW', category: 'PILLOW', defaultPrice: '29.00' },
+    ];
+    const interiorsPrices: Record<string, string> = { 'PFH-STDPILLOW': '18.00', 'PFH-QNPILLOW': '27.00', 'PFH-KGPILLOW': '31.00' };
+    const standardPrices: Record<string, string> = { 'PFH-STDPILLOW': '15.00', 'PFH-QNPILLOW': '22.00', 'PFH-KGPILLOW': '29.00' };
+    const standardResult = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
+    const standardId = standardResult.rows[0]?.id;
+
+    for (const pp of pillowProducts) {
+      const existing = await pool.query(`SELECT id FROM products WHERE sku = $1 LIMIT 1`, [pp.sku]);
+      let productId: string;
+      if (existing.rows.length === 0) {
+        const ins = await pool.query(
+          `INSERT INTO products (id, sku, name, category, active, unit_price) VALUES (gen_random_uuid(), $1, $2, $3, true, $4) RETURNING id`,
+          [pp.sku, pp.name, pp.category, pp.defaultPrice]
+        );
+        productId = ins.rows[0].id;
+      } else {
+        productId = existing.rows[0].id;
+      }
+      if (interiorsResult.rows.length > 0) {
+        const intId = interiorsResult.rows[0].id;
+        const existsInt = await pool.query(`SELECT id FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 LIMIT 1`, [intId, productId]);
+        if (existsInt.rows.length === 0) {
+          await pool.query(`INSERT INTO price_list_prices (id, price_list_id, product_id, unit_price) VALUES (gen_random_uuid(), $1, $2, $3)`, [intId, productId, interiorsPrices[pp.sku]]);
+        }
+      }
+      if (standardId) {
+        const existsStd = await pool.query(`SELECT id FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 LIMIT 1`, [standardId, productId]);
+        if (existsStd.rows.length === 0) {
+          await pool.query(`INSERT INTO price_list_prices (id, price_list_id, product_id, unit_price) VALUES (gen_random_uuid(), $1, $2, $3)`, [standardId, productId, standardPrices[pp.sku]]);
+        }
+      }
+    }
+    console.log("Pillow products and prices ensured");
   } catch (error) {
     console.error("Portal categories column error:", error);
   }
