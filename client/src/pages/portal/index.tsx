@@ -778,6 +778,8 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   }, [products, search]);
 
   const PORTAL_CATEGORY_ORDER = [
+    'RAW MATERIAL',
+    'BULK',
     'INSERTS',
     '80% WINTER FILLED',
     '80% DUCK WINTER FILLED',
