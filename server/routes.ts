@@ -5455,6 +5455,137 @@ Rules:
     }
   });
 
+  app.get("/api/portal/order-requests/:id", requirePortalAuth, async (req, res) => {
+    try {
+      const requestId = req.params.id;
+      const companyId = req.session.portalCompanyId!;
+      const companyResult = await pool.query(`SELECT legal_name, trading_name FROM companies WHERE id = $1`, [companyId]);
+      const legalName = companyResult.rows[0]?.legal_name || "";
+      const tradingName = companyResult.rows[0]?.trading_name || "";
+      const result = await pool.query(
+        `SELECT * FROM customer_order_requests WHERE id = $1 AND (company_name = $2 OR ($3 != '' AND company_name = $3))`,
+        [requestId, legalName, tradingName]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: "Order request not found" });
+      }
+      const r = result.rows[0];
+      res.json({
+        id: r.id,
+        companyName: r.company_name,
+        contactName: r.contact_name,
+        contactEmail: r.contact_email,
+        contactPhone: r.contact_phone,
+        items: r.items,
+        status: r.status,
+        customerNotes: r.customer_notes,
+        shippingAddress: r.shipping_address,
+        createdAt: r.created_at,
+        convertedOrderId: r.converted_order_id,
+      });
+    } catch (error) {
+      console.error("Portal get order request error:", error);
+      res.status(500).json({ message: "Failed to fetch order request" });
+    }
+  });
+
+  app.patch("/api/portal/order-requests/:id", requirePortalAuth, async (req, res) => {
+    try {
+      const requestId = req.params.id;
+      const companyId = req.session.portalCompanyId!;
+      const companyResult = await pool.query(`SELECT legal_name, trading_name, price_list_id FROM companies WHERE id = $1`, [companyId]);
+      const legalName = companyResult.rows[0]?.legal_name || "";
+      const tradingName = companyResult.rows[0]?.trading_name || "";
+      const companyPriceListId = companyResult.rows[0]?.price_list_id;
+
+      const existing = await pool.query(
+        `SELECT * FROM customer_order_requests WHERE id = $1 AND (company_name = $2 OR ($3 != '' AND company_name = $3))`,
+        [requestId, legalName, tradingName]
+      );
+      if (existing.rows.length === 0) {
+        return res.status(404).json({ message: "Order request not found" });
+      }
+      if (existing.rows[0].status !== "pending") {
+        return res.status(400).json({ message: "This order has already been accepted and can no longer be edited" });
+      }
+
+      const { items, customItems, customerNotes, customerName: submittedCustomerName, shippingAddress: deliveryAddress, customerOrderNumber } = req.body;
+      const hasItems = items && Array.isArray(items) && items.length > 0;
+      const hasCustomItems = customItems && Array.isArray(customItems) && customItems.length > 0;
+      if (!hasItems && !hasCustomItems) {
+        return res.status(400).json({ message: "At least one item is required" });
+      }
+
+      const [portalUser] = await db.select().from(portalUsers).where(eq(portalUsers.id, req.session.portalUserId!));
+      const contactName = submittedCustomerName || portalUser?.name || existing.rows[0].contact_name;
+
+      const priceMap = new Map<string, number>();
+      if (companyPriceListId) {
+        const priceRows = await pool.query(
+          `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`,
+          [companyPriceListId]
+        );
+        for (const row of priceRows.rows) {
+          const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
+          priceMap.set(key, parseFloat(row.unit_price));
+          if (!priceMap.has(row.product_id)) {
+            priceMap.set(row.product_id, parseFloat(row.unit_price));
+          }
+        }
+      }
+
+      const orderItems: any[] = [];
+      if (hasItems) {
+        for (const item of items) {
+          const prodResult = await pool.query("SELECT id, name, sku, unit_price FROM products WHERE id = $1 AND active = true", [item.productId]);
+          if (prodResult.rows.length === 0) continue;
+          const prod = prodResult.rows[0];
+          const qty = Math.max(1, parseInt(item.quantity) || 1);
+          const desc = item.filling ? `${prod.name} (${item.filling}${item.weight ? `, ${item.weight}` : ''})` : prod.name;
+          const variantKey = `${prod.id}|${item.filling || ''}|${item.weight || ''}`;
+          const unitPrice = priceMap.get(variantKey) ?? priceMap.get(prod.id) ?? parseFloat(prod.unit_price || "0");
+          const lineTotal = Math.round(qty * unitPrice * 100) / 100;
+          orderItems.push({
+            productId: prod.id,
+            productName: desc,
+            sku: prod.sku,
+            quantity: qty,
+            unitPrice: unitPrice.toFixed(2),
+            lineTotal: lineTotal.toFixed(2),
+            filling: item.filling || undefined,
+            weight: item.weight || undefined,
+          });
+        }
+      }
+      if (hasCustomItems) {
+        for (const ci of customItems) {
+          const qty = Math.max(1, parseInt(ci.quantity) || 1);
+          orderItems.push({
+            productId: null,
+            productName: `CUSTOM INSERT: ${ci.size}${ci.filling ? ` (${ci.filling})` : ''}${ci.weight ? ` [${ci.weight}]` : ''}`,
+            sku: "",
+            quantity: qty,
+          });
+        }
+      }
+
+      const notesWithPO = [
+        customerOrderNumber ? `PO/Order #: ${customerOrderNumber}` : "",
+        customerNotes || "",
+      ].filter(Boolean).join("\n\n") || null;
+
+      await pool.query(
+        `UPDATE customer_order_requests SET items = $1, customer_notes = $2, contact_name = $3, shipping_address = $4 WHERE id = $5`,
+        [JSON.stringify(orderItems), notesWithPO, contactName, deliveryAddress || existing.rows[0].shipping_address, requestId]
+      );
+
+      res.json({ success: true, message: "Order updated successfully" });
+    } catch (error) {
+      console.error("Portal update order request error:", error);
+      res.status(500).json({ message: "Failed to update order" });
+    }
+  });
+
   app.post("/api/portal/order-requests/:id/attachments", requirePortalAuth, async (req, res) => {
     try {
       const requestId = req.params.id;

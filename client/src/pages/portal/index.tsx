@@ -29,6 +29,7 @@ import {
   ClipboardList,
   Paperclip,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -449,12 +450,26 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
                       <TableCell><OrderRequestStatusBadge status={req.status} /></TableCell>
                       <TableCell className="text-right text-sm">{estTotal > 0 ? `$${estTotal.toLocaleString("en-AU", { minimumFractionDigits: 2 })}` : "-"}</TableCell>
                       <TableCell className="w-8">
-                        {req.attachmentCount > 0 && (
-                          <span className="flex items-center gap-1 text-muted-foreground" title={`${req.attachmentCount} attachment(s)`}>
-                            <Paperclip className="w-3.5 h-3.5" />
-                            <span className="text-xs">{req.attachmentCount}</span>
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {req.status === "pending" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => onNavigate(`edit-request-${req.id}`)}
+                              title="Edit order"
+                              data-testid={`button-edit-request-${req.id}`}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          {req.attachmentCount > 0 && (
+                            <span className="flex items-center gap-1 text-muted-foreground" title={`${req.attachmentCount} attachment(s)`}>
+                              <Paperclip className="w-3.5 h-3.5" />
+                              <span className="text-xs">{req.attachmentCount}</span>
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -720,13 +735,18 @@ function PortalInvoices() {
   );
 }
 
-function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) {
+function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: string) => void; editRequestId?: string }) {
   const { toast } = useToast();
+  const isEditMode = !!editRequestId;
   const { data: products, isLoading: loadingProducts } = useQuery<any[]>({
     queryKey: ["/api/portal/products"],
   });
   const { data: company } = useQuery<any>({
     queryKey: ["/api/portal/company"],
+  });
+  const { data: editRequest, isLoading: loadingEditRequest } = useQuery<any>({
+    queryKey: ["/api/portal/order-requests", editRequestId],
+    enabled: !!editRequestId,
   });
 
   const [cart, setCart] = useState<Record<string, number>>({});
@@ -741,6 +761,54 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [editLoaded, setEditLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!isEditMode || !editRequest || !products || editLoaded) return;
+    if (editRequest.status !== "pending") {
+      toast({ title: "Cannot edit", description: "This order has already been accepted and can no longer be edited.", variant: "destructive" });
+      onNavigate("orders");
+      return;
+    }
+    const items = Array.isArray(editRequest.items) ? editRequest.items : [];
+    const newCart: Record<string, number> = {};
+    const newFillings: Record<string, string> = {};
+    const newWeights: Record<string, string> = {};
+    const newCustomLines: { id: string; size: string; filling: string; weight: string; qty: number }[] = [];
+    for (const item of items) {
+      if (!item.productId) {
+        const nameMatch = (item.productName || "").match(/CUSTOM INSERT:\s*(.+?)(?:\s*\(([^)]*)\))?(?:\s*\[([^\]]*)\])?$/);
+        newCustomLines.push({
+          id: `custom-${Date.now()}-${Math.random()}`,
+          size: nameMatch ? nameMatch[1].trim() : item.productName || "",
+          filling: nameMatch && nameMatch[2] ? nameMatch[2].trim() : "",
+          weight: nameMatch && nameMatch[3] ? nameMatch[3].trim() : "",
+          qty: item.quantity || 1,
+        });
+      } else {
+        newCart[item.productId] = item.quantity || 1;
+        if (item.filling) newFillings[item.productId] = item.filling;
+        if (item.weight) newWeights[item.productId] = item.weight;
+      }
+    }
+    setCart(newCart);
+    setFillings(newFillings);
+    setWeights(newWeights);
+    if (newCustomLines.length > 0) setCustomLines(newCustomLines);
+
+    const rawNotes = editRequest.customerNotes || "";
+    const poMatch = rawNotes.match(/^PO\/Order #:\s*(.+?)$/m);
+    if (poMatch) {
+      setCustomerOrderNumber(poMatch[1].trim());
+      setNotes(rawNotes.replace(/^PO\/Order #:\s*.+?\n?\n?/m, "").trim());
+    } else {
+      setNotes(rawNotes);
+    }
+
+    setDeliveryAddress(editRequest.shippingAddress || "");
+    setCustomerName(editRequest.contactName || "");
+    setEditLoaded(true);
+  }, [isEditMode, editRequest, products, editLoaded]);
 
   const { fillingOptions, weightOptions } = useMemo(() => {
     if (!products) return { fillingOptions: {} as Record<string, string[]>, weightOptions: {} as Record<string, string[]> };
@@ -944,22 +1012,26 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
       ];
       const fullNotes = [notes, ...extraNotes].filter(Boolean).join("\n\n");
       const activeCustomLines = customLines.filter((l) => l.size && l.qty > 0);
-      const res = await fetch("/api/portal/orders", {
-        method: "POST",
+      const payload = {
+        items: cartItems.map((item) => ({ productId: item.id, quantity: item.qty, filling: fillings[item.id] || undefined, weight: weights[item.id] || undefined })),
+        customItems: activeCustomLines.map((l) => ({ size: l.size, filling: l.filling, weight: l.weight, quantity: l.qty })),
+        customerNotes: fullNotes,
+        customerName: customerName || undefined,
+        shippingAddress: deliveryAddress || undefined,
+        customerOrderNumber: customerOrderNumber || undefined,
+      };
+
+      const url = isEditMode ? `/api/portal/order-requests/${editRequestId}` : "/api/portal/orders";
+      const method = isEditMode ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: cartItems.map((item) => ({ productId: item.id, quantity: item.qty, filling: fillings[item.id] || undefined, weight: weights[item.id] || undefined })),
-          customItems: activeCustomLines.map((l) => ({ size: l.size, filling: l.filling, weight: l.weight, quantity: l.qty })),
-          customerNotes: fullNotes,
-          customerName: customerName || undefined,
-          shippingAddress: deliveryAddress || undefined,
-          customerOrderNumber: customerOrderNumber || undefined,
-        }),
+        body: JSON.stringify(payload),
         credentials: "include",
       });
-      if (!res.ok) throw new Error((await res.json()).message || "Failed to place order");
+      if (!res.ok) throw new Error((await res.json()).message || (isEditMode ? "Failed to update order" : "Failed to place order"));
       const data = await res.json();
-      if (attachedFiles.length > 0 && data.id) {
+      if (!isEditMode && attachedFiles.length > 0 && data.id) {
         try {
           const formData = new FormData();
           attachedFiles.forEach((file) => formData.append("files", file));
@@ -975,10 +1047,26 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
           toast({ title: "Warning", description: "Order submitted but file attachments failed to upload. Please contact us.", variant: "destructive" });
         }
       }
+      if (isEditMode && attachedFiles.length > 0) {
+        try {
+          const formData = new FormData();
+          attachedFiles.forEach((file) => formData.append("files", file));
+          await fetch(`/api/portal/order-requests/${editRequestId}/attachments`, {
+            method: "POST",
+            body: formData,
+            credentials: "include",
+          });
+        } catch {}
+      }
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/orders"] });
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/order-requests"] });
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/dashboard"] });
-      toast({ title: "Order submitted", description: "Your order has been submitted and is pending review. You can track it on your Orders page." });
+      toast({
+        title: isEditMode ? "Order updated" : "Order submitted",
+        description: isEditMode
+          ? "Your order has been updated successfully."
+          : "Your order has been submitted and is pending review. You can track it on your Orders page.",
+      });
       onNavigate("orders");
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -1009,7 +1097,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
     setCustomLines((prev) => prev.filter((l) => l.id !== id));
   };
 
-  if (loadingProducts) {
+  if (loadingProducts || (isEditMode && loadingEditRequest)) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -1023,7 +1111,8 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
         <Button variant="ghost" size="icon" onClick={() => onNavigate("orders")} data-testid="button-back-to-orders">
           <ArrowLeft className="w-4 h-4" />
         </Button>
-        <h1 className="text-2xl font-semibold" data-testid="text-new-order-title">New Order</h1>
+        <h1 className="text-2xl font-semibold" data-testid="text-new-order-title">{isEditMode ? "Edit Order" : "New Order"}</h1>
+        {isEditMode && <Badge variant="outline" className="text-amber-600 border-amber-300">Pending Review</Badge>}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -1394,7 +1483,7 @@ function PortalNewOrder({ onNavigate }: { onNavigate: (page: string) => void }) 
 
               <Button className="w-full" disabled={cartItems.length === 0 || submitting} onClick={handleSubmit} data-testid="button-submit-order">
                 {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShoppingCart className="w-4 h-4 mr-2" />}
-                Place Order
+                {isEditMode ? "Update Order" : "Place Order"}
               </Button>
             </CardContent>
           </Card>
@@ -1590,6 +1679,10 @@ function PortalLayout() {
   ];
 
   const renderPage = () => {
+    if (currentPage.startsWith("edit-request-")) {
+      const requestId = currentPage.replace("edit-request-", "");
+      return <PortalNewOrder onNavigate={navigate} editRequestId={requestId} />;
+    }
     if (currentPage.startsWith("order-")) {
       const orderId = currentPage.replace("order-", "");
       return <PortalOrderDetail orderId={orderId} onBack={() => navigate("orders")} />;
@@ -1610,7 +1703,7 @@ function PortalLayout() {
     }
   };
 
-  const activePage = currentPage.startsWith("order-") ? "orders" : currentPage;
+  const activePage = currentPage.startsWith("order-") || currentPage.startsWith("edit-request-") ? "orders" : currentPage;
 
   return (
     <div className="min-h-screen bg-background">
