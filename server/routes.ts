@@ -5678,18 +5678,21 @@ Rules:
       let csv = 'Name,Email (Login),Password,Company\n';
       for (const row of result.rows) {
         let password = '(unknown)';
-        if (row.first_name || row.last_name) {
-          const firstName = (row.first_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
-          const lastName = (row.last_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
-          if (firstName.length >= 3) {
-            password = firstName.substring(0, 9);
-          } else if (lastName.length >= 3) {
-            password = lastName.substring(0, 9);
-          } else if ((firstName + lastName).length >= 3) {
-            password = (firstName + lastName).substring(0, 9);
-          } else {
-            password = 'purax1';
-          }
+        const firstName = (row.first_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+        const lastName = (row.last_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+        const nameParts = (row.name || '').trim().split(/\s+/);
+        const fallbackFirst = (nameParts[0] || '').toLowerCase().replace(/[^a-z]/g, '');
+        const fallbackLast = (nameParts.slice(1).join('') || '').toLowerCase().replace(/[^a-z]/g, '');
+        const fn = firstName || fallbackFirst;
+        const ln = lastName || fallbackLast;
+        if (fn.length >= 3) {
+          password = fn.substring(0, 9);
+        } else if (ln.length >= 3) {
+          password = ln.substring(0, 9);
+        } else if ((fn + ln).length >= 3) {
+          password = (fn + ln).substring(0, 9);
+        } else {
+          password = 'purax1';
         }
         const escapeCsv = (s: string) => '"' + s.replace(/"/g, '""') + '"';
         csv += [escapeCsv(row.name), escapeCsv(row.email), escapeCsv(password), escapeCsv(row.company_name)].join(',') + '\n';
