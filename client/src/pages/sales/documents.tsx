@@ -22,8 +22,7 @@ export default function SalesDocumentsPage() {
     retry: false,
   });
 
-  const ordersWithDocs = orders?.filter((o: any) => o.pdfUrl || o.attachments?.length > 0) ?? [];
-  const totalDocuments = (ordersWithDocs.length) + (attachments?.length ?? 0) + (quotes?.length ?? 0) + (invoices?.length ?? 0);
+  const totalDocuments = (orders?.length ?? 0) + (attachments?.length ?? 0) + (quotes?.length ?? 0) + (invoices?.length ?? 0);
 
   const isLoading = ordersLoading || attachmentsLoading;
 
@@ -139,7 +138,7 @@ export default function SalesDocumentsPage() {
                 ))}
               </CardContent>
             </Card>
-          ) : ordersWithDocs.length > 0 ? (
+          ) : orders && orders.length > 0 ? (
             <Card>
               <Table>
                 <TableHeader>
@@ -152,7 +151,7 @@ export default function SalesDocumentsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ordersWithDocs.map((order: any) => (
+                  {orders.map((order: any) => (
                     <TableRow key={order.id} data-testid={`row-order-${order.id}`}>
                       <TableCell className="font-medium" data-testid={`text-order-number-${order.id}`}>
                         {order.orderNumber || `#${order.id}`}
@@ -251,14 +250,12 @@ export default function SalesDocumentsPage() {
                         {attachment.createdAt ? format(new Date(attachment.createdAt), "dd MMM yyyy") : "—"}
                       </TableCell>
                       <TableCell className="text-right">
-                        {attachment.url && (
-                          <a href={attachment.url} target="_blank" rel="noopener noreferrer">
-                            <Button variant="outline" size="sm" data-testid={`button-download-${attachment.id || index}`}>
-                              <Download className="w-4 h-4 mr-1" />
-                              Download
-                            </Button>
-                          </a>
-                        )}
+                        <a href={`/api/attachments/${attachment.id}/download`} target="_blank" rel="noopener noreferrer">
+                          <Button variant="outline" size="sm" data-testid={`button-download-${attachment.id || index}`}>
+                            <Download className="w-4 h-4 mr-1" />
+                            Download
+                          </Button>
+                        </a>
                       </TableCell>
                     </TableRow>
                   ))}

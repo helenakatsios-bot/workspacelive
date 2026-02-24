@@ -1671,6 +1671,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/attachments", requireAuth, async (req, res) => {
+    try {
+      const allAttachments = await db.select().from(attachments).orderBy(attachments.uploadedAt);
+      res.json(allAttachments);
+    } catch (error) {
+      console.error("Get all attachments error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/attachments/:id/download", requireAuth, async (req, res) => {
     try {
       const [attachment] = await db.select().from(attachments).where(eq(attachments.id, req.params.id));
