@@ -3,23 +3,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { Building2, Users, CheckCircle2, AlertTriangle, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
+import { useLocation } from "wouter";
 
 export default function DataEnrichmentPage() {
   const { data: companies } = useQuery<any[]>({ queryKey: ["/api/companies"] });
   const { data: contacts } = useQuery<any[]>({ queryKey: ["/api/contacts"] });
   const [view, setView] = useState<"companies" | "contacts">("companies");
+  const [, navigate] = useLocation();
 
-  const companiesMissingData = companies?.filter((c) => !c.email || !c.phone || !c.billingAddress) || [];
+  const companiesMissingData = companies?.filter((c) => !c.emailAddresses || !c.phone || !c.billingAddress) || [];
   const contactsMissingData = contacts?.filter((c) => !c.email || !c.phone) || [];
 
   const enrichmentItems = view === "companies"
     ? companiesMissingData.slice(0, 25).map((company: any) => {
         const missing = [];
-        if (!company.email) missing.push("email");
+        if (!company.emailAddresses) missing.push("email");
         if (!company.phone) missing.push("phone");
         if (!company.billingAddress) missing.push("address");
-        return { id: company.id, name: company.name, missing, type: "company" as const };
+        return { id: company.id, name: company.tradingName || company.legalName || "Unnamed Company", missing, type: "company" as const };
       })
     : contactsMissingData.slice(0, 25).map((contact: any) => {
         const missing = [];
@@ -95,24 +96,21 @@ export default function DataEnrichmentPage() {
         <CardContent>
           <div className="space-y-2">
             {enrichmentItems.map((item) => (
-              <Link
+              <div
                 key={item.id}
-                href={item.type === "company" ? `/companies/${item.id}` : `/contacts/${item.id}`}
+                className="flex items-center justify-between gap-2 p-3 rounded-md border hover:bg-muted/50 cursor-pointer transition-colors"
+                data-testid={`row-enrichment-${item.id}`}
+                onClick={() => navigate(item.type === "company" ? `/companies/${item.id}` : `/contacts/${item.id}`)}
               >
-                <div
-                  className="flex items-center justify-between gap-2 p-3 rounded-md border hover:bg-muted/50 cursor-pointer transition-colors"
-                  data-testid={`row-enrichment-${item.id}`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate" data-testid={`text-name-${item.id}`}>{item.name}</p>
-                      <p className="text-xs text-muted-foreground">Missing: {item.missing.join(", ")}</p>
-                    </div>
+                <div className="flex items-center gap-3 min-w-0">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate" data-testid={`text-name-${item.id}`}>{item.name}</p>
+                    <p className="text-xs text-muted-foreground">Missing: {item.missing.join(", ")}</p>
                   </div>
-                  <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                 </div>
-              </Link>
+                <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              </div>
             ))}
             {enrichmentItems.length === 0 && (
               <div className="flex items-center gap-3 p-3 rounded-md border">
