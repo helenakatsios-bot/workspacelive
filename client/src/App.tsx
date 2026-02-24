@@ -16,10 +16,14 @@ import CompanyDetailPage from "@/pages/companies/detail";
 import CompanyFormPage from "@/pages/companies/form";
 import ContactsPage from "@/pages/contacts/index";
 import DealsPage from "@/pages/deals/index";
+import DealFormPage from "@/pages/deals/form";
+import DealDetailPage from "@/pages/deals/detail";
 import ProductsPage from "@/pages/products/index";
 import ProductFormPage from "@/pages/products/form";
 import ProductDetailPage from "@/pages/products/detail";
 import QuotesPage from "@/pages/quotes/index";
+import QuoteFormPage from "@/pages/quotes/form";
+import QuoteDetailPage from "@/pages/quotes/detail";
 import OrdersPage from "@/pages/orders/index";
 import OrderFormPage from "@/pages/orders/form";
 import OrderDetailPage from "@/pages/orders/detail";
@@ -122,15 +126,17 @@ function AuthenticatedApp() {
         <Route path="/companies/:id/edit" component={CompanyFormPage} />
         <Route path="/contacts" component={ContactsPage} />
         <Route path="/deals" component={DealsPage} />
-        <Route path="/deals/new" component={DealsPage} />
-        <Route path="/deals/:id" component={DealsPage} />
+        <Route path="/deals/new" component={DealFormPage} />
+        <Route path="/deals/:id" component={DealDetailPage} />
+        <Route path="/deals/:id/edit" component={DealFormPage} />
         <Route path="/products" component={ProductsPage} />
         <Route path="/products/new" component={ProductFormPage} />
         <Route path="/products/:id" component={ProductDetailPage} />
         <Route path="/products/:id/edit" component={ProductFormPage} />
         <Route path="/quotes" component={QuotesPage} />
-        <Route path="/quotes/new" component={QuotesPage} />
-        <Route path="/quotes/:id" component={QuotesPage} />
+        <Route path="/quotes/new" component={QuoteFormPage} />
+        <Route path="/quotes/:id" component={QuoteDetailPage} />
+        <Route path="/quotes/:id/edit" component={QuoteFormPage} />
         <Route path="/orders" component={OrdersPage} />
         <Route path="/orders/new" component={OrderFormPage} />
         <Route path="/orders/requests" component={OrderRequestsPage} />

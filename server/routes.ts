@@ -7,7 +7,7 @@ import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { eq, ilike, and } from "drizzle-orm";
-import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, emails as emailsTable, contacts, companies as companiesTable, outlookTokens as outlookTokensTable, crmSettings, portalUsers, attachments } from "@shared/schema";
+import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, insertQuoteSchema, emails as emailsTable, contacts, companies as companiesTable, outlookTokens as outlookTokensTable, crmSettings, portalUsers, attachments } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero, autoSyncXeroInvoices } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks, fetchEmailAttachments, downloadAttachment } from "./outlook";
@@ -1445,6 +1445,83 @@ export async function registerRoutes(
       res.json({ ...quote, company, lines });
     } catch (error) {
       console.error("Get quote error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/quotes", requireEdit, async (req, res) => {
+    try {
+      const maxResult = await pool.query("SELECT MAX(CAST(REPLACE(quote_number, 'QUO-', '') AS INTEGER)) as max_num FROM quotes");
+      const nextNum = ((maxResult.rows[0]?.max_num || 0) + 1);
+      const quoteNumber = `QUO-${String(nextNum).padStart(4, '0')}`;
+
+      const { lines, ...quoteData } = req.body;
+      const data = insertQuoteSchema.parse({ ...quoteData, quoteNumber });
+      const quote = await storage.createQuote(data);
+
+      if (lines && Array.isArray(lines)) {
+        for (const line of lines) {
+          await storage.createQuoteLine({
+            quoteId: quote.id,
+            productId: line.productId || null,
+            descriptionOverride: line.descriptionOverride || null,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            discount: line.discount || "0",
+            lineTotal: line.lineTotal,
+          });
+        }
+      }
+
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "create",
+        entityType: "quote",
+        entityId: quote.id,
+        afterJson: quote,
+      });
+      res.status(201).json(quote);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Create quote error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/quotes/:id", requireEdit, async (req, res) => {
+    try {
+      const before = await storage.getQuote(req.params.id);
+      const { lines, ...quoteData } = req.body;
+      const quote = await storage.updateQuote(req.params.id, quoteData);
+
+      if (lines && Array.isArray(lines)) {
+        await pool.query("DELETE FROM quote_lines WHERE quote_id = $1", [req.params.id]);
+        for (const line of lines) {
+          await storage.createQuoteLine({
+            quoteId: req.params.id,
+            productId: line.productId || null,
+            descriptionOverride: line.descriptionOverride || null,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            discount: line.discount || "0",
+            lineTotal: line.lineTotal,
+          });
+        }
+      }
+
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "update",
+        entityType: "quote",
+        entityId: req.params.id,
+        beforeJson: before,
+        afterJson: quote,
+      });
+      res.json(quote);
+    } catch (error) {
+      console.error("Update quote error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
