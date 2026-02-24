@@ -12,6 +12,7 @@ import {
   ToggleRight,
   Key,
   Search,
+  Pencil,
   Copy,
   Check,
   Eye,
@@ -90,6 +91,9 @@ export default function CustomerPortalPage() {
   const [showResetDialog, setShowResetDialog] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null);
   const [showProfileDialog, setShowProfileDialog] = useState<string | null>(null);
+  const [showEditDialog, setShowEditDialog] = useState<PortalUserAdmin | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -150,6 +154,21 @@ export default function CustomerPortalPage() {
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const editMutation = useMutation({
+    mutationFn: async ({ id, name, email }: { id: string; name: string; email: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/portal-users/${id}`, { name, email });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-users"] });
+      toast({ title: "Portal user updated", description: "Name and email have been saved" });
+      setShowEditDialog(null);
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to update portal user", variant: "destructive" });
     },
   });
 
@@ -336,6 +355,19 @@ export default function CustomerPortalPage() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          onClick={() => {
+                            setShowEditDialog(user);
+                            setEditName(user.name);
+                            setEditEmail(user.email);
+                          }}
+                          title="Edit name/email"
+                          data-testid={`button-edit-${user.id}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => toggleMutation.mutate({ id: user.id, active: !user.active })}
                           title={user.active ? "Disable user" : "Enable user"}
                           data-testid={`button-toggle-${user.id}`}
@@ -494,6 +526,57 @@ export default function CustomerPortalPage() {
               <Button type="submit" disabled={resetPasswordMutation.isPending} data-testid="button-confirm-reset">
                 {resetPasswordMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 Reset Password
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!showEditDialog} onOpenChange={() => setShowEditDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Portal User</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (showEditDialog) {
+                editMutation.mutate({ id: showEditDialog.id, name: editName, email: editEmail });
+              }
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="User name"
+                required
+                data-testid="input-edit-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email (Login)</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                placeholder="user@example.com"
+                required
+                data-testid="input-edit-email"
+              />
+              <p className="text-xs text-muted-foreground">This is the email they use to log in to the portal</p>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowEditDialog(null)} data-testid="button-cancel-edit">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={editMutation.isPending} data-testid="button-confirm-edit">
+                {editMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Save Changes
               </Button>
             </DialogFooter>
           </form>

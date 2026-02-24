@@ -5666,10 +5666,19 @@ Rules:
 
   app.patch("/api/admin/portal-users/:id", requireAdmin, async (req, res) => {
     try {
-      const { active, password } = req.body;
+      const { active, password, email, name } = req.body;
       const updates: any = {};
       if (typeof active === "boolean") updates.active = active;
       if (password) updates.passwordHash = await bcrypt.hash(password, 10);
+      if (email) {
+        const trimmedEmail = email.toLowerCase().trim();
+        const existing = await db.select().from(portalUsers).where(eq(portalUsers.email, trimmedEmail));
+        if (existing.length > 0 && existing[0].id !== req.params.id) {
+          return res.status(400).json({ message: "A portal user with this email already exists" });
+        }
+        updates.email = trimmedEmail;
+      }
+      if (name && typeof name === "string") updates.name = name.trim();
       if (Object.keys(updates).length === 0) return res.status(400).json({ message: "No updates provided" });
       await db.update(portalUsers).set(updates).where(eq(portalUsers.id, req.params.id));
       res.json({ message: "Portal user updated" });
