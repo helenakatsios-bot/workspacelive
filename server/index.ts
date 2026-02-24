@@ -485,9 +485,9 @@ async function runStartupTasks() {
     }
 
     const pillowProducts = [
-      { sku: 'PFH-STDPILLOW', name: 'STANDARD PILLOW', category: 'PILLOW', defaultPrice: '15.00' },
-      { sku: 'PFH-QNPILLOW', name: 'QUEEN PILLOW', category: 'PILLOW', defaultPrice: '22.00' },
-      { sku: 'PFH-KGPILLOW', name: 'KING PILLOW', category: 'PILLOW', defaultPrice: '29.00' },
+      { sku: 'PFH-STDPILLOW', name: 'STANDARD PILLOW', category: 'MICROSOFT', defaultPrice: '15.00' },
+      { sku: 'PFH-QNPILLOW', name: 'QUEEN PILLOW', category: 'MICROSOFT', defaultPrice: '22.00' },
+      { sku: 'PFH-KGPILLOW', name: 'KING PILLOW', category: 'MICROSOFT', defaultPrice: '29.00' },
     ];
     const interiorsPrices: Record<string, string> = { 'PFH-STDPILLOW': '18.00', 'PFH-QNPILLOW': '27.00', 'PFH-KGPILLOW': '31.00' };
     const standardPrices: Record<string, string> = { 'PFH-STDPILLOW': '15.00', 'PFH-QNPILLOW': '22.00', 'PFH-KGPILLOW': '29.00' };
@@ -505,6 +505,7 @@ async function runStartupTasks() {
         productId = ins.rows[0].id;
       } else {
         productId = existing.rows[0].id;
+        await pool.query(`UPDATE products SET category = $1 WHERE id = $2`, [pp.category, productId]);
       }
       if (interiorsResult.rows.length > 0) {
         const intId = interiorsResult.rows[0].id;
