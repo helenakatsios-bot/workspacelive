@@ -1,9 +1,10 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
 import { Plug, CheckCircle2, ExternalLink, RefreshCw, Mail, Receipt, ShoppingCart, Users, Globe, FileText } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 
 interface Integration {
   name: string;
@@ -11,6 +12,7 @@ interface Integration {
   icon: any;
   status: "Connected" | "Active" | "Not Connected";
   lastSync?: string;
+  manageUrl?: string;
 }
 
 const connectedIntegrations: Integration[] = [
@@ -20,6 +22,7 @@ const connectedIntegrations: Integration[] = [
     icon: Receipt,
     status: "Connected",
     lastSync: "Automatic sync on invoice creation",
+    manageUrl: "/settings",
   },
   {
     name: "Outlook Email",
@@ -27,6 +30,7 @@ const connectedIntegrations: Integration[] = [
     icon: Mail,
     status: "Connected",
     lastSync: "Periodic email sync",
+    manageUrl: "/email",
   },
   {
     name: "Purax App",
@@ -34,6 +38,7 @@ const connectedIntegrations: Integration[] = [
     icon: ShoppingCart,
     status: "Connected",
     lastSync: "On order confirmation",
+    manageUrl: "/settings",
   },
   {
     name: "Customer Portal",
@@ -41,6 +46,7 @@ const connectedIntegrations: Integration[] = [
     icon: Globe,
     status: "Active",
     lastSync: "Real-time",
+    manageUrl: "/service/customer-portal",
   },
 ];
 
@@ -65,7 +71,7 @@ const availableIntegrations: Integration[] = [
   },
 ];
 
-function IntegrationCard({ integration }: { integration: Integration }) {
+function IntegrationCard({ integration, onConnect, onManage }: { integration: Integration; onConnect: (name: string) => void; onManage: (integration: Integration) => void }) {
   const statusColor = integration.status === "Connected"
     ? "bg-green-500/10 text-green-700 dark:text-green-400"
     : integration.status === "Active"
@@ -100,12 +106,22 @@ function IntegrationCard({ integration }: { integration: Integration }) {
         )}
         <div>
           {integration.status !== "Not Connected" ? (
-            <Button variant="outline" size="sm" data-testid={`button-manage-${integration.name.toLowerCase().replace(/\s+/g, "-")}`}>
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid={`button-manage-${integration.name.toLowerCase().replace(/\s+/g, "-")}`}
+              onClick={() => onManage(integration)}
+            >
               <ExternalLink className="w-3 h-3 mr-1" />
               Manage
             </Button>
           ) : (
-            <Button variant="outline" size="sm" data-testid={`button-connect-${integration.name.toLowerCase().replace(/\s+/g, "-")}`}>
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid={`button-connect-${integration.name.toLowerCase().replace(/\s+/g, "-")}`}
+              onClick={() => onConnect(integration.name)}
+            >
               <Plug className="w-3 h-3 mr-1" />
               Connect
             </Button>
@@ -117,6 +133,27 @@ function IntegrationCard({ integration }: { integration: Integration }) {
 }
 
 export default function DataIntegrationPage() {
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+
+  const handleConnect = (name: string) => {
+    toast({
+      title: `${name} Integration`,
+      description: `${name} integration is not yet available. This feature is planned for a future update. Contact your administrator for more information.`,
+    });
+  };
+
+  const handleManage = (integration: Integration) => {
+    if (integration.manageUrl) {
+      navigate(integration.manageUrl);
+    } else {
+      toast({
+        title: `Manage ${integration.name}`,
+        description: `Opening ${integration.name} settings...`,
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -128,7 +165,7 @@ export default function DataIntegrationPage() {
         <h2 className="text-lg font-semibold mb-3" data-testid="text-connected-systems">Connected Systems</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {connectedIntegrations.map((integration) => (
-            <IntegrationCard key={integration.name} integration={integration} />
+            <IntegrationCard key={integration.name} integration={integration} onConnect={handleConnect} onManage={handleManage} />
           ))}
         </div>
       </div>
@@ -137,7 +174,7 @@ export default function DataIntegrationPage() {
         <h2 className="text-lg font-semibold mb-3" data-testid="text-available-integrations">Available Integrations</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {availableIntegrations.map((integration) => (
-            <IntegrationCard key={integration.name} integration={integration} />
+            <IntegrationCard key={integration.name} integration={integration} onConnect={handleConnect} onManage={handleManage} />
           ))}
         </div>
       </div>
