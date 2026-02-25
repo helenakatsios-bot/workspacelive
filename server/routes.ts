@@ -1632,28 +1632,25 @@ export async function registerRoutes(
 
       bb.on("file", (_fieldname: string, file: any, info: any) => {
         const { filename, mimeType } = info;
-        const safeFileName = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-        const filePath = path.default.join(uploadsDir, safeFileName);
+        const chunks: Buffer[] = [];
         let fileSize = 0;
 
-        file.on("data", (data: Buffer) => { fileSize += data.length; });
-
-        const writeStream = fs.createWriteStream(filePath);
-        file.pipe(writeStream);
+        file.on("data", (data: Buffer) => { chunks.push(data); fileSize += data.length; });
 
         const filePromise = new Promise<any>((resolve, reject) => {
-          writeStream.on("finish", () => {
+          file.on("end", () => {
+            const fileData = Buffer.concat(chunks);
             resolve({
               entityType: "company",
               entityId: companyId,
               fileName: filename,
               fileType: mimeType,
               fileSize,
-              storagePath: filePath,
+              storagePath: `db://${companyId}/${filename}`,
               uploadedBy: req.session.userId,
+              fileData,
             });
           });
-          writeStream.on("error", reject);
           file.on("error", reject);
         });
         filePromises.push(filePromise);
@@ -1662,8 +1659,12 @@ export async function registerRoutes(
       bb.on("finish", async () => {
         try {
           const uploadedFiles = await Promise.all(filePromises);
-          for (const fileData of uploadedFiles) {
-            await storage.createAttachment(fileData);
+          for (const f of uploadedFiles) {
+            await pool.query(
+              `INSERT INTO attachments (id, entity_type, entity_id, file_name, file_type, file_size, storage_path, uploaded_by, uploaded_at, file_data)
+               VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW(), $8)`,
+              [f.entityType, f.entityId, f.fileName, f.fileType, f.fileSize, f.storagePath, f.uploadedBy, f.fileData]
+            );
           }
           await storage.createActivity({
             entityType: "company",
@@ -1704,15 +1705,26 @@ export async function registerRoutes(
 
   app.get("/api/attachments/:id/download", requireAuth, async (req, res) => {
     try {
-      const [attachment] = await db.select().from(attachments).where(eq(attachments.id, req.params.id));
-      if (!attachment) return res.status(404).json({ message: "Attachment not found" });
-      const fs = await import("fs");
-      if (!fs.existsSync(attachment.storagePath)) {
-        return res.status(404).json({ message: "File not found on disk" });
+      const dbResult = await pool.query(
+        `SELECT id, entity_type, entity_id, file_name, file_type, file_size, storage_path, file_data FROM attachments WHERE id = $1`,
+        [req.params.id]
+      );
+      if (dbResult.rows.length === 0) return res.status(404).json({ message: "Attachment not found" });
+      const attachment = dbResult.rows[0];
+
+      res.setHeader("Content-Type", attachment.file_type);
+      res.setHeader("Content-Disposition", `attachment; filename="${attachment.file_name}"`);
+
+      if (attachment.file_data) {
+        res.setHeader("Content-Length", attachment.file_data.length);
+        return res.send(attachment.file_data);
       }
-      res.setHeader("Content-Type", attachment.fileType);
-      res.setHeader("Content-Disposition", `attachment; filename="${attachment.fileName}"`);
-      const fileStream = fs.createReadStream(attachment.storagePath);
+
+      const fs = await import("fs");
+      if (!fs.existsSync(attachment.storage_path)) {
+        return res.status(404).json({ message: "File not found" });
+      }
+      const fileStream = fs.createReadStream(attachment.storage_path);
       fileStream.pipe(res);
     } catch (error) {
       console.error("Download attachment error:", error);
@@ -4829,6 +4841,14 @@ Rules:
         [order.id, req.session.userId, req.params.id]
       );
 
+      // Copy attachments from order request to the new order
+      await client.query(
+        `INSERT INTO attachments (id, entity_type, entity_id, file_name, file_type, file_size, storage_path, uploaded_by, uploaded_at, file_data)
+         SELECT gen_random_uuid(), 'order', $1, file_name, file_type, file_size, storage_path, uploaded_by, uploaded_at, file_data
+         FROM attachments WHERE entity_type = 'order_request' AND entity_id = $2`,
+        [order.id, req.params.id]
+      );
+
       await client.query('COMMIT');
 
       await storage.createAuditLog({
@@ -5676,17 +5696,14 @@ Rules:
 
       bb.on("file", (_fieldname: string, file: any, info: any) => {
         const { filename, mimeType } = info;
-        const safeFileName = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-        const filePath = path.default.join(uploadsDir, safeFileName);
+        const chunks: Buffer[] = [];
         let fileSize = 0;
-        file.on("data", (data: Buffer) => { fileSize += data.length; });
-        const writeStream = fs.createWriteStream(filePath);
-        file.pipe(writeStream);
+        file.on("data", (data: Buffer) => { chunks.push(data); fileSize += data.length; });
         const filePromise = new Promise<any>((resolve, reject) => {
-          writeStream.on("finish", () => {
-            resolve({ entityType: "order_request", entityId: requestId, fileName: filename, fileType: mimeType, fileSize, storagePath: filePath, uploadedBy: null });
+          file.on("end", () => {
+            const fileData = Buffer.concat(chunks);
+            resolve({ entityType: "order_request", entityId: requestId, fileName: filename, fileType: mimeType, fileSize, storagePath: `db://${requestId}/${filename}`, uploadedBy: null, fileData });
           });
-          writeStream.on("error", reject);
           file.on("error", reject);
         });
         filePromises.push(filePromise);
@@ -5695,8 +5712,12 @@ Rules:
       bb.on("finish", async () => {
         try {
           const uploadedFiles = await Promise.all(filePromises);
-          for (const fileData of uploadedFiles) {
-            await storage.createAttachment(fileData);
+          for (const f of uploadedFiles) {
+            await pool.query(
+              `INSERT INTO attachments (id, entity_type, entity_id, file_name, file_type, file_size, storage_path, uploaded_by, uploaded_at, file_data)
+               VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW(), $8)`,
+              [f.entityType, f.entityId, f.fileName, f.fileType, f.fileSize, f.storagePath, f.uploadedBy, f.fileData]
+            );
           }
           const result = await storage.getAttachmentsByEntity("order_request", requestId);
           res.json(result);
