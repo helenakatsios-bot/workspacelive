@@ -37,6 +37,10 @@ import {
   Receipt,
   ExternalLink,
   Search,
+  Shield,
+  ShieldCheck,
+  ShieldOff,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -163,6 +167,72 @@ export default function CompanyDetailPage() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to update portal categories.", variant: "destructive" });
+    },
+  });
+
+  const [portalDialogOpen, setPortalDialogOpen] = useState(false);
+  const [editingPortalUser, setEditingPortalUser] = useState<any | null>(null);
+  const [portalForm, setPortalForm] = useState({ name: "", email: "", password: "purax2026" });
+
+  const { data: companyPortalUsers, refetch: refetchPortalUsers } = useQuery<any[]>({
+    queryKey: ["/api/companies", params?.id, "portal-users"],
+    queryFn: async () => {
+      const res = await fetch(`/api/companies/${params?.id}/portal-users`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!params?.id && isAdmin,
+  });
+
+  const createPortalUserMutation = useMutation({
+    mutationFn: async (data: { name: string; email: string; password: string }) => {
+      const res = await apiRequest("POST", "/api/admin/portal-users", {
+        ...data,
+        companyId: params?.id,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchPortalUsers();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-users"] });
+      setPortalDialogOpen(false);
+      setPortalForm({ name: "", email: "", password: "purax2026" });
+      toast({ title: "Portal access created", description: "The customer can now log in to the portal." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to create portal user", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updatePortalUserMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await apiRequest("PATCH", `/api/admin/portal-users/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchPortalUsers();
+      setPortalDialogOpen(false);
+      setEditingPortalUser(null);
+      setPortalForm({ name: "", email: "", password: "purax2026" });
+      toast({ title: "Portal user updated" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to update portal user", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deletePortalUserMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/portal-users/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchPortalUsers();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-users"] });
+      toast({ title: "Portal access removed" });
+    },
+    onError: () => {
+      toast({ title: "Failed to remove portal user", variant: "destructive" });
     },
   });
 
@@ -796,6 +866,84 @@ export default function CompanyDetailPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+                {isAdmin && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Portal Access</p>
+                    {companyPortalUsers && companyPortalUsers.length > 0 ? (
+                      <div className="space-y-1.5">
+                        {companyPortalUsers.map((pu) => (
+                          <div key={pu.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50 border">
+                            <ShieldCheck className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium truncate">{pu.name}</p>
+                              <p className="text-xs text-muted-foreground truncate">{pu.email}</p>
+                              {pu.lastLogin && (
+                                <p className="text-xs text-muted-foreground">
+                                  Last login: {format(new Date(pu.lastLogin), "MMM d, yyyy")}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex gap-1 flex-shrink-0">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6"
+                                data-testid={`button-edit-portal-user-${pu.id}`}
+                                onClick={() => {
+                                  setEditingPortalUser(pu);
+                                  setPortalForm({ name: pu.name, email: pu.email, password: "" });
+                                  setPortalDialogOpen(true);
+                                }}
+                              >
+                                <Edit className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 text-destructive hover:text-destructive"
+                                data-testid={`button-delete-portal-user-${pu.id}`}
+                                onClick={() => {
+                                  if (confirm(`Remove portal access for ${pu.email}?`)) {
+                                    deletePortalUserMutation.mutate(pu.id);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full h-7 text-xs"
+                          data-testid="button-add-portal-user"
+                          onClick={() => {
+                            setEditingPortalUser(null);
+                            setPortalForm({ name: company?.tradingName || company?.legalName || "", email: "", password: "purax2026" });
+                            setPortalDialogOpen(true);
+                          }}
+                        >
+                          <Plus className="w-3 h-3 mr-1" /> Add another login
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full h-7 text-xs"
+                        data-testid="button-create-portal-access"
+                        onClick={() => {
+                          setEditingPortalUser(null);
+                          setPortalForm({ name: company?.tradingName || company?.legalName || "", email: "", password: "purax2026" });
+                          setPortalDialogOpen(true);
+                        }}
+                      >
+                        <Shield className="w-3 h-3 mr-1" /> Create Portal Access
+                      </Button>
+                    )}
                   </div>
                 )}
                 <div>
@@ -2122,6 +2270,80 @@ export default function CompanyDetailPage() {
             >
               {isSubmittingContact && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={portalDialogOpen} onOpenChange={(open) => {
+        if (!open) { setPortalDialogOpen(false); setEditingPortalUser(null); }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingPortalUser ? "Edit Portal Access" : "Create Portal Access"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-muted-foreground">Name *</label>
+              <Input
+                value={portalForm.name}
+                onChange={(e) => setPortalForm({ ...portalForm, name: e.target.value })}
+                placeholder="Customer name"
+                data-testid="input-portal-name"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Email (login) *</label>
+              <Input
+                type="email"
+                value={portalForm.email}
+                onChange={(e) => setPortalForm({ ...portalForm, email: e.target.value })}
+                placeholder="customer@example.com"
+                data-testid="input-portal-email"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">
+                {editingPortalUser ? "New Password (leave blank to keep current)" : "Password *"}
+              </label>
+              <Input
+                type="text"
+                value={portalForm.password}
+                onChange={(e) => setPortalForm({ ...portalForm, password: e.target.value })}
+                placeholder={editingPortalUser ? "Leave blank to keep current" : "purax2026"}
+                data-testid="input-portal-password"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPortalDialogOpen(false)} data-testid="button-cancel-portal">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (editingPortalUser) {
+                  const updates: any = {};
+                  if (portalForm.name) updates.name = portalForm.name;
+                  if (portalForm.email) updates.email = portalForm.email;
+                  if (portalForm.password) updates.password = portalForm.password;
+                  updatePortalUserMutation.mutate({ id: editingPortalUser.id, data: updates });
+                } else {
+                  createPortalUserMutation.mutate({
+                    name: portalForm.name,
+                    email: portalForm.email,
+                    password: portalForm.password,
+                  });
+                }
+              }}
+              disabled={createPortalUserMutation.isPending || updatePortalUserMutation.isPending || !portalForm.name || !portalForm.email || (!editingPortalUser && !portalForm.password)}
+              data-testid="button-save-portal"
+            >
+              {(createPortalUserMutation.isPending || updatePortalUserMutation.isPending) && (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              )}
+              {editingPortalUser ? "Save Changes" : "Create Access"}
             </Button>
           </DialogFooter>
         </DialogContent>

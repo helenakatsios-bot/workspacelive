@@ -5884,6 +5884,28 @@ Rules:
 
   // ============ ADMIN: PORTAL USER MANAGEMENT ============
 
+  app.get("/api/companies/:id/portal-users", requireAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT pu.id, pu.company_id, pu.name, pu.email, pu.active, pu.created_at, pu.last_login
+        FROM portal_users pu
+        WHERE pu.company_id = $1
+        ORDER BY pu.created_at DESC
+      `, [req.params.id]);
+      res.json(result.rows.map((r: any) => ({
+        id: r.id,
+        companyId: r.company_id,
+        name: r.name,
+        email: r.email,
+        active: r.active,
+        createdAt: r.created_at,
+        lastLogin: r.last_login,
+      })));
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch portal users" });
+    }
+  });
+
   app.get("/api/admin/portal-users", requireAdmin, async (req, res) => {
     try {
       const result = await pool.query(`
