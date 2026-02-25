@@ -84,6 +84,7 @@ interface Company {
   id: string;
   legalName: string;
   tradingName: string | null;
+  priceListId: string | null;
 }
 
 export default function CustomerPortalPage() {
@@ -95,6 +96,7 @@ export default function CustomerPortalPage() {
   const [showEditDialog, setShowEditDialog] = useState<PortalUserAdmin | null>(null);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
+  const [editPriceListId, setEditPriceListId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -169,13 +171,17 @@ export default function CustomerPortalPage() {
   });
 
   const editMutation = useMutation({
-    mutationFn: async ({ id, name, email }: { id: string; name: string; email: string }) => {
+    mutationFn: async ({ id, name, email, companyId, priceListId }: { id: string; name: string; email: string; companyId: string; priceListId: string }) => {
+      if (priceListId && companyId) {
+        await apiRequest("PATCH", `/api/companies/${companyId}`, { priceListId: priceListId === "none" ? null : priceListId });
+      }
       const res = await apiRequest("PATCH", `/api/admin/portal-users/${id}`, { name, email });
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-users"] });
-      toast({ title: "Portal user updated", description: "Name and email have been saved" });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      toast({ title: "Portal user updated", description: "Changes have been saved" });
       setShowEditDialog(null);
     },
     onError: (err: any) => {
@@ -325,6 +331,7 @@ export default function CustomerPortalPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Company</TableHead>
+                  <TableHead>Price List</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Last Login</TableHead>
                   <TableHead>Created</TableHead>
@@ -342,6 +349,14 @@ export default function CustomerPortalPage() {
                     </TableCell>
                     <TableCell data-testid={`text-user-company-${user.id}`}>
                       {user.companyName || "-"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground" data-testid={`text-user-pricelist-${user.id}`}>
+                      {(() => {
+                        const userCompany = companies?.find((c) => c.id === user.companyId);
+                        if (!userCompany?.priceListId) return "-";
+                        const pl = priceLists?.find((p: any) => p.id === userCompany.priceListId);
+                        return pl?.name || "-";
+                      })()}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -378,6 +393,8 @@ export default function CustomerPortalPage() {
                             setShowEditDialog(user);
                             setEditName(user.name);
                             setEditEmail(user.email);
+                            const userCompany = companies?.find((c) => c.id === user.companyId);
+                            setEditPriceListId(userCompany?.priceListId || "none");
                           }}
                           title="Edit name/email"
                           data-testid={`button-edit-${user.id}`}
@@ -582,7 +599,7 @@ export default function CustomerPortalPage() {
             onSubmit={(e) => {
               e.preventDefault();
               if (showEditDialog) {
-                editMutation.mutate({ id: showEditDialog.id, name: editName, email: editEmail });
+                editMutation.mutate({ id: showEditDialog.id, name: editName, email: editEmail, companyId: showEditDialog.companyId, priceListId: editPriceListId });
               }
             }}
             className="space-y-4"
@@ -610,6 +627,22 @@ export default function CustomerPortalPage() {
                 data-testid="input-edit-email"
               />
               <p className="text-xs text-muted-foreground">This is the email they use to log in to the portal</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Price List</Label>
+              <Select value={editPriceListId} onValueChange={setEditPriceListId}>
+                <SelectTrigger data-testid="select-edit-pricelist">
+                  <SelectValue placeholder="Select a price list..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No price list</SelectItem>
+                  {priceLists?.filter((pl: any) => pl.active).map((pl: any) => (
+                    <SelectItem key={pl.id} value={pl.id}>
+                      {pl.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowEditDialog(null)} data-testid="button-cancel-edit">
