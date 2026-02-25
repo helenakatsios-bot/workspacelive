@@ -18,6 +18,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -98,6 +105,9 @@ export default function OrderFormPage() {
 
   const [productSearch, setProductSearch] = useState("");
   const [productOpen, setProductOpen] = useState(false);
+  const [pendingProduct, setPendingProduct] = useState<Product | null>(null);
+  const [selectedFilling, setSelectedFilling] = useState("");
+  const [selectedWeight, setSelectedWeight] = useState("");
 
   const { data: companies } = useQuery<Company[]>({
     queryKey: ["/api/companies"],
@@ -141,6 +151,20 @@ export default function OrderFormPage() {
   const { data: products } = useQuery<Product[]>({
     queryKey: ["/api/products"],
   });
+
+  const { data: allVariantPrices } = useQuery<any[]>({
+    queryKey: ["/api/products/all-variant-prices"],
+  });
+
+  const variantsByProduct = useMemo(() => {
+    if (!allVariantPrices) return {};
+    const map: Record<string, any[]> = {};
+    for (const v of allVariantPrices) {
+      if (!map[v.productId]) map[v.productId] = [];
+      map[v.productId].push(v);
+    }
+    return map;
+  }, [allVariantPrices]);
 
   const selectedCompany = useMemo(
     () => companies?.find((c) => c.id === companyId),
@@ -188,11 +212,35 @@ export default function OrderFormPage() {
   }, [products, productSearch, priceListProductIds]);
 
   const addProduct = (product: Product) => {
-    const existing = lines.find((l) => l.productId === product.id);
-    if (existing) {
+    const variants = variantsByProduct[product.id];
+    if (variants && variants.length > 0) {
+      setPendingProduct(product);
+      setSelectedFilling(variants[0].filling);
+      setSelectedWeight(variants[0].weight || "");
+      setProductOpen(false);
+      setProductSearch("");
+      return;
+    }
+    addProductLine(product, "", "");
+  };
+
+  const addProductLine = (product: Product, filling: string, weight: string) => {
+    const variants = variantsByProduct[product.id];
+    let price = parseFloat(product.unitPrice as string);
+    if (filling && variants) {
+      const match = variants.find(
+        (v) => v.filling === filling && (weight ? v.weight === weight : !v.weight || v.weight === weight)
+      );
+      if (match) price = parseFloat(match.unitPrice);
+    }
+    const description = filling
+      ? [filling, weight].filter(Boolean).join(" – ")
+      : "";
+    const existing = lines.find((l) => l.productId === product.id && l.descriptionOverride === description);
+    if (existing && !filling) {
       setLines(
         lines.map((l) =>
-          l.productId === product.id
+          l.productId === product.id && l.descriptionOverride === description
             ? {
                 ...l,
                 quantity: l.quantity + 1,
@@ -202,7 +250,6 @@ export default function OrderFormPage() {
         )
       );
     } else {
-      const price = parseFloat(product.unitPrice as string);
       setLines([
         ...lines,
         {
@@ -213,12 +260,15 @@ export default function OrderFormPage() {
           unitPrice: price,
           discount: 0,
           lineTotal: price,
-          descriptionOverride: "",
+          descriptionOverride: description,
         },
       ]);
     }
     setProductOpen(false);
     setProductSearch("");
+    setPendingProduct(null);
+    setSelectedFilling("");
+    setSelectedWeight("");
   };
 
   const updateLine = (index: number, field: keyof OrderLineForm, value: string | number) => {
@@ -702,6 +752,92 @@ export default function OrderFormPage() {
           </Button>
         </div>
       </div>
+
+      {/* Variant picker dialog */}
+      {pendingProduct && (() => {
+        const variants = variantsByProduct[pendingProduct.id] || [];
+        const fillings = [...new Set(variants.map((v: any) => v.filling))];
+        const weightsForFilling = variants
+          .filter((v: any) => v.filling === selectedFilling && v.weight)
+          .map((v: any) => v.weight as string);
+        const selectedVariant = variants.find(
+          (v: any) => v.filling === selectedFilling && (weightsForFilling.length === 0 || v.weight === selectedWeight)
+        );
+        return (
+          <Dialog open={!!pendingProduct} onOpenChange={(open) => { if (!open) { setPendingProduct(null); setSelectedFilling(""); setSelectedWeight(""); } }}>
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Choose Filling — {pendingProduct.name}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label>Filling</Label>
+                  <div className="flex flex-col gap-2">
+                    {fillings.map((f: string) => (
+                      <button
+                        key={f}
+                        type="button"
+                        data-testid={`option-filling-${f}`}
+                        onClick={() => {
+                          setSelectedFilling(f);
+                          const firstWeight = variants.find((v: any) => v.filling === f && v.weight)?.weight || "";
+                          setSelectedWeight(firstWeight);
+                        }}
+                        className={`text-left px-3 py-2 rounded border text-sm transition-colors ${
+                          selectedFilling === f
+                            ? "border-primary bg-primary/10 font-medium"
+                            : "border-border hover:border-primary/50"
+                        }`}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {weightsForFilling.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Weight</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {weightsForFilling.map((w: string) => (
+                        <button
+                          key={w}
+                          type="button"
+                          data-testid={`option-weight-${w}`}
+                          onClick={() => setSelectedWeight(w)}
+                          className={`px-3 py-1.5 rounded border text-sm transition-colors ${
+                            selectedWeight === w
+                              ? "border-primary bg-primary/10 font-medium"
+                              : "border-border hover:border-primary/50"
+                          }`}
+                        >
+                          {w}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedVariant && (
+                  <p className="text-sm text-muted-foreground">
+                    Price: <span className="font-medium text-foreground">{formatCurrency(parseFloat(selectedVariant.unitPrice))}</span>
+                  </p>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setPendingProduct(null); setSelectedFilling(""); setSelectedWeight(""); }}>
+                  Cancel
+                </Button>
+                <Button
+                  disabled={!selectedFilling}
+                  onClick={() => addProductLine(pendingProduct, selectedFilling, selectedWeight)}
+                  data-testid="button-confirm-variant"
+                >
+                  Add to Order
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </div>
   );
 }
