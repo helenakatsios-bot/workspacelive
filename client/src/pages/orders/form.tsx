@@ -58,7 +58,7 @@ import { Badge } from "@/components/ui/badge";
 import type { Company, Contact, Product } from "@shared/schema";
 
 interface OrderLineForm {
-  productId: string;
+  productId: string | null;
   productName: string;
   sku: string;
   quantity: number;
@@ -67,6 +67,8 @@ interface OrderLineForm {
   lineTotal: number;
   descriptionOverride: string;
 }
+
+const FEE_TYPES = ["Freight", "Drop Ship", "Shopify Fee"] as const;
 
 export default function OrderFormPage() {
   const [, navigate] = useLocation();
@@ -291,6 +293,25 @@ export default function OrderFormPage() {
     setLines(lines.filter((_, i) => i !== index));
   };
 
+  const [feeOpen, setFeeOpen] = useState(false);
+
+  const addFee = (feeName: string) => {
+    setLines([
+      ...lines,
+      {
+        productId: null,
+        productName: feeName,
+        sku: "",
+        quantity: 1,
+        unitPrice: 0,
+        discount: 0,
+        lineTotal: 0,
+        descriptionOverride: feeName,
+      },
+    ]);
+    setFeeOpen(false);
+  };
+
   const subtotal = lines.reduce((sum, l) => sum + l.lineTotal, 0);
   const tax = subtotal * 0.1;
   const total = subtotal + tax;
@@ -509,7 +530,29 @@ export default function OrderFormPage() {
             <CardHeader>
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <CardTitle className="text-base">Order Lines</CardTitle>
-                <Popover open={productOpen} onOpenChange={setProductOpen}>
+                <div className="flex items-center gap-2">
+                  <Popover open={feeOpen} onOpenChange={setFeeOpen}>
+                    <PopoverTrigger asChild>
+                      <Button size="sm" variant="outline" data-testid="button-add-fee">
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add Fee
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-48 p-1" align="end">
+                      {FEE_TYPES.map((fee) => (
+                        <button
+                          key={fee}
+                          type="button"
+                          onClick={() => addFee(fee)}
+                          data-testid={`option-fee-${fee.replace(/\s+/g, "-").toLowerCase()}`}
+                          className="w-full text-left px-3 py-2 text-sm rounded hover:bg-muted transition-colors"
+                        >
+                          {fee}
+                        </button>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
+                  <Popover open={productOpen} onOpenChange={setProductOpen}>
                   <PopoverTrigger asChild>
                     <Button size="sm" data-testid="button-add-product">
                       <Plus className="w-4 h-4 mr-1" />
@@ -550,6 +593,7 @@ export default function OrderFormPage() {
                     </Command>
                   </PopoverContent>
                 </Popover>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -574,7 +618,7 @@ export default function OrderFormPage() {
                   </TableHeader>
                   <TableBody>
                     {lines.map((line, index) => (
-                      <TableRow key={line.productId} data-testid={`row-line-${index}`}>
+                      <TableRow key={`line-${index}`} data-testid={`row-line-${index}`}>
                         <TableCell>
                           <div>
                             <p className="font-medium text-sm">{line.productName}</p>

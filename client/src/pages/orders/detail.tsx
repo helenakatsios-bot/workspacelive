@@ -124,6 +124,7 @@ export default function OrderDetailPage() {
   const [companyOpen, setCompanyOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [productOpen, setProductOpen] = useState(false);
+  const [feeOpen, setFeeOpen] = useState(false);
   const [pendingProduct, setPendingProduct] = useState<Product | null>(null);
   const [selectedFilling, setSelectedFilling] = useState("");
   const [selectedWeight, setSelectedWeight] = useState("");
@@ -715,7 +716,29 @@ export default function OrderDetailPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                 <CardTitle className="text-lg">Line Items</CardTitle>
-                <Popover open={productOpen} onOpenChange={setProductOpen}>
+                <div className="flex items-center gap-2">
+                  <Popover open={feeOpen} onOpenChange={setFeeOpen}>
+                    <PopoverTrigger asChild>
+                      <Button size="sm" variant="outline" data-testid="button-add-fee">
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add Fee
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-48 p-1" align="end">
+                      {(["Freight", "Drop Ship", "Shopify Fee"] as const).map((fee) => (
+                        <button
+                          key={fee}
+                          type="button"
+                          onClick={() => { addLine({ id: "", name: fee, sku: "", unitPrice: "0", active: true } as any); setFeeOpen(false); }}
+                          data-testid={`option-fee-${fee.replace(/\s+/g, "-").toLowerCase()}`}
+                          className="w-full text-left px-3 py-2 text-sm rounded hover:bg-muted transition-colors"
+                        >
+                          {fee}
+                        </button>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
+                  <Popover open={productOpen} onOpenChange={setProductOpen}>
                   <PopoverTrigger asChild>
                     <Button size="sm" data-testid="button-add-product">
                       <Plus className="w-4 h-4 mr-1" />
@@ -748,6 +771,7 @@ export default function OrderDetailPage() {
                     </Command>
                   </PopoverContent>
                 </Popover>
+                </div>
               </CardHeader>
               {pendingProduct && (
                 <div className="mx-6 mb-4 p-4 border rounded-lg bg-muted/50" data-testid="variant-selector">
