@@ -15,6 +15,7 @@ import CompaniesPage from "@/pages/companies/index";
 import CompanyDetailPage from "@/pages/companies/detail";
 import CompanyFormPage from "@/pages/companies/form";
 import ContactsPage from "@/pages/contacts/index";
+import ContactDetailPage from "@/pages/contacts/detail";
 import DealsPage from "@/pages/deals/index";
 import DealFormPage from "@/pages/deals/form";
 import DealDetailPage from "@/pages/deals/detail";
@@ -125,6 +126,7 @@ function AuthenticatedApp() {
         <Route path="/companies/:id" component={CompanyDetailPage} />
         <Route path="/companies/:id/edit" component={CompanyFormPage} />
         <Route path="/contacts" component={ContactsPage} />
+        <Route path="/contacts/:id" component={ContactDetailPage} />
         <Route path="/deals" component={DealsPage} />
         <Route path="/deals/new" component={DealFormPage} />
         <Route path="/deals/:id" component={DealDetailPage} />
