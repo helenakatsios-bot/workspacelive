@@ -552,7 +552,7 @@ async function runStartupTasks() {
 
   // Create portal users for all companies that don't have one
   try {
-    const bcrypt = await import("bcrypt");
+    const bcrypt = await import("bcryptjs");
     const allCompanies = await pool.query(`SELECT id, legal_name, trading_name FROM companies`);
     const existingPortal = await pool.query(`SELECT DISTINCT company_id FROM portal_users`);
     const existingIds = new Set(existingPortal.rows.map((r: any) => r.company_id));

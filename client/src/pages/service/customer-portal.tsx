@@ -97,6 +97,7 @@ export default function CustomerPortalPage() {
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPriceListId, setEditPriceListId] = useState("");
+  const [editNewPassword, setEditNewPassword] = useState("");
   const [searchQuery, setSearchQueryRaw] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -171,11 +172,13 @@ export default function CustomerPortalPage() {
   });
 
   const editMutation = useMutation({
-    mutationFn: async ({ id, name, email, companyId, priceListId }: { id: string; name: string; email: string; companyId: string; priceListId: string }) => {
+    mutationFn: async ({ id, name, email, companyId, priceListId, newPassword }: { id: string; name: string; email: string; companyId: string; priceListId: string; newPassword?: string }) => {
       if (priceListId && companyId) {
         await apiRequest("PATCH", `/api/companies/${companyId}`, { priceListId: priceListId === "none" ? null : priceListId });
       }
-      const res = await apiRequest("PATCH", `/api/admin/portal-users/${id}`, { name, email });
+      const body: any = { name, email };
+      if (newPassword && newPassword.length >= 6) body.password = newPassword;
+      const res = await apiRequest("PATCH", `/api/admin/portal-users/${id}`, body);
       return res.json();
     },
     onSuccess: () => {
@@ -183,6 +186,7 @@ export default function CustomerPortalPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
       toast({ title: "Portal user updated", description: "Changes have been saved" });
       setShowEditDialog(null);
+      setEditNewPassword("");
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message || "Failed to update portal user", variant: "destructive" });
@@ -358,7 +362,19 @@ export default function CustomerPortalPage() {
               </TableHeader>
               <TableBody>
                 {pagedUsers!.map((user) => (
-                  <TableRow key={user.id} data-testid={`row-portal-user-${user.id}`}>
+                  <TableRow
+                    key={user.id}
+                    data-testid={`row-portal-user-${user.id}`}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => {
+                      setShowEditDialog(user);
+                      setEditName(user.name);
+                      setEditEmail(user.email);
+                      setEditNewPassword("");
+                      const userCompany = companies?.find((c) => c.id === user.companyId);
+                      setEditPriceListId(userCompany?.priceListId || "none");
+                    }}
+                  >
                     <TableCell className="font-medium" data-testid={`text-user-name-${user.id}`}>
                       {user.name}
                     </TableCell>
@@ -393,7 +409,7 @@ export default function CustomerPortalPage() {
                     <TableCell className="text-muted-foreground text-sm">
                       {format(new Date(user.createdAt), "MMM d, yyyy")}
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
@@ -411,6 +427,7 @@ export default function CustomerPortalPage() {
                             setShowEditDialog(user);
                             setEditName(user.name);
                             setEditEmail(user.email);
+                            setEditNewPassword("");
                             const userCompany = companies?.find((c) => c.id === user.companyId);
                             setEditPriceListId(userCompany?.priceListId || "none");
                           }}
@@ -616,7 +633,7 @@ export default function CustomerPortalPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!showEditDialog} onOpenChange={() => setShowEditDialog(null)}>
+      <Dialog open={!!showEditDialog} onOpenChange={() => { setShowEditDialog(null); setEditNewPassword(""); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Portal User</DialogTitle>
@@ -625,7 +642,7 @@ export default function CustomerPortalPage() {
             onSubmit={(e) => {
               e.preventDefault();
               if (showEditDialog) {
-                editMutation.mutate({ id: showEditDialog.id, name: editName, email: editEmail, companyId: showEditDialog.companyId, priceListId: editPriceListId });
+                editMutation.mutate({ id: showEditDialog.id, name: editName, email: editEmail, companyId: showEditDialog.companyId, priceListId: editPriceListId, newPassword: editNewPassword || undefined });
               }
             }}
             className="space-y-4"
@@ -653,6 +670,19 @@ export default function CustomerPortalPage() {
                 data-testid="input-edit-email"
               />
               <p className="text-xs text-muted-foreground">This is the email they use to log in to the portal</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-password">New Password</Label>
+              <Input
+                id="edit-password"
+                type="text"
+                value={editNewPassword}
+                onChange={(e) => setEditNewPassword(e.target.value)}
+                placeholder="Leave blank to keep current password"
+                minLength={6}
+                data-testid="input-edit-password"
+              />
+              <p className="text-xs text-muted-foreground">Minimum 6 characters. Leave blank to keep existing.</p>
             </div>
             <div className="space-y-2">
               <Label>Price List</Label>
