@@ -1485,7 +1485,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                 </div>
               </div>
 
-              <Button className="w-full" disabled={cartItems.length === 0 || submitting} onClick={handleSubmit} data-testid="button-submit-order">
+              <Button className="w-full" disabled={(cartItems.length === 0 && !customLines.some((l) => l.size && l.qty > 0)) || submitting} onClick={handleSubmit} data-testid="button-submit-order">
                 {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShoppingCart className="w-4 h-4 mr-2" />}
                 {isEditMode ? "Update Order" : "Place Order"}
               </Button>
