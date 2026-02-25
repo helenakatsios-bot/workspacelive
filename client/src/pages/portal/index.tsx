@@ -1223,9 +1223,11 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                         <TableCell>
                           <Input
                             type="number"
+                            inputMode="numeric"
                             min={0}
                             value={cart[product.id] || ""}
                             placeholder="0"
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => {
                               const val = parseInt(e.target.value) || 0;
                               setCart((prev) => {
@@ -1302,8 +1304,10 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                               <div className="flex items-center justify-center gap-1">
                                 <Input
                                   type="number"
+                                  inputMode="numeric"
                                   min={1}
                                   value={line.qty}
+                                  onFocus={(e) => e.target.select()}
                                   onChange={(e) => updateCustomLine(line.id, "qty", Math.max(1, parseInt(e.target.value) || 1))}
                                   className="h-8 w-[70px] text-center"
                                   data-testid={`input-qty-custom-${line.id}`}
@@ -1343,7 +1347,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
         </div>
 
         <div className="space-y-4">
-          <Card className="sticky top-4">
+          <Card className="lg:sticky lg:top-20">
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
                 <ShoppingCart className="w-4 h-4" />
