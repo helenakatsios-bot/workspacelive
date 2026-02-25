@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, MapPin, Phone, Mail, User, Building2, FileText, Clock, Trash2, Pencil, Check, X } from "lucide-react";
+import { Loader2, MapPin, Phone, Mail, User, Building2, FileText, Clock, Trash2, Pencil, Check, X, Paperclip, Download } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -183,10 +183,16 @@ export default function OrderRequestsPage() {
                       <div className="text-xs text-muted-foreground">{req.contactEmail}</div>
                     </TableCell>
                     <TableCell>
-                      <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
                         {Array.isArray(req.items) ? (
                           <span className="text-xs">{req.items.length} item{req.items.length !== 1 ? "s" : ""}</span>
                         ) : <span className="text-xs text-muted-foreground">No items</span>}
+                        {req.attachmentCount > 0 && (
+                          <span className="flex items-center gap-0.5 text-xs text-muted-foreground" title={`${req.attachmentCount} attachment${req.attachmentCount !== 1 ? "s" : ""}`}>
+                            <Paperclip className="w-3 h-3" />
+                            {req.attachmentCount}
+                          </span>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -360,7 +366,42 @@ export default function OrderRequestsPage() {
                     <h3 className="text-sm font-semibold text-muted-foreground">Customer Notes</h3>
                     <div className="flex items-start gap-2">
                       <FileText className="w-4 h-4 mt-0.5 text-muted-foreground" />
-                      <p className="text-sm">{selectedRequest.customerNotes}</p>
+                      <p className="text-sm whitespace-pre-wrap">{selectedRequest.customerNotes}</p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {selectedRequest.attachments && selectedRequest.attachments.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                      <Paperclip className="w-4 h-4" />
+                      Attachments ({selectedRequest.attachments.length})
+                    </h3>
+                    <div className="space-y-1.5">
+                      {selectedRequest.attachments.map((att: any) => (
+                        <div key={att.id} className="flex items-center gap-2 text-sm bg-muted/50 rounded px-3 py-2" data-testid={`attachment-${att.id}`}>
+                          <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                          <span className="truncate flex-1">{att.fileName}</span>
+                          <span className="text-xs text-muted-foreground flex-shrink-0">
+                            {att.fileSize > 1024 * 1024
+                              ? `${(att.fileSize / (1024 * 1024)).toFixed(1)}MB`
+                              : `${Math.round(att.fileSize / 1024)}KB`}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => window.open(`/api/attachments/${att.id}/download`, "_blank")}
+                            title="Download"
+                            data-testid={`button-download-${att.id}`}
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </>

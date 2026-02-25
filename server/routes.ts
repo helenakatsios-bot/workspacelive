@@ -4651,7 +4651,18 @@ Rules:
   app.get("/api/customer-order-requests", requireAuth, async (_req, res) => {
     try {
       const requests = await storage.getAllCustomerOrderRequests();
-      res.json(requests);
+      const attachCounts = await pool.query(
+        `SELECT entity_id, COUNT(*)::int as count FROM attachments WHERE entity_type = 'order_request' GROUP BY entity_id`
+      );
+      const countMap: Record<string, number> = {};
+      for (const row of attachCounts.rows) {
+        countMap[row.entity_id] = row.count;
+      }
+      const withCounts = requests.map((r: any) => ({
+        ...r,
+        attachmentCount: countMap[r.id] || 0,
+      }));
+      res.json(withCounts);
     } catch (error) {
       console.error("Get order requests error:", error);
       res.status(500).json({ message: "Failed to load order requests" });
@@ -4662,7 +4673,21 @@ Rules:
     try {
       const request = await storage.getCustomerOrderRequest(req.params.id);
       if (!request) return res.status(404).json({ message: "Order request not found" });
-      res.json(request);
+      const attachments = await pool.query(
+        `SELECT id, file_name, file_type, file_size, storage_path, uploaded_at FROM attachments WHERE entity_type = 'order_request' AND entity_id = $1 ORDER BY uploaded_at`,
+        [req.params.id]
+      );
+      res.json({
+        ...request,
+        attachments: attachments.rows.map((a: any) => ({
+          id: a.id,
+          fileName: a.file_name,
+          fileType: a.file_type,
+          fileSize: a.file_size,
+          storagePath: a.storage_path,
+          uploadedAt: a.uploaded_at,
+        })),
+      });
     } catch (error) {
       console.error("Get order request error:", error);
       res.status(500).json({ message: "Failed to load order request" });
