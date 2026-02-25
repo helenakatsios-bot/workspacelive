@@ -5848,7 +5848,6 @@ Rules:
         lastLogin: r.last_login,
         companyName: r.company_name,
         paymentTerms: r.payment_terms,
-        derivedPassword: 'purax2026',
       })));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch portal users" });
@@ -5890,10 +5889,10 @@ Rules:
         ORDER BY pu.name
       `);
 
-      let csv = 'Name,Email (Login),Password,Company\n';
+      let csv = 'Name,Email (Login),Company\n';
       for (const row of result.rows) {
         const escapeCsv = (s: string) => '"' + s.replace(/"/g, '""') + '"';
-        csv += [escapeCsv(row.name), escapeCsv(row.email), escapeCsv('purax2026'), escapeCsv(row.company_name)].join(',') + '\n';
+        csv += [escapeCsv(row.name), escapeCsv(row.email), escapeCsv(row.company_name)].join(',') + '\n';
       }
 
       res.setHeader('Content-Type', 'text/csv');

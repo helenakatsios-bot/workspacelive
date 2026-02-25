@@ -1463,7 +1463,6 @@ function PortalUsersManagement() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Password</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead>Payment Days</TableHead>
                   <TableHead>Status</TableHead>
@@ -1477,7 +1476,6 @@ function PortalUsersManagement() {
                   <TableRow key={pu.id} data-testid={`row-portal-user-${pu.id}`}>
                     <TableCell className="font-medium">{pu.name}</TableCell>
                     <TableCell className="text-sm">{pu.email}</TableCell>
-                    <TableCell className="text-sm font-mono" data-testid={`text-password-${pu.id}`}>{pu.derivedPassword}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1.5">
                         <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
