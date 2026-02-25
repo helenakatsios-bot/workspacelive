@@ -4694,15 +4694,51 @@ Rules:
       }
 
       const allCompanies = await storage.getAllCompanies();
+      const reqName = orderRequest.companyName.toLowerCase().trim();
       let company = allCompanies.find(
         (c) =>
-          c.legalName.toLowerCase() === orderRequest.companyName.toLowerCase() ||
-          (c.tradingName && c.tradingName.toLowerCase() === orderRequest.companyName.toLowerCase())
+          c.legalName.toLowerCase() === reqName ||
+          (c.tradingName && c.tradingName.toLowerCase() === reqName)
       );
 
       if (!company) {
+        company = allCompanies.find(
+          (c) =>
+            c.legalName.toLowerCase().includes(reqName) ||
+            reqName.includes(c.legalName.toLowerCase()) ||
+            (c.tradingName && (c.tradingName.toLowerCase().includes(reqName) || reqName.includes(c.tradingName.toLowerCase())))
+        );
+      }
+
+      if (!company && orderRequest.contactEmail) {
+        const emailDomain = orderRequest.contactEmail.split("@")[1]?.toLowerCase();
+        if (emailDomain && !["gmail.com", "hotmail.com", "yahoo.com", "outlook.com", "icloud.com", "live.com"].includes(emailDomain)) {
+          company = allCompanies.find(
+            (c) => c.emailAddresses && c.emailAddresses.some((e: string) => e.toLowerCase().endsWith("@" + emailDomain))
+          );
+        }
+      }
+
+      const overrideCompanyId = req.body?.companyId;
+      if (!company && overrideCompanyId) {
+        company = allCompanies.find((c) => c.id === overrideCompanyId);
+      }
+
+      if (!company) {
+        const suggestions = allCompanies
+          .filter((c) => {
+            const ln = c.legalName.toLowerCase();
+            const tn = (c.tradingName || "").toLowerCase();
+            const words = reqName.split(/\s+/);
+            return words.some((w) => w.length >= 3 && (ln.includes(w) || tn.includes(w)));
+          })
+          .slice(0, 5)
+          .map((c) => c.tradingName || c.legalName);
+        const suggestionText = suggestions.length > 0
+          ? ` Did you mean: ${suggestions.join(", ")}?`
+          : "";
         return res.status(400).json({ 
-          message: `Could not match "${orderRequest.companyName}" to an existing company. Please check the company name and try again, or create the order manually with the correct company.`
+          message: `Could not match "${orderRequest.companyName}" to an existing company.${suggestionText} You can edit the company name on the request, or create the order manually with the correct company.`
         });
       }
 

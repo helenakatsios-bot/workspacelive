@@ -4,10 +4,11 @@ import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, MapPin, Phone, Mail, User, Building2, FileText, Clock, Trash2 } from "lucide-react";
+import { Loader2, MapPin, Phone, Mail, User, Building2, FileText, Clock, Trash2, Pencil, Check, X } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -21,6 +22,8 @@ function statusBadgeClass(status: string) {
 
 export default function OrderRequestsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingCompany, setEditingCompany] = useState(false);
+  const [editCompanyName, setEditCompanyName] = useState("");
   const { toast } = useToast();
   const [, navigate] = useLocation();
 
@@ -58,8 +61,31 @@ export default function OrderRequestsPage() {
       toast({ title: "Converted", description: "Order request converted to order successfully." });
       navigate(`/orders/${order.id}`);
     },
+    onError: async (error: any) => {
+      let msg = "Failed to convert order request.";
+      try {
+        const raw = error?.message || "";
+        const jsonMatch = raw.match(/\{.*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          msg = parsed.message || msg;
+        }
+      } catch {}
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    },
+  });
+
+  const updateCompanyMutation = useMutation({
+    mutationFn: async ({ id, companyName }: { id: string; companyName: string }) => {
+      return apiRequest("PATCH", `/api/customer-order-requests/${id}`, { companyName });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-order-requests"] });
+      setEditingCompany(false);
+      toast({ title: "Updated", description: "Company name updated." });
+    },
     onError: () => {
-      toast({ title: "Error", description: "Failed to convert order request.", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to update company name.", variant: "destructive" });
     },
   });
 
@@ -201,10 +227,54 @@ export default function OrderRequestsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-muted-foreground">Company</h3>
-                  <div className="flex items-start gap-2">
-                    <Building2 className="w-4 h-4 mt-0.5 text-muted-foreground" />
-                    <span className="text-sm font-medium" data-testid="text-detail-company">{selectedRequest.companyName}</span>
-                  </div>
+                  {editingCompany ? (
+                    <div className="flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <Input
+                        value={editCompanyName}
+                        onChange={(e) => setEditCompanyName(e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-edit-company-name"
+                        autoFocus
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => updateCompanyMutation.mutate({ id: selectedRequest.id, companyName: editCompanyName })}
+                        disabled={updateCompanyMutation.isPending}
+                        data-testid="button-save-company"
+                      >
+                        <Check className="w-4 h-4 text-green-600" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setEditingCompany(false)}
+                        data-testid="button-cancel-edit-company"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium" data-testid="text-detail-company">{selectedRequest.companyName}</span>
+                      {selectedRequest.status !== "converted" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => { setEditCompanyName(selectedRequest.companyName); setEditingCompany(true); }}
+                          title="Edit company name"
+                          data-testid="button-edit-company"
+                        >
+                          <Pencil className="w-3 h-3 text-muted-foreground" />
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-muted-foreground">Contact</h3>
