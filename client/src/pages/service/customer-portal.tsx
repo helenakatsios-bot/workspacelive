@@ -97,7 +97,7 @@ export default function CustomerPortalPage() {
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPriceListId, setEditPriceListId] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQueryRaw] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
 
   const [newName, setNewName] = useState("");
@@ -201,6 +201,10 @@ export default function CustomerPortalPage() {
     },
   });
 
+  const [currentPage, setCurrentPage] = useState(0);
+  const PAGE_SIZE = 50;
+  const setSearchQuery = (val: string) => { setSearchQueryRaw(val); setCurrentPage(0); };
+
   const filteredUsers = portalUsers?.filter((u) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -210,6 +214,9 @@ export default function CustomerPortalPage() {
       (u.companyName || "").toLowerCase().includes(q)
     );
   });
+
+  const totalPages = Math.ceil((filteredUsers?.length || 0) / PAGE_SIZE);
+  const pagedUsers = filteredUsers?.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
   const portalUrl = `${window.location.origin}/portal`;
 
@@ -325,6 +332,17 @@ export default function CustomerPortalPage() {
               <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             </div>
           ) : filteredUsers && filteredUsers.length > 0 ? (
+            <>
+            <div className="flex items-center justify-between mb-2 text-sm text-muted-foreground px-1">
+              <span>Showing {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, filteredUsers.length)} of {filteredUsers.length} users</span>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setCurrentPage(p => p - 1)} data-testid="button-prev-page">Previous</Button>
+                  <span>Page {currentPage + 1} of {totalPages}</span>
+                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage(p => p + 1)} data-testid="button-next-page">Next</Button>
+                </div>
+              )}
+            </div>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -339,7 +357,7 @@ export default function CustomerPortalPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
+                {pagedUsers!.map((user) => (
                   <TableRow key={user.id} data-testid={`row-portal-user-${user.id}`}>
                     <TableCell className="font-medium" data-testid={`text-user-name-${user.id}`}>
                       {user.name}
@@ -437,6 +455,14 @@ export default function CustomerPortalPage() {
                 ))}
               </TableBody>
             </Table>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-end gap-2 mt-3 text-sm text-muted-foreground px-1">
+                <Button variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setCurrentPage(p => p - 1)}>Previous</Button>
+                <span>Page {currentPage + 1} of {totalPages}</span>
+                <Button variant="outline" size="sm" disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage(p => p + 1)}>Next</Button>
+              </div>
+            )}
+            </>
           ) : (
             <div className="text-center py-12 text-muted-foreground">
               <Users className="w-10 h-10 mx-auto mb-2 opacity-50" />
