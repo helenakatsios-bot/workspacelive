@@ -5791,36 +5791,19 @@ Rules:
         LEFT JOIN contacts ct ON ct.id = pu.contact_id
         ORDER BY pu.created_at DESC
       `);
-      res.json(result.rows.map((r: any) => {
-        const firstName = (r.first_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
-        const lastName = (r.last_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
-        const nameParts = (r.name || '').trim().split(/\s+/);
-        const fallbackFirst = (nameParts[0] || '').toLowerCase().replace(/[^a-z]/g, '');
-        const fallbackLast = (nameParts.slice(1).join('') || '').toLowerCase().replace(/[^a-z]/g, '');
-        const fn = firstName || fallbackFirst;
-        const ln = lastName || fallbackLast;
-        let derivedPassword = 'purax1';
-        if (fn.length >= 3) {
-          derivedPassword = fn.substring(0, 9);
-        } else if (ln.length >= 3) {
-          derivedPassword = ln.substring(0, 9);
-        } else if ((fn + ln).length >= 3) {
-          derivedPassword = (fn + ln).substring(0, 9);
-        }
-        return {
-          id: r.id,
-          companyId: r.company_id,
-          contactId: r.contact_id,
-          name: r.name,
-          email: r.email,
-          active: r.active,
-          createdAt: r.created_at,
-          lastLogin: r.last_login,
-          companyName: r.company_name,
-          paymentTerms: r.payment_terms,
-          derivedPassword,
-        };
-      }));
+      res.json(result.rows.map((r: any) => ({
+        id: r.id,
+        companyId: r.company_id,
+        contactId: r.contact_id,
+        name: r.name,
+        email: r.email,
+        active: r.active,
+        createdAt: r.created_at,
+        lastLogin: r.last_login,
+        companyName: r.company_name,
+        paymentTerms: r.payment_terms,
+        derivedPassword: 'purax2026',
+      })));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch portal users" });
     }
@@ -5854,35 +5837,17 @@ Rules:
   app.get("/api/admin/portal-users/export-csv", requireAdmin, async (req, res) => {
     try {
       const result = await pool.query(`
-        SELECT pu.name, pu.email, c.first_name, c.last_name,
+        SELECT pu.name, pu.email,
           COALESCE(co.trading_name, co.legal_name, '') as company_name
         FROM portal_users pu
-        LEFT JOIN contacts c ON c.id = pu.contact_id
         LEFT JOIN companies co ON co.id = pu.company_id
         ORDER BY pu.name
       `);
 
       let csv = 'Name,Email (Login),Password,Company\n';
       for (const row of result.rows) {
-        let password = '(unknown)';
-        const firstName = (row.first_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
-        const lastName = (row.last_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
-        const nameParts = (row.name || '').trim().split(/\s+/);
-        const fallbackFirst = (nameParts[0] || '').toLowerCase().replace(/[^a-z]/g, '');
-        const fallbackLast = (nameParts.slice(1).join('') || '').toLowerCase().replace(/[^a-z]/g, '');
-        const fn = firstName || fallbackFirst;
-        const ln = lastName || fallbackLast;
-        if (fn.length >= 3) {
-          password = fn.substring(0, 9);
-        } else if (ln.length >= 3) {
-          password = ln.substring(0, 9);
-        } else if ((fn + ln).length >= 3) {
-          password = (fn + ln).substring(0, 9);
-        } else {
-          password = 'purax1';
-        }
         const escapeCsv = (s: string) => '"' + s.replace(/"/g, '""') + '"';
-        csv += [escapeCsv(row.name), escapeCsv(row.email), escapeCsv(password), escapeCsv(row.company_name)].join(',') + '\n';
+        csv += [escapeCsv(row.name), escapeCsv(row.email), escapeCsv('purax2026'), escapeCsv(row.company_name)].join(',') + '\n';
       }
 
       res.setHeader('Content-Type', 'text/csv');
