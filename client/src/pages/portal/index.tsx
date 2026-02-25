@@ -984,16 +984,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
         return;
       }
     }
-    const missingCustomFilling = customLines.filter((l) => l.size && l.qty > 0 && !l.filling);
-    if (missingCustomFilling.length > 0) {
-      toast({ title: "Filling required", description: "Please select a filling for all custom inserts", variant: "destructive" });
-      return;
-    }
-    const missingCustomWeight = customLines.filter((l) => l.size && l.qty > 0 && !l.weight);
-    if (missingCustomWeight.length > 0) {
-      toast({ title: "Weight required", description: "Please select a weight for all custom inserts", variant: "destructive" });
-      return;
-    }
+    // Filling and weight are optional for custom inserts — Purax staff will follow up
     setSubmitting(true);
     try {
       const fillingSelections = cartItems
