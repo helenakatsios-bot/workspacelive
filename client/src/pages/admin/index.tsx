@@ -437,6 +437,10 @@ export default function AdminPage() {
             <Globe className="w-4 h-4" />
             Portal
           </TabsTrigger>
+          <TabsTrigger value="imports" className="gap-2" data-testid="tab-imports">
+            <FileText className="w-4 h-4" />
+            Imports
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users" className="mt-6">
@@ -890,6 +894,10 @@ export default function AdminPage() {
 
         <TabsContent value="portal" className="mt-6">
           <PortalUsersManagement />
+        </TabsContent>
+
+        <TabsContent value="imports" className="mt-6 space-y-6">
+          <InvoiceCsvImport />
         </TabsContent>
       </Tabs>
 
@@ -1827,6 +1835,121 @@ function PortalUsersManagement() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function InvoiceCsvImport() {
+  const { toast } = useToast();
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<{ imported: number; skipped: number; skippedDuplicates: number; unmatched: string[]; errors: string[]; total: number } | null>(null);
+
+  const handleImport = async () => {
+    if (!csvFile) return;
+    setImporting(true);
+    setResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", csvFile);
+      const res = await fetch("/api/admin/import-invoices-csv", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Import failed");
+      setResult(data);
+      toast({ title: `Import complete — ${data.imported} invoices imported` });
+    } catch (e: any) {
+      toast({ title: "Import failed", description: e.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <FileText className="w-5 h-5" />
+          Import Invoices from CSV
+        </CardTitle>
+        <CardDescription>
+          Upload a CSV file exported from Excel or your accounting system to add historical invoices to customer accounts.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="rounded-lg border bg-muted/40 p-4 text-sm space-y-2">
+          <p className="font-medium">Required columns (flexible naming accepted):</p>
+          <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+            <li><span className="font-medium text-foreground">Invoice Number</span> — e.g. "Invoice Number", "Invoice No", "Ref"</li>
+            <li><span className="font-medium text-foreground">Company / Customer</span> — must match a company name in the CRM</li>
+          </ul>
+          <p className="font-medium pt-1">Optional columns:</p>
+          <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+            <li>Date / Invoice Date — invoice issue date</li>
+            <li>Due Date — payment due date</li>
+            <li>Total / Amount — invoice total (inc. tax)</li>
+            <li>Subtotal / Net — amount before tax</li>
+            <li>Tax / GST — tax amount</li>
+            <li>Balance Due / Outstanding — remaining balance</li>
+            <li>Status — Paid, Overdue, Sent, Void</li>
+          </ul>
+          <p className="text-xs text-muted-foreground pt-1">Duplicate invoice numbers are automatically skipped.</p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <input
+            type="file"
+            accept=".csv"
+            data-testid="input-invoice-csv"
+            onChange={(e) => { setCsvFile(e.target.files?.[0] || null); setResult(null); }}
+            className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-border file:text-sm file:bg-background file:cursor-pointer cursor-pointer"
+          />
+          <Button
+            onClick={handleImport}
+            disabled={!csvFile || importing}
+            data-testid="button-import-invoice-csv"
+          >
+            {importing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importing...</> : "Import Invoices"}
+          </Button>
+        </div>
+
+        {result && (
+          <div className="space-y-3 pt-1">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg border p-3 text-center">
+                <p className="text-2xl font-bold text-green-600">{result.imported}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Imported</p>
+              </div>
+              <div className="rounded-lg border p-3 text-center">
+                <p className="text-2xl font-bold text-yellow-600">{result.skippedDuplicates}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Duplicates skipped</p>
+              </div>
+              <div className="rounded-lg border p-3 text-center">
+                <p className="text-2xl font-bold text-orange-600">{result.skipped}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Unmatched / skipped</p>
+              </div>
+            </div>
+            {result.unmatched.length > 0 && (
+              <div className="rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 p-3">
+                <p className="text-sm font-medium text-orange-800 dark:text-orange-300 mb-1">Companies not found in CRM ({result.unmatched.length}):</p>
+                <p className="text-xs text-orange-700 dark:text-orange-400 leading-relaxed">{result.unmatched.join(", ")}</p>
+                <p className="text-xs text-muted-foreground mt-1">Check that the company name in your CSV exactly matches the name in the CRM (trading name or legal name).</p>
+              </div>
+            )}
+            {result.errors.length > 0 && (
+              <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 p-3">
+                <p className="text-sm font-medium text-red-800 dark:text-red-300 mb-1">Errors ({result.errors.length}):</p>
+                <ul className="text-xs text-red-700 dark:text-red-400 space-y-0.5">
+                  {result.errors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

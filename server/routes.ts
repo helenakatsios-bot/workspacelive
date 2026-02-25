@@ -6091,6 +6091,190 @@ Rules:
     }
   });
 
+  // ============ CSV INVOICE IMPORT ============
+
+  app.post("/api/admin/import-invoices-csv", requireAdmin, async (req, res) => {
+    try {
+      const contentType = req.headers["content-type"] || "";
+      if (!contentType.includes("multipart/form-data")) {
+        return res.status(400).json({ message: "Expected multipart/form-data" });
+      }
+
+      const busboy = await import("busboy");
+      const bb = busboy.default({ headers: req.headers });
+      let csvText = "";
+
+      await new Promise<void>((resolve, reject) => {
+        bb.on("file", (_fieldname: string, file: any) => {
+          const chunks: Buffer[] = [];
+          file.on("data", (d: Buffer) => chunks.push(d));
+          file.on("end", () => { csvText = Buffer.concat(chunks).toString("utf-8"); });
+          file.on("error", reject);
+        });
+        bb.on("finish", resolve);
+        bb.on("error", reject);
+        req.pipe(bb);
+      });
+
+      if (!csvText.trim()) {
+        return res.status(400).json({ message: "Empty CSV file" });
+      }
+
+      // Simple CSV parser that handles quoted fields
+      function parseCSV(text: string): string[][] {
+        const rows: string[][] = [];
+        const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const cells: string[] = [];
+          let current = "";
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (ch === '"') {
+              if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+              else { inQuotes = !inQuotes; }
+            } else if (ch === ',' && !inQuotes) {
+              cells.push(current.trim());
+              current = "";
+            } else {
+              current += ch;
+            }
+          }
+          cells.push(current.trim());
+          rows.push(cells);
+        }
+        return rows;
+      }
+
+      function normalizeKey(s: string): string {
+        return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+      }
+
+      function detectColumn(headers: string[], candidates: string[]): number {
+        const normHeaders = headers.map(normalizeKey);
+        for (const c of candidates) {
+          const idx = normHeaders.indexOf(normalizeKey(c));
+          if (idx !== -1) return idx;
+        }
+        return -1;
+      }
+
+      const rows = parseCSV(csvText);
+      if (rows.length < 2) {
+        return res.status(400).json({ message: "CSV must have a header row and at least one data row" });
+      }
+
+      const headers = rows[0];
+      const dataRows = rows.slice(1);
+
+      const colInvoiceNum = detectColumn(headers, ["Invoice Number", "Invoice No", "Invoice #", "Inv No", "InvoiceNumber", "InvNo", "Reference", "Ref", "Invoice"]);
+      const colCompany = detectColumn(headers, ["Company", "Customer", "Client", "To", "Name", "Company Name", "Customer Name", "Contact"]);
+      const colIssueDate = detectColumn(headers, ["Date", "Invoice Date", "Issue Date", "InvoiceDate", "IssueDate"]);
+      const colDueDate = detectColumn(headers, ["Due Date", "Due", "Payment Due", "DueDate", "PaymentDue"]);
+      const colTotal = detectColumn(headers, ["Total", "Amount", "Total Amount", "Invoice Total", "Gross", "TotalAmount", "InvoiceTotal"]);
+      const colSubtotal = detectColumn(headers, ["Subtotal", "Sub Total", "Net", "Net Amount", "NetAmount", "SubTotal"]);
+      const colTax = detectColumn(headers, ["Tax", "GST", "Tax Amount", "VAT", "TaxAmount"]);
+      const colStatus = detectColumn(headers, ["Status", "Payment Status", "PaymentStatus"]);
+      const colBalance = detectColumn(headers, ["Balance Due", "Balance", "Amount Due", "Outstanding", "BalanceDue", "AmountDue"]);
+
+      if (colInvoiceNum === -1) {
+        return res.status(400).json({ message: "Could not find an Invoice Number column. Ensure your CSV has a column named 'Invoice Number', 'Invoice No', or similar." });
+      }
+      if (colCompany === -1) {
+        return res.status(400).json({ message: "Could not find a Company/Customer column. Ensure your CSV has a column named 'Company', 'Customer', or similar." });
+      }
+
+      // Load all companies for matching
+      const allCompanies = await pool.query(`SELECT id, legal_name, trading_name FROM companies`);
+      const companyByName = new Map<string, string>();
+      for (const c of allCompanies.rows) {
+        if (c.trading_name) companyByName.set(c.trading_name.toLowerCase().trim(), c.id);
+        companyByName.set(c.legal_name.toLowerCase().trim(), c.id);
+      }
+
+      function findCompany(name: string): string | null {
+        const n = name.toLowerCase().trim();
+        if (companyByName.has(n)) return companyByName.get(n)!;
+        // Try partial match
+        for (const [k, v] of companyByName.entries()) {
+          if (k.includes(n) || n.includes(k)) return v;
+        }
+        return null;
+      }
+
+      function mapStatus(s: string): string {
+        const n = s.toLowerCase().trim();
+        if (n === "paid") return "paid";
+        if (["overdue"].includes(n)) return "overdue";
+        if (["void", "cancelled", "canceled"].includes(n)) return "void";
+        return "sent";
+      }
+
+      function parseAmount(s: string): string {
+        if (!s) return "0.00";
+        const num = parseFloat(s.replace(/[^0-9.\-]/g, ""));
+        return isNaN(num) ? "0.00" : num.toFixed(2);
+      }
+
+      function parseDate(s: string): Date | null {
+        if (!s || !s.trim()) return null;
+        const d = new Date(s.trim());
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      let imported = 0;
+      let skipped = 0;
+      let skippedDuplicates = 0;
+      const unmatched: string[] = [];
+      const errors: string[] = [];
+
+      for (const row of dataRows) {
+        if (row.every(c => !c)) continue; // skip blank rows
+
+        const invoiceNumber = row[colInvoiceNum]?.trim();
+        const companyName = row[colCompany]?.trim();
+
+        if (!invoiceNumber || !companyName) { skipped++; continue; }
+
+        const companyId = findCompany(companyName);
+        if (!companyId) {
+          if (!unmatched.includes(companyName)) unmatched.push(companyName);
+          skipped++;
+          continue;
+        }
+
+        // Check for duplicate
+        const existing = await pool.query(`SELECT id FROM invoices WHERE invoice_number = $1`, [invoiceNumber]);
+        if (existing.rows.length > 0) { skippedDuplicates++; continue; }
+
+        const total = colTotal !== -1 ? parseAmount(row[colTotal]) : "0.00";
+        const subtotal = colSubtotal !== -1 ? parseAmount(row[colSubtotal]) : total;
+        const tax = colTax !== -1 ? parseAmount(row[colTax]) : "0.00";
+        const balanceDue = colBalance !== -1 ? parseAmount(row[colBalance]) : total;
+        const status = colStatus !== -1 ? mapStatus(row[colStatus] || "") : "sent";
+        const issueDate = colIssueDate !== -1 ? (parseDate(row[colIssueDate]) || new Date()) : new Date();
+        const dueDate = colDueDate !== -1 ? parseDate(row[colDueDate]) : null;
+
+        try {
+          await pool.query(
+            `INSERT INTO invoices (id, invoice_number, company_id, status, issue_date, due_date, subtotal, tax, total, balance_due, created_at)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+            [invoiceNumber, companyId, status, issueDate, dueDate, subtotal, tax, total, balanceDue]
+          );
+          imported++;
+        } catch (e: any) {
+          errors.push(`Row ${invoiceNumber}: ${e.message}`);
+        }
+      }
+
+      res.json({ imported, skipped, skippedDuplicates, unmatched, errors, total: dataRows.length });
+    } catch (error: any) {
+      console.error("CSV invoice import error:", error);
+      res.status(500).json({ message: error.message || "Failed to import invoices" });
+    }
+  });
+
   // ============ DATA EXPORTS ============
 
   app.get("/api/admin/export/:type", requireAdmin, async (req, res) => {
