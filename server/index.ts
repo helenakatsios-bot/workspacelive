@@ -550,6 +550,36 @@ async function runStartupTasks() {
     console.error("Portal categories column error:", error);
   }
 
+  // Create portal users for all companies that don't have one
+  try {
+    const bcrypt = await import("bcrypt");
+    const allCompanies = await pool.query(`SELECT id, legal_name, trading_name FROM companies`);
+    const existingPortal = await pool.query(`SELECT DISTINCT company_id FROM portal_users`);
+    const existingIds = new Set(existingPortal.rows.map((r: any) => r.company_id));
+    const missing = allCompanies.rows.filter((c: any) => !existingIds.has(c.id));
+    if (missing.length > 0) {
+      const defaultHash = await bcrypt.default.hash('purax2026', 10);
+      let created = 0;
+      for (const company of missing) {
+        const name = company.trading_name || company.legal_name;
+        const emailBase = name.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '');
+        const email = emailBase + '@portal.purax.com.au';
+        const emailCheck = await pool.query('SELECT id FROM portal_users WHERE email = $1', [email]);
+        if (emailCheck.rows.length > 0) continue;
+        await pool.query(
+          'INSERT INTO portal_users (id, company_id, name, email, password_hash, active, created_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, true, NOW())',
+          [company.id, name, email, defaultHash]
+        );
+        created++;
+      }
+      console.log(`Created ${created} portal users for companies without accounts`);
+    } else {
+      console.log("All companies already have portal users");
+    }
+  } catch (error) {
+    console.error("Bulk portal user creation error:", error);
+  }
+
   try {
     console.log("Running email-to-company backfill...");
     const emailsUpdated = await backfillEmailCompanyLinks();
