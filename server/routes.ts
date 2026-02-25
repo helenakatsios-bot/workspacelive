@@ -6170,21 +6170,22 @@ Rules:
       const headers = rows[0];
       const dataRows = rows.slice(1);
 
-      const colInvoiceNum = detectColumn(headers, ["Invoice Number", "Invoice No", "Invoice #", "Inv No", "InvoiceNumber", "InvNo", "Reference", "Ref", "Invoice"]);
-      const colCompany = detectColumn(headers, ["Company", "Customer", "Client", "To", "Name", "Company Name", "Customer Name", "Contact"]);
-      const colIssueDate = detectColumn(headers, ["Date", "Invoice Date", "Issue Date", "InvoiceDate", "IssueDate"]);
-      const colDueDate = detectColumn(headers, ["Due Date", "Due", "Payment Due", "DueDate", "PaymentDue"]);
+      // Xero exports ContactName; also handle other common naming conventions
+      const colInvoiceNum = detectColumn(headers, ["InvoiceNumber", "Invoice Number", "Invoice No", "Invoice #", "Inv No", "InvNo", "Invoice"]);
+      const colCompany = detectColumn(headers, ["ContactName", "Contact Name", "Company", "Customer", "Client", "To", "Company Name", "Customer Name", "Contact"]);
+      const colIssueDate = detectColumn(headers, ["InvoiceDate", "Invoice Date", "Date", "Issue Date", "IssueDate"]);
+      const colDueDate = detectColumn(headers, ["DueDate", "Due Date", "Due", "Payment Due", "PaymentDue"]);
       const colTotal = detectColumn(headers, ["Total", "Amount", "Total Amount", "Invoice Total", "Gross", "TotalAmount", "InvoiceTotal"]);
       const colSubtotal = detectColumn(headers, ["Subtotal", "Sub Total", "Net", "Net Amount", "NetAmount", "SubTotal"]);
-      const colTax = detectColumn(headers, ["Tax", "GST", "Tax Amount", "VAT", "TaxAmount"]);
+      const colTax = detectColumn(headers, ["TaxTotal", "Tax Total", "Tax", "GST", "Tax Amount", "VAT", "TaxAmount"]);
       const colStatus = detectColumn(headers, ["Status", "Payment Status", "PaymentStatus"]);
-      const colBalance = detectColumn(headers, ["Balance Due", "Balance", "Amount Due", "Outstanding", "BalanceDue", "AmountDue"]);
+      const colBalance = detectColumn(headers, ["InvoiceAmountDue", "Invoice Amount Due", "Balance Due", "Balance", "Amount Due", "Outstanding", "BalanceDue", "AmountDue"]);
 
       if (colInvoiceNum === -1) {
-        return res.status(400).json({ message: "Could not find an Invoice Number column. Ensure your CSV has a column named 'Invoice Number', 'Invoice No', or similar." });
+        return res.status(400).json({ message: "Could not find an Invoice Number column. Ensure your CSV has a column named 'InvoiceNumber' or 'Invoice Number'." });
       }
       if (colCompany === -1) {
-        return res.status(400).json({ message: "Could not find a Company/Customer column. Ensure your CSV has a column named 'Company', 'Customer', or similar." });
+        return res.status(400).json({ message: "Could not find a Company/Customer column. Ensure your CSV has a column named 'ContactName', 'Company', or 'Customer'." });
       }
 
       // Load all companies for matching
@@ -6198,9 +6199,17 @@ Rules:
       function findCompany(name: string): string | null {
         const n = name.toLowerCase().trim();
         if (companyByName.has(n)) return companyByName.get(n)!;
-        // Try partial match
+        // Try partial match — name contains key or key contains name
         for (const [k, v] of companyByName.entries()) {
           if (k.includes(n) || n.includes(k)) return v;
+        }
+        // Try stripping /COD, /cod suffixes that appear in Xero contact names
+        const stripped = n.replace(/\/cod$/i, "").replace(/\s+t\/as\s+.*/i, "").trim();
+        if (stripped !== n) {
+          if (companyByName.has(stripped)) return companyByName.get(stripped)!;
+          for (const [k, v] of companyByName.entries()) {
+            if (k.includes(stripped) || stripped.includes(k)) return v;
+          }
         }
         return null;
       }
@@ -6208,9 +6217,10 @@ Rules:
       function mapStatus(s: string): string {
         const n = s.toLowerCase().trim();
         if (n === "paid") return "paid";
-        if (["overdue"].includes(n)) return "overdue";
+        if (n === "overdue") return "overdue";
         if (["void", "cancelled", "canceled"].includes(n)) return "void";
-        return "sent";
+        if (n === "draft") return "draft";
+        return "sent"; // "awaiting payment", "sent", "viewed", "unsent" etc.
       }
 
       function parseAmount(s: string): string {
@@ -6219,10 +6229,33 @@ Rules:
         return isNaN(num) ? "0.00" : num.toFixed(2);
       }
 
+      // Xero exports dates as DD/MM/YYYY — handle both formats
       function parseDate(s: string): Date | null {
         if (!s || !s.trim()) return null;
-        const d = new Date(s.trim());
+        const clean = s.trim();
+        // Try DD/MM/YYYY or D/M/YYYY
+        const dmyMatch = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (dmyMatch) {
+          const [, d, m, y] = dmyMatch;
+          const date = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+          return isNaN(date.getTime()) ? null : date;
+        }
+        // Fall back to JS native parsing (handles ISO etc.)
+        const d = new Date(clean);
         return isNaN(d.getTime()) ? null : d;
+      }
+
+      // Group rows by InvoiceNumber — Xero exports one row per line item
+      // We only want one invoice record per invoice number
+      const invoiceMap = new Map<string, { companyName: string; row: string[] }>();
+      for (const row of dataRows) {
+        if (row.every(c => !c)) continue;
+        const invNum = row[colInvoiceNum]?.trim();
+        if (!invNum) continue;
+        // Keep only the first occurrence (subsequent rows are additional line items)
+        if (!invoiceMap.has(invNum)) {
+          invoiceMap.set(invNum, { companyName: row[colCompany]?.trim() || "", row });
+        }
       }
 
       let imported = 0;
@@ -6231,13 +6264,8 @@ Rules:
       const unmatched: string[] = [];
       const errors: string[] = [];
 
-      for (const row of dataRows) {
-        if (row.every(c => !c)) continue; // skip blank rows
-
-        const invoiceNumber = row[colInvoiceNum]?.trim();
-        const companyName = row[colCompany]?.trim();
-
-        if (!invoiceNumber || !companyName) { skipped++; continue; }
+      for (const [invoiceNumber, { companyName, row }] of invoiceMap.entries()) {
+        if (!companyName) { skipped++; continue; }
 
         const companyId = findCompany(companyName);
         if (!companyId) {
@@ -6266,11 +6294,11 @@ Rules:
           );
           imported++;
         } catch (e: any) {
-          errors.push(`Row ${invoiceNumber}: ${e.message}`);
+          errors.push(`${invoiceNumber}: ${e.message}`);
         }
       }
 
-      res.json({ imported, skipped, skippedDuplicates, unmatched, errors, total: dataRows.length });
+      res.json({ imported, skipped, skippedDuplicates, unmatched, errors, total: invoiceMap.size });
     } catch (error: any) {
       console.error("CSV invoice import error:", error);
       res.status(500).json({ message: error.message || "Failed to import invoices" });
