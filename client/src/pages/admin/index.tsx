@@ -296,6 +296,49 @@ export default function AdminPage() {
     },
   });
 
+  const [xeroRepairRunning, setXeroRepairRunning] = useState(false);
+  const [xeroRepairProgress, setXeroRepairProgress] = useState("");
+
+  const repairInvoicesMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/xero/repair-invoices");
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.status === "running") {
+        setXeroRepairRunning(true);
+        setXeroRepairProgress(data.progress || "Scanning...");
+        toast({ title: "Repair started", description: "Scanning Xero for missing invoice records..." });
+        const pollInterval = setInterval(async () => {
+          try {
+            const res = await fetch("/api/xero/repair-invoices/status", { credentials: "include" });
+            const status = await res.json();
+            setXeroRepairProgress(status.progress || "");
+            if (!status.running) {
+              clearInterval(pollInterval);
+              setXeroRepairRunning(false);
+              if (status.result) {
+                queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+                toast({
+                  title: "Invoice repair complete",
+                  description: `${status.result.fixed} missing invoice records created, ${status.result.skipped} already up to date`,
+                });
+              } else if (status.error) {
+                toast({ title: "Repair failed", description: status.error, variant: "destructive" });
+              }
+            }
+          } catch {
+            clearInterval(pollInterval);
+            setXeroRepairRunning(false);
+          }
+        }, 3000);
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to repair invoices", description: error.message, variant: "destructive" });
+    },
+  });
+
   const connectOutlookMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("GET", "/api/outlook/auth-url");
@@ -653,6 +696,25 @@ export default function AdminPage() {
                     </Button>
                     <p className="text-sm text-muted-foreground">
                       Imports all invoices from Xero as orders matched to customer profiles
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => repairInvoicesMutation.mutate()}
+                      disabled={repairInvoicesMutation.isPending || xeroRepairRunning || xeroImportRunning}
+                      data-testid="button-xero-repair-invoices"
+                    >
+                      {(repairInvoicesMutation.isPending || xeroRepairRunning) ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
+                      {xeroRepairRunning ? xeroRepairProgress || "Repairing..." : repairInvoicesMutation.isPending ? "Starting..." : "Fix Missing Portal Invoice Records"}
+                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      Finds orders imported from Xero that are missing invoice records and creates them — fixes blank invoice history in the customer portal
                     </p>
                   </div>
                 </div>

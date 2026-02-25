@@ -9,7 +9,7 @@ import { z } from "zod";
 import { eq, ilike, and } from "drizzle-orm";
 import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, insertQuoteSchema, emails as emailsTable, contacts, companies as companiesTable, outlookTokens as outlookTokensTable, crmSettings, portalUsers, attachments } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
-import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero, autoSyncXeroInvoices } from "./xero";
+import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero, autoSyncXeroInvoices, repairMissingInvoiceRecords } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks, fetchEmailAttachments, downloadAttachment } from "./outlook";
 
 declare module "express-session" {
@@ -2797,6 +2797,64 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Xero session expired. Please go to Admin > Integrations and reconnect Xero." });
       }
       res.status(500).json({ message: error.message || "Failed to import invoices from Xero" });
+    }
+  });
+
+  let xeroRepairStatus: { running: boolean; progress: string; result: any | null; error: string | null } = {
+    running: false, progress: "", result: null, error: null,
+  };
+
+  app.get("/api/xero/repair-invoices/status", requireAdmin, async (_req, res) => {
+    res.json(xeroRepairStatus);
+  });
+
+  app.post("/api/xero/repair-invoices", requireAdmin, async (req, res) => {
+    try {
+      if (xeroRepairStatus.running) {
+        return res.json({ message: "Repair already in progress", status: "running", progress: xeroRepairStatus.progress });
+      }
+
+      const token = await getStoredToken();
+      if (!token) {
+        return res.status(400).json({ message: "Xero not connected" });
+      }
+
+      const baseUrl = process.env.APP_URL || `${req.headers["x-forwarded-proto"] || req.protocol}://${req.headers["x-forwarded-host"] || req.headers.host}`;
+      const redirectUri = `${baseUrl}/api/xero/callback`;
+      const xero = createXeroClient(redirectUri);
+      const refreshed = await refreshTokenIfNeeded(xero, token);
+
+      if (!refreshed) {
+        await deleteXeroToken();
+        return res.status(401).json({ message: "Xero session expired. Please reconnect Xero." });
+      }
+
+      const freshToken = await getStoredToken();
+      if (!freshToken) {
+        return res.status(400).json({ message: "Xero token not found after refresh" });
+      }
+
+      xeroRepairStatus = { running: true, progress: "Scanning Xero invoices for missing records...", result: null, error: null };
+      res.json({ message: "Repair started in background", status: "running" });
+
+      (async () => {
+        try {
+          const result = await repairMissingInvoiceRecords(freshToken.accessToken, freshToken.tenantId);
+          xeroRepairStatus = {
+            running: false,
+            progress: "Complete",
+            result,
+            error: null,
+          };
+          console.log(`[XERO-REPAIR] Complete: ${result.fixed} fixed, ${result.skipped} skipped, ${result.errors.length} errors`);
+        } catch (error: any) {
+          console.error("Xero repair invoices error:", error?.message || error);
+          xeroRepairStatus = { running: false, progress: "Failed", result: null, error: error.message || "Failed to repair invoices" };
+        }
+      })();
+    } catch (error: any) {
+      console.error("Xero repair invoices error:", error?.message || error);
+      res.status(500).json({ message: error.message || "Failed to repair invoices from Xero" });
     }
   });
 

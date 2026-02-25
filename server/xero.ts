@@ -740,3 +740,94 @@ export function startAutoXeroInvoiceSync(intervalMinutes: number = 15) {
   xeroSyncInterval = setInterval(syncAll, intervalMinutes * 60 * 1000);
   console.log(`[XERO-AUTOSYNC] Invoice auto-sync started (every ${intervalMinutes} minutes)`);
 }
+
+export async function repairMissingInvoiceRecords(accessToken: string, tenantId: string): Promise<{ fixed: number; skipped: number; errors: { invoiceNumber: string; error: string }[] }> {
+  let fixed = 0;
+  let skipped = 0;
+  const errors: { invoiceNumber: string; error: string }[] = [];
+  let page = 1;
+  let hasMore = true;
+  let currentToken = accessToken;
+
+  while (hasMore) {
+    const freshToken = await getFreshXeroToken(tenantId);
+    if (freshToken) currentToken = freshToken;
+
+    const response = await fetch(
+      `https://api.xero.com/api.xro/2.0/Invoices?page=${page}&where=Type%3D%3D%22ACCREC%22&order=Date%20DESC`,
+      {
+        headers: {
+          "Authorization": `Bearer ${currentToken}`,
+          "Xero-Tenant-Id": tenantId,
+          "Accept": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        const retryToken = await getFreshXeroToken(tenantId);
+        if (retryToken && retryToken !== currentToken) {
+          currentToken = retryToken;
+          continue;
+        }
+      }
+      const errorText = await response.text();
+      console.error(`[XERO-REPAIR] API error (page ${page}):`, errorText);
+      throw new Error(`Failed to fetch invoices from Xero: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const xeroInvoices: XeroInvoiceRaw[] = data.Invoices || [];
+
+    if (xeroInvoices.length === 0) {
+      hasMore = false;
+      break;
+    }
+
+    for (const xInv of xeroInvoices) {
+      if (!xInv.InvoiceID) continue;
+      const invNumber = xInv.InvoiceNumber || xInv.InvoiceID.substring(0, 8);
+
+      try {
+        const existingInvoice = await db.select().from(invoices).where(eq(invoices.xeroInvoiceId, xInv.InvoiceID)).limit(1);
+        if (existingInvoice.length > 0) {
+          skipped++;
+          continue;
+        }
+
+        const mapping = await getXeroSyncMappingByXeroId("order", xInv.InvoiceID);
+        if (!mapping) {
+          skipped++;
+          continue;
+        }
+
+        const [orderRow] = await db.select().from(orders).where(eq(orders.id, mapping.localId)).limit(1);
+        if (!orderRow) {
+          skipped++;
+          continue;
+        }
+
+        const companyId = orderRow.companyId;
+        if (!companyId) {
+          errors.push({ invoiceNumber: invNumber, error: "Order has no company_id" });
+          continue;
+        }
+
+        await createInvoiceFromXero(xInv, companyId, orderRow.id, invNumber, currentToken, tenantId);
+        fixed++;
+        console.log(`[XERO-REPAIR] Created missing invoice record for ${invNumber}`);
+      } catch (err: any) {
+        errors.push({ invoiceNumber: invNumber, error: err.message || "Unknown error" });
+      }
+    }
+
+    if (xeroInvoices.length < 100) {
+      hasMore = false;
+    } else {
+      page++;
+    }
+  }
+
+  return { fixed, skipped, errors };
+}
