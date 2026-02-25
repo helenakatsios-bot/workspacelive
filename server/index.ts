@@ -20,6 +20,7 @@ import { importSageClairePriceList } from "./import-sageclaire-pricelist";
 import { importLMPriceList } from "./import-lm-pricelist";
 import { importSpaceCraftPriceList } from "./import-spacecraft-pricelist";
 import { importWalterGPriceList } from "./import-walterg-pricelist";
+import { importCastlePriceList } from "./import-castle-pricelist";
 
 const app = express();
 const httpServer = createServer(app);
@@ -311,6 +312,7 @@ async function runStartupTasks() {
     { name: "L&M", fn: importLMPriceList },
     { name: "Space Craft", fn: importSpaceCraftPriceList },
     { name: "Walter G", fn: importWalterGPriceList },
+    { name: "Castle & Things", fn: importCastlePriceList },
   ];
 
   for (const { name, fn } of otherImports) {
@@ -337,6 +339,27 @@ async function runStartupTasks() {
     }
   } catch (error) {
     console.error("Luxe bedding merge error:", error);
+  }
+
+  try {
+    const excludeLists = ['Sage & Claire', 'L&M', 'Space Craft', 'Walter G'];
+    const priceUpdates = [
+      { filling: '100% Feather', weight: 'Normal', oldPrice: '12.00', newPrice: '12.65' },
+      { filling: '100% Feather', weight: 'Firm Fill', oldPrice: '12.60', newPrice: '13.25' },
+      { filling: '100% Feather', weight: 'Extra Firm Fill', oldPrice: '13.20', newPrice: '13.85' },
+    ];
+    for (const u of priceUpdates) {
+      await pool.query(
+        `UPDATE price_list_prices plp SET unit_price = $1, updated_at = NOW()
+         FROM products p, price_lists pl
+         WHERE plp.product_id = p.id AND plp.price_list_id = pl.id
+         AND p.name = '55X55CM' AND plp.filling = $2 AND plp.weight = $3
+         AND plp.unit_price = $4 AND pl.name != ALL($5)`,
+        [u.newPrice, u.filling, u.weight, u.oldPrice, excludeLists]
+      );
+    }
+  } catch (error) {
+    console.error("55x55 price update error:", error);
   }
 
   try {
@@ -473,6 +496,7 @@ async function runStartupTasks() {
 
   try {
     await pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS portal_categories text[]`);
+    await pool.query(`ALTER TABLE attachments ADD COLUMN IF NOT EXISTS file_data bytea`);
     const interiorsResult = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'interiors' LIMIT 1`);
     if (interiorsResult.rows.length > 0) {
       const interiorsId = interiorsResult.rows[0].id;
