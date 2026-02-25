@@ -77,6 +77,7 @@ const mainNavItems = [
   { title: "Order Requests", url: "/orders/requests", icon: ClipboardCheck },
   { title: "Products", url: "/products", icon: Package },
   { title: "Email", url: "/marketing/email", icon: Mail },
+  { title: "Customer Portal", url: "/service/customer-portal", icon: Globe },
 ];
 
 const crmItems = [
