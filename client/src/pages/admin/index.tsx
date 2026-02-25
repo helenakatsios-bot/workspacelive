@@ -1266,10 +1266,15 @@ function PortalUsersManagement() {
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newCompanyId, setNewCompanyId] = useState("");
+  const [newPriceListId, setNewPriceListId] = useState("");
   const [companySearch, setCompanySearch] = useState("");
 
   const { data: portalUsers, isLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/portal-users"],
+  });
+
+  const { data: priceLists } = useQuery<any[]>({
+    queryKey: ["/api/price-lists"],
   });
 
   const { data: companies } = useQuery<any[]>({
@@ -1288,6 +1293,9 @@ function PortalUsersManagement() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      if (newPriceListId && newPriceListId !== "none" && newCompanyId) {
+        await apiRequest("PATCH", `/api/companies/${newCompanyId}`, { priceListId: newPriceListId });
+      }
       return apiRequest("POST", "/api/admin/portal-users", {
         name: newName,
         email: newEmail,
@@ -1297,12 +1305,14 @@ function PortalUsersManagement() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
       toast({ title: "Portal user created" });
       setCreateDialogOpen(false);
       setNewName("");
       setNewEmail("");
       setNewPassword("");
       setNewCompanyId("");
+      setNewPriceListId("");
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error?.message || "Failed to create portal user", variant: "destructive" });
@@ -1630,7 +1640,13 @@ function PortalUsersManagement() {
             </div>
             <div className="space-y-2">
               <Label>Company</Label>
-              <Select value={newCompanyId} onValueChange={setNewCompanyId}>
+              <Select value={newCompanyId} onValueChange={(val) => {
+                setNewCompanyId(val);
+                const selectedCompany = companies?.find((c: any) => c.id === val);
+                if (selectedCompany?.priceListId) {
+                  setNewPriceListId(selectedCompany.priceListId);
+                }
+              }}>
                 <SelectTrigger data-testid="select-portal-company">
                   <SelectValue placeholder="Select a company..." />
                 </SelectTrigger>
@@ -1647,6 +1663,22 @@ function PortalUsersManagement() {
                   {filteredCompanies.map((c: any) => (
                     <SelectItem key={c.id} value={c.id} data-testid={`option-portal-company-${c.id}`}>
                       {c.tradingName || c.legalName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Price List</Label>
+              <Select value={newPriceListId} onValueChange={setNewPriceListId}>
+                <SelectTrigger data-testid="select-portal-pricelist">
+                  <SelectValue placeholder="Select a price list..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No price list</SelectItem>
+                  {priceLists?.filter((pl: any) => pl.active).map((pl: any) => (
+                    <SelectItem key={pl.id} value={pl.id} data-testid={`option-portal-pricelist-${pl.id}`}>
+                      {pl.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
