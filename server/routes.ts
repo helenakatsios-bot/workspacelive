@@ -2094,6 +2094,29 @@ export async function registerRoutes(
 
       if (!response.ok) {
         const now = new Date();
+        // Purax API sometimes returns 500 even when the order is successfully created on their side.
+        // Treat 500 as "sent with warning" rather than a hard failure so the order isn't stuck.
+        if (response.status === 500) {
+          await storage.updateOrder(order.id, {
+            puraxSyncStatus: "sent",
+            puraxSyncedAt: now,
+          });
+          await storage.createActivity({
+            entityType: "order",
+            entityId: order.id,
+            activityType: "system",
+            content: `Synced to Purax (Purax returned 500 but order typically goes through — verify in Purax app)`,
+            createdBy: req.session.userId,
+          });
+          await storage.createAuditLog({
+            userId: req.session.userId,
+            action: "update",
+            entityType: "order",
+            entityId: order.id,
+            afterJson: { puraxSyncStatus: "sent", puraxSyncedAt: now },
+          });
+          return res.json({ success: true, warning: "Purax returned an error response but the order usually goes through. Please verify in the Purax app." });
+        }
         await storage.updateOrder(order.id, {
           puraxSyncStatus: "failed",
           puraxSyncedAt: now,

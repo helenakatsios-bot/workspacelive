@@ -480,10 +480,14 @@ export default function OrderDetailPage() {
     mutationFn: async () => {
       return apiRequest("POST", `/api/orders/${params?.id}/sync-purax`);
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id, "activities"] });
-      toast({ title: "Order sent to Purax", description: "The order has been synced to the Purax Feather Holdings app." });
+      if (data?.warning) {
+        toast({ title: "Order sent to Purax", description: data.warning });
+      } else {
+        toast({ title: "Order sent to Purax", description: "The order has been synced to the Purax Feather Holdings app." });
+      }
     },
     onError: (error: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id] });
