@@ -1274,13 +1274,7 @@ export default function CompanyDetailPage() {
                             key={inv.id}
                             className="flex items-center justify-between p-3 rounded-lg border hover-elevate cursor-pointer"
                             data-testid={`row-invoice-${inv.id}`}
-                            onClick={() => {
-                              if (inv.xeroOnlineUrl) {
-                                window.open(inv.xeroOnlineUrl, "_blank");
-                              } else {
-                                navigate(`/invoices`);
-                              }
-                            }}
+                            onClick={() => navigate(`/invoices/${inv.id}`)}
                           >
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">

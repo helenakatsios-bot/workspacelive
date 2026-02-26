@@ -30,6 +30,7 @@ import OrderFormPage from "@/pages/orders/form";
 import OrderDetailPage from "@/pages/orders/detail";
 import InvoicesPage from "@/pages/invoices/index";
 import NewInvoicePage from "@/pages/invoices/new";
+import InvoiceDetailPage from "@/pages/invoices/detail";
 import AdminPage from "@/pages/admin/index";
 import PriceListsPage from "@/pages/admin/price-lists";
 import ClientsSinceJuly2021Page from "@/pages/reports/clients-since-july-2021";
@@ -147,7 +148,7 @@ function AuthenticatedApp() {
         <Route path="/orders/:id/edit" component={OrderDetailPage} />
         <Route path="/invoices" component={InvoicesPage} />
         <Route path="/invoices/new" component={NewInvoicePage} />
-        <Route path="/invoices/:id" component={InvoicesPage} />
+        <Route path="/invoices/:id" component={InvoiceDetailPage} />
         <Route path="/crm/tickets" component={TicketsPage} />
         <Route path="/crm/projects" component={ProjectsPage} />
         <Route path="/crm/segments" component={SegmentsPage} />
