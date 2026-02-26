@@ -1842,7 +1842,9 @@ function InvoiceCsvImport() {
   const { toast } = useToast();
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<{ imported: number; skipped: number; skippedDuplicates: number; unmatched: string[]; errors: string[]; total: number } | null>(null);
+  const [result, setResult] = useState<{ imported: number; skipped: number; skippedDuplicates: number; duplicateInvoiceNumbers: string[]; unmatched: string[]; unmatchedDetails: { company: string; invoices: string[] }[]; errors: string[]; total: number } | null>(null);
+  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [showUnmatched, setShowUnmatched] = useState(false);
 
   const handleImport = async () => {
     if (!csvFile) return;
@@ -1922,22 +1924,57 @@ function InvoiceCsvImport() {
                 <p className="text-2xl font-bold text-green-600">{result.imported}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">Imported</p>
               </div>
-              <div className="rounded-lg border p-3 text-center">
+              <button
+                className="rounded-lg border p-3 text-center hover:bg-muted/50 transition-colors cursor-pointer"
+                onClick={() => setShowDuplicates(v => !v)}
+                data-testid="button-show-duplicates"
+              >
                 <p className="text-2xl font-bold text-yellow-600">{result.skippedDuplicates}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Duplicates skipped</p>
-              </div>
-              <div className="rounded-lg border p-3 text-center">
+                <p className="text-xs text-muted-foreground mt-0.5">Duplicates skipped {result.skippedDuplicates > 0 && <span className="underline">(click to view)</span>}</p>
+              </button>
+              <button
+                className="rounded-lg border p-3 text-center hover:bg-muted/50 transition-colors cursor-pointer"
+                onClick={() => setShowUnmatched(v => !v)}
+                data-testid="button-show-unmatched"
+              >
                 <p className="text-2xl font-bold text-orange-600">{result.skipped}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Unmatched / skipped</p>
-              </div>
+                <p className="text-xs text-muted-foreground mt-0.5">Unmatched / skipped {result.skipped > 0 && <span className="underline">(click to view)</span>}</p>
+              </button>
             </div>
-            {result.unmatched.length > 0 && (
-              <div className="rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 p-3">
-                <p className="text-sm font-medium text-orange-800 dark:text-orange-300 mb-1">Companies not found in CRM ({result.unmatched.length}):</p>
-                <p className="text-xs text-orange-700 dark:text-orange-400 leading-relaxed">{result.unmatched.join(", ")}</p>
-                <p className="text-xs text-muted-foreground mt-1">Check that the company name in your CSV exactly matches the name in the CRM (trading name or legal name).</p>
+
+            {showDuplicates && result.duplicateInvoiceNumbers?.length > 0 && (
+              <div className="rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20 p-3">
+                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-2">
+                  Duplicate invoice numbers ({result.duplicateInvoiceNumbers.length}) — already exist in the CRM:
+                </p>
+                <div className="max-h-48 overflow-y-auto">
+                  <div className="flex flex-wrap gap-1">
+                    {result.duplicateInvoiceNumbers.map((inv, i) => (
+                      <span key={i} className="inline-block bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 text-xs px-2 py-0.5 rounded font-mono">{inv}</span>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
+
+            {showUnmatched && result.unmatchedDetails?.length > 0 && (
+              <div className="rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 p-3">
+                <p className="text-sm font-medium text-orange-800 dark:text-orange-300 mb-2">
+                  Companies not found in CRM ({result.unmatchedDetails.length}) — check names match exactly:
+                </p>
+                <div className="max-h-64 overflow-y-auto space-y-2">
+                  {result.unmatchedDetails.map((u, i) => (
+                    <div key={i} className="text-xs">
+                      <span className="font-semibold text-orange-800 dark:text-orange-300">{u.company}</span>
+                      <span className="text-orange-600 dark:text-orange-400 ml-2">({u.invoices.length} invoice{u.invoices.length !== 1 ? "s" : ""}): </span>
+                      <span className="text-orange-700 dark:text-orange-400 font-mono">{u.invoices.join(", ")}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">Add these companies to the CRM first, then re-import.</p>
+              </div>
+            )}
+
             {result.errors.length > 0 && (
               <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 p-3">
                 <p className="text-sm font-medium text-red-800 dark:text-red-300 mb-1">Errors ({result.errors.length}):</p>

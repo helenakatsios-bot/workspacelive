@@ -6260,8 +6260,8 @@ Rules:
 
       let imported = 0;
       let skipped = 0;
-      let skippedDuplicates = 0;
-      const unmatched: string[] = [];
+      const duplicateInvoiceNumbers: string[] = [];
+      const unmatchedMap = new Map<string, string[]>(); // company name -> invoice numbers
       const errors: string[] = [];
 
       for (const [invoiceNumber, { companyName, row }] of invoiceMap.entries()) {
@@ -6269,14 +6269,16 @@ Rules:
 
         const companyId = findCompany(companyName);
         if (!companyId) {
-          if (!unmatched.includes(companyName)) unmatched.push(companyName);
+          const existing = unmatchedMap.get(companyName) || [];
+          existing.push(invoiceNumber);
+          unmatchedMap.set(companyName, existing);
           skipped++;
           continue;
         }
 
         // Check for duplicate
         const existing = await pool.query(`SELECT id FROM invoices WHERE invoice_number = $1`, [invoiceNumber]);
-        if (existing.rows.length > 0) { skippedDuplicates++; continue; }
+        if (existing.rows.length > 0) { duplicateInvoiceNumbers.push(invoiceNumber); continue; }
 
         const total = colTotal !== -1 ? parseAmount(row[colTotal]) : "0.00";
         const subtotal = colSubtotal !== -1 ? parseAmount(row[colSubtotal]) : total;
@@ -6298,7 +6300,17 @@ Rules:
         }
       }
 
-      res.json({ imported, skipped, skippedDuplicates, unmatched, errors, total: invoiceMap.size });
+      const unmatchedDetails = Array.from(unmatchedMap.entries()).map(([company, invoices]) => ({ company, invoices }));
+      res.json({
+        imported,
+        skipped,
+        skippedDuplicates: duplicateInvoiceNumbers.length,
+        duplicateInvoiceNumbers,
+        unmatched: unmatchedDetails.map(u => u.company),
+        unmatchedDetails,
+        errors,
+        total: invoiceMap.size,
+      });
     } catch (error: any) {
       console.error("CSV invoice import error:", error);
       res.status(500).json({ message: error.message || "Failed to import invoices" });
