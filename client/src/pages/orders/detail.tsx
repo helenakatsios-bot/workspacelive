@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation, Link } from "wouter";
 import { format } from "date-fns";
@@ -97,6 +97,32 @@ export default function OrderDetailPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { canEdit, canViewPricing } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !params?.id) return;
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/orders/${params.id}/attachments`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params.id, "attachments"] });
+      toast({ title: "File uploaded", description: file.name });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message || "Could not upload file", variant: "destructive" });
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const [newNote, setNewNote] = useState("");
   const [isSubmittingNote, setIsSubmittingNote] = useState(false);
   const [isEditing, setIsEditing] = useState(!!matchEdit);
@@ -1434,10 +1460,24 @@ export default function OrderDetailPage() {
                 <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                   <CardTitle className="text-base">Files & Attachments</CardTitle>
                   {canEdit && (
-                    <Button size="sm" data-testid="button-upload-file">
-                      <Plus className="w-4 h-4 mr-1" />
-                      Upload
-                    </Button>
+                    <>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        onChange={handleFileUpload}
+                        data-testid="input-file-upload"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingFile}
+                        data-testid="button-upload-file"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        {uploadingFile ? "Uploading..." : "Upload"}
+                      </Button>
+                    </>
                   )}
                 </CardHeader>
                 <CardContent>

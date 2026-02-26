@@ -1600,6 +1600,73 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/orders/:id/attachments", requireEdit, async (req, res) => {
+    try {
+      const orderId = req.params.id;
+      const contentType = req.headers["content-type"] || "";
+      if (!contentType.includes("multipart/form-data")) {
+        return res.status(400).json({ message: "Expected multipart/form-data" });
+      }
+      const busboy = await import("busboy");
+      const bb = busboy.default({ headers: req.headers });
+      const filePromises: Promise<any>[] = [];
+      bb.on("file", (_fieldname: string, file: any, info: any) => {
+        const { filename, mimeType } = info;
+        const chunks: Buffer[] = [];
+        let fileSize = 0;
+        file.on("data", (data: Buffer) => { chunks.push(data); fileSize += data.length; });
+        const filePromise = new Promise<any>((resolve, reject) => {
+          file.on("end", () => {
+            resolve({
+              entityType: "order",
+              entityId: orderId,
+              fileName: filename,
+              fileType: mimeType,
+              fileSize,
+              storagePath: `db://${orderId}/${filename}`,
+              uploadedBy: req.session.userId,
+              fileData: Buffer.concat(chunks),
+            });
+          });
+          file.on("error", reject);
+        });
+        filePromises.push(filePromise);
+      });
+      bb.on("finish", async () => {
+        try {
+          const uploadedFiles = await Promise.all(filePromises);
+          for (const f of uploadedFiles) {
+            await pool.query(
+              `INSERT INTO attachments (id, entity_type, entity_id, file_name, file_type, file_size, storage_path, uploaded_by, uploaded_at, file_data)
+               VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW(), $8)`,
+              [f.entityType, f.entityId, f.fileName, f.fileType, f.fileSize, f.storagePath, f.uploadedBy, f.fileData]
+            );
+          }
+          await storage.createActivity({
+            entityType: "order",
+            entityId: orderId,
+            activityType: "system",
+            content: `${uploadedFiles.length} file(s) uploaded`,
+            createdBy: req.session.userId,
+          });
+          const result = await storage.getAttachmentsByEntity("order", orderId);
+          res.json(result);
+        } catch (err) {
+          console.error("Order file write error:", err);
+          res.status(500).json({ message: "Failed to save files" });
+        }
+      });
+      bb.on("error", (err: any) => {
+        console.error("Busboy error:", err);
+        res.status(500).json({ message: "Upload processing error" });
+      });
+      req.pipe(bb);
+    } catch (error) {
+      console.error("Upload order attachment error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/companies/:id/attachments", requireAuth, async (req, res) => {
     try {
       const result = await storage.getAttachmentsByEntity("company", req.params.id);
