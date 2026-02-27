@@ -2055,6 +2055,9 @@ export async function registerRoutes(
         }
       }
 
+      // Fetch attachments to include with the sync
+      const orderAttachments = await storage.getAttachmentsByEntity("order", order.id);
+
       const linesWithProducts = await Promise.all(
         lines.map(async (line) => {
           let productName = line.descriptionOverride || "Unknown Item";
@@ -2108,6 +2111,35 @@ export async function registerRoutes(
         ? `${order.orderNumber} ${customerName}`
         : order.orderNumber;
 
+      // Build notes string combining customer notes and internal notes
+      const noteParts: string[] = [];
+      if (order.customerNotes) noteParts.push(`Customer Notes:\n${order.customerNotes}`);
+      if (order.notes) noteParts.push(`Internal Notes:\n${order.notes}`);
+      const combinedNotes = noteParts.join("\n\n") || null;
+
+      // Fetch attachment file data from DB and convert to base64 for Purax
+      const attachmentsPayload = await Promise.all(
+        orderAttachments.map(async (att: any) => {
+          try {
+            const result = await pool.query(
+              `SELECT file_name, file_type, file_data FROM attachments WHERE id = $1`,
+              [att.id]
+            );
+            const row = result.rows[0];
+            if (!row || !row.file_data) return null;
+            return {
+              fileName: row.file_name,
+              mimeType: row.file_type,
+              data: Buffer.isBuffer(row.file_data)
+                ? row.file_data.toString("base64")
+                : Buffer.from(row.file_data).toString("base64"),
+            };
+          } catch {
+            return null;
+          }
+        })
+      ).then(results => results.filter(Boolean));
+
       const webhookPayload = {
         orderNumber: order.orderNumber,
         companyName: company?.tradingName || company?.legalName || "",
@@ -2119,11 +2151,13 @@ export async function registerRoutes(
         paymentMethod: order.paymentMethod || "",
         shippingCost: "0",
         orderDetails: orderDetailsText,
+        notes: combinedNotes,
         subtotal: `$${order.subtotal}`,
         tax: `$${order.tax}`,
         totalAmount: `$${order.total}`,
         pdfData: pdfBuffer.toString("base64"),
         originalEmailHtml: originalEmailHtml || null,
+        attachments: attachmentsPayload,
         isUrgent: false,
       };
 
