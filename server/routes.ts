@@ -1997,15 +1997,17 @@ export async function registerRoutes(
       const linesWithProducts = await Promise.all(
         lines.map(async (line) => {
           let productName = line.descriptionOverride || "Unknown Item";
+          let baseProductName = "";
           let productSku = "";
           if (line.productId) {
             const product = await storage.getProduct(line.productId);
             if (product) {
+              baseProductName = product.name;
               productName = line.descriptionOverride || product.name;
               productSku = product.sku;
             }
           }
-          return { ...line, productName, productSku };
+          return { ...line, productName, baseProductName, productSku };
         })
       );
 

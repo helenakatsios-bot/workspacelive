@@ -1303,7 +1303,12 @@ export default function OrderDetailPage() {
                         {order.lines.map((line) => (
                           <TableRow key={line.id}>
                             <TableCell>
-                              <p className="font-medium">{line.descriptionOverride || "Product"}</p>
+                              <p className="font-medium">
+                                {(line as any).baseProductName || line.descriptionOverride || "Product"}
+                              </p>
+                              {(line as any).baseProductName && line.descriptionOverride && (line as any).baseProductName !== line.descriptionOverride && (
+                                <p className="text-sm text-muted-foreground">{line.descriptionOverride}</p>
+                              )}
                             </TableCell>
                             <TableCell className="text-center">{line.quantity}</TableCell>
                             {canViewPricing && (
