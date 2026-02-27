@@ -1,0 +1,53 @@
+Let me look at the current webhook endpoint and the order schema to understand what needs updating:
+
+I can see the issue — there's a reference to finalOrderNumber on line 91 and 98 that doesn't exist anymore (we removed the auto-generation earlier). That's likely causing the 500 error. Let me also check the schema for a notes field:
+
+The orders table doesn't have a notes field — only completionNotes. I need to add a notes field to the orders table and fix the webhook. Let me check the full webhook response too:
+
+Now I have the full picture. Here's what I need to do:
+
+Fix the 500 error — finalOrderNumber is referenced but was removed
+Add notes field to the orders schema
+Handle notes and attachments in the webhook
+Let me do all of this:
+
+Now push the schema and fix the webhook:
+
+Now fix the webhook endpoint — fix the finalOrderNumber reference and add notes and attachments handling:
+
+Now I need to display the notes on the order detail page. Let me add it:
+
+Now add the notes display right after the order items section:
+
+Now let me also add the notes field to the edit dialog so it can be edited:
+
+I also need to add the notes state and handling in the edit dialog. Let me check the edit state setup:
+
+Now add the notes state and include it in the edit flow:
+
+Now set notes in the edit dialog open handler:
+
+Now include notes in the save handler:
+
+Now add the notes textarea in the edit dialog, after the order details field:
+
+Let me restart and verify:
+
+Everything is running cleanly. Here's a summary of what I fixed and added:
+
+Fixed the 500 error: The webhook was referencing a variable finalOrderNumber that no longer existed (leftover from when we removed auto-generated order numbers). This was causing every webhook call to crash.
+
+Added notes support:
+
+New notes field in the orders database
+The webhook now accepts and saves the notes field from the CRM payload
+Notes are displayed on the order detail page under "Notes"
+Notes can be edited via the Edit dialog
+Added attachments support:
+
+The webhook now accepts the attachments array
+Each attachment is saved as an order file (PDFs go as documents, images as photos)
+They'll show up in the Photos/PDF tabs on the order detail page
+The CRM's payload format works perfectly as-is — no changes needed on their end.
+
+Go ahead and publish — the webhook will now properly accept notes and attachments from your CRM, and the 500 error will be fixed.
