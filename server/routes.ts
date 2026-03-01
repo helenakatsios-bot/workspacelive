@@ -2058,7 +2058,23 @@ export async function registerRoutes(
       }
 
       // Fetch attachments to include with the sync
-      const orderAttachments = await storage.getAttachmentsByEntity("order", order.id);
+      // First check direct order attachments, then also check the source portal order request (in case
+      // the attachment was uploaded after conversion, so it wasn't copied over during convert)
+      let orderAttachments = await storage.getAttachmentsByEntity("order", order.id);
+      if (orderAttachments.length === 0) {
+        const srcRequest = await pool.query(
+          `SELECT id FROM customer_order_requests WHERE converted_order_id = $1 LIMIT 1`,
+          [order.id]
+        );
+        if (srcRequest.rows.length > 0) {
+          const reqId = srcRequest.rows[0].id;
+          const reqAttachments = await storage.getAttachmentsByEntity("order_request", reqId);
+          if (reqAttachments.length > 0) {
+            console.log(`[PURAX-SYNC] Order has no attachments, but source order_request ${reqId} has ${reqAttachments.length} — using those`);
+            orderAttachments = reqAttachments;
+          }
+        }
+      }
 
       const linesWithProducts = await Promise.all(
         lines.map(async (line) => {
@@ -2120,27 +2136,40 @@ export async function registerRoutes(
       const combinedNotes = noteParts.join("\n\n") || null;
 
       // Fetch attachment file data from DB and convert to base64 for Purax
+      console.log(`[PURAX-SYNC] Found ${orderAttachments.length} attachment(s) for order ${order.orderNumber}`);
       const attachmentsPayload = await Promise.all(
         orderAttachments.map(async (att: any) => {
           try {
+            console.log(`[PURAX-SYNC] Fetching file_data for attachment id=${att.id}, name=${att.fileName}`);
             const result = await pool.query(
               `SELECT file_name, file_type, file_data FROM attachments WHERE id = $1`,
               [att.id]
             );
             const row = result.rows[0];
-            if (!row || !row.file_data) return null;
+            if (!row) {
+              console.warn(`[PURAX-SYNC] No DB row found for attachment id=${att.id}`);
+              return null;
+            }
+            if (!row.file_data) {
+              console.warn(`[PURAX-SYNC] file_data is null for attachment id=${att.id}, name=${row.file_name}`);
+              return null;
+            }
+            const b64 = Buffer.isBuffer(row.file_data)
+              ? row.file_data.toString("base64")
+              : Buffer.from(row.file_data).toString("base64");
+            console.log(`[PURAX-SYNC] Attachment "${row.file_name}" encoded (${b64.length} base64 chars)`);
             return {
               fileName: row.file_name,
               mimeType: row.file_type,
-              data: Buffer.isBuffer(row.file_data)
-                ? row.file_data.toString("base64")
-                : Buffer.from(row.file_data).toString("base64"),
+              data: b64,
             };
-          } catch {
+          } catch (attErr) {
+            console.error(`[PURAX-SYNC] Error fetching attachment id=${att.id}:`, attErr);
             return null;
           }
         })
       ).then(results => results.filter(Boolean));
+      console.log(`[PURAX-SYNC] ${attachmentsPayload.length} attachment(s) will be sent to Purax`);
 
       const webhookPayload = {
         orderNumber: order.orderNumber,
@@ -5026,12 +5055,13 @@ Rules:
       );
 
       // Copy attachments from order request to the new order
-      await client.query(
+      const copyResult = await client.query(
         `INSERT INTO attachments (id, entity_type, entity_id, file_name, file_type, file_size, storage_path, uploaded_by, uploaded_at, file_data)
          SELECT gen_random_uuid(), 'order', $1, file_name, file_type, file_size, storage_path, uploaded_by, uploaded_at, file_data
          FROM attachments WHERE entity_type = 'order_request' AND entity_id = $2`,
         [order.id, req.params.id]
       );
+      console.log(`[CONVERT] Copied ${copyResult.rowCount} attachment(s) from order_request ${req.params.id} to order ${order.id}`);
 
       await client.query('COMMIT');
 
