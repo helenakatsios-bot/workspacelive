@@ -2142,7 +2142,7 @@ export async function registerRoutes(
           try {
             console.log(`[PURAX-SYNC] Fetching file_data for attachment id=${att.id}, name=${att.fileName}`);
             const result = await pool.query(
-              `SELECT file_name, file_type, file_data FROM attachments WHERE id = $1`,
+              `SELECT file_name, file_type, file_data, storage_path FROM attachments WHERE id = $1`,
               [att.id]
             );
             const row = result.rows[0];
@@ -2150,13 +2150,25 @@ export async function registerRoutes(
               console.warn(`[PURAX-SYNC] No DB row found for attachment id=${att.id}`);
               return null;
             }
-            if (!row.file_data) {
-              console.warn(`[PURAX-SYNC] file_data is null for attachment id=${att.id}, name=${row.file_name}`);
+            let fileBuffer: Buffer | null = null;
+            if (row.file_data) {
+              fileBuffer = Buffer.isBuffer(row.file_data) ? row.file_data : Buffer.from(row.file_data);
+            } else if (row.storage_path && !row.storage_path.startsWith("db://")) {
+              // Fallback: try reading from filesystem (older attachments stored before file_data was implemented)
+              try {
+                const fsModule = await import("fs");
+                const fsData = await fsModule.promises.readFile(row.storage_path);
+                fileBuffer = fsData;
+                console.log(`[PURAX-SYNC] Read attachment from filesystem: ${row.storage_path} (${fsData.length} bytes)`);
+              } catch (fsErr: any) {
+                console.warn(`[PURAX-SYNC] file_data null and filesystem read failed for ${row.file_name}: ${fsErr.message}`);
+              }
+            }
+            if (!fileBuffer) {
+              console.warn(`[PURAX-SYNC] No file content available for attachment id=${att.id}, name=${row.file_name}`);
               return null;
             }
-            const b64 = Buffer.isBuffer(row.file_data)
-              ? row.file_data.toString("base64")
-              : Buffer.from(row.file_data).toString("base64");
+            const b64 = fileBuffer.toString("base64");
             console.log(`[PURAX-SYNC] Attachment "${row.file_name}" encoded (${b64.length} base64 chars)`);
             return {
               fileName: row.file_name,
@@ -3977,17 +3989,12 @@ Rules: Extract ALL line items. If prices are not present, use 0. Quantities must
           const filePath = path.default.join(uploadsDir, fileName);
           await fs.promises.writeFile(filePath, pdfBuffer);
           console.log(`[EMAIL-TO-ORDER] PDF saved to: ${filePath}`);
-          await storage.createAttachment({
-            entityType: "order",
-            entityId: order.id,
-            fileName,
-            fileType: "application/pdf",
-            fileSize: pdfBuffer.length,
-            storagePath: filePath,
-            uploadedBy: req.session.userId,
-            description: `Original email: ${subject}`,
-          });
-          console.log(`[EMAIL-TO-ORDER] Auto-attached email PDF to order ${order.orderNumber}`);
+          await pool.query(
+            `INSERT INTO attachments (id, entity_type, entity_id, file_name, file_type, file_size, storage_path, uploaded_by, uploaded_at, description, file_data)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9)`,
+            ["order", order.id, fileName, "application/pdf", pdfBuffer.length, filePath, req.session.userId, `Original email: ${subject}`, pdfBuffer]
+          );
+          console.log(`[EMAIL-TO-ORDER] Auto-attached email PDF to order ${order.orderNumber} (with file_data)`);
         } else {
           console.warn(`[EMAIL-TO-ORDER] No HTML body found for email, skipping PDF attachment`);
         }
@@ -4018,17 +4025,12 @@ Rules: Extract ALL line items. If prices are not present, use 0. Quantities must
                 const attFileName = path.default.basename(rawName).replace(/[^a-zA-Z0-9_\-.\s]/g, "_");
                 const attFilePath = path.default.join(uploadsDir, attFileName);
                 await fs.promises.writeFile(attFilePath, attBuffer);
-                await storage.createAttachment({
-                  entityType: "order",
-                  entityId: order.id,
-                  fileName: attFileName,
-                  fileType: att.contentType || "application/octet-stream",
-                  fileSize: attBuffer.length,
-                  storagePath: attFilePath,
-                  uploadedBy: req.session.userId,
-                  description: `Email attachment: ${attFileName}`,
-                });
-                console.log(`[EMAIL-TO-ORDER] Attached email file: ${attFileName} (${attBuffer.length} bytes)`);
+                await pool.query(
+                  `INSERT INTO attachments (id, entity_type, entity_id, file_name, file_type, file_size, storage_path, uploaded_by, uploaded_at, description, file_data)
+                   VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9)`,
+                  ["order", order.id, attFileName, att.contentType || "application/octet-stream", attBuffer.length, attFilePath, req.session.userId, `Email attachment: ${attFileName}`, attBuffer]
+                );
+                console.log(`[EMAIL-TO-ORDER] Attached email file: ${attFileName} (${attBuffer.length} bytes, with file_data)`);
               } catch (fileErr: any) {
                 console.error(`[EMAIL-TO-ORDER] Failed to attach file ${att.name}:`, fileErr?.message);
               }
