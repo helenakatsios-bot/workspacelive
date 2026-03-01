@@ -5961,9 +5961,12 @@ Rules:
       if (!valid) return res.status(400).json({ message: "Current password is incorrect" });
       const hash = await bcrypt.hash(newPassword, 10);
       await db.update(portalUsers).set({ passwordHash: hash }).where(eq(portalUsers.id, user.id));
-      res.json({ message: "Password updated" });
+      return res.json({ message: "Password updated" });
     } catch (error) {
-      res.status(500).json({ message: "Failed to update password" });
+      console.error("[PORTAL] Change password error:", error);
+      if (!res.headersSent) {
+        return res.status(500).json({ message: "Failed to update password. Please try again." });
+      }
     }
   });
 

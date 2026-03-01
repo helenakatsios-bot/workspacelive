@@ -1519,8 +1519,14 @@ function PortalAccount() {
         credentials: "include",
       });
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Failed to change password");
+        let message = "Failed to change password";
+        try {
+          const data = await res.json();
+          message = data.message || message;
+        } catch {
+          // response wasn't JSON — use default message
+        }
+        throw new Error(message);
       }
       toast({ title: "Password updated", description: "Your password has been changed successfully" });
       setCurrentPassword("");
