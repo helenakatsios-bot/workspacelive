@@ -38,7 +38,15 @@ const connectedIntegrations: Integration[] = [
     icon: ShoppingCart,
     status: "Connected",
     lastSync: "On order confirmation",
-    manageUrl: "/settings",
+    manageUrl: "/admin",
+  },
+  {
+    name: "Shopify",
+    description: "Automatically imports Shopify orders into the CRM and syncs fulfillment status back to Shopify.",
+    icon: ShoppingCart,
+    status: "Connected",
+    lastSync: "Via webhook on order creation",
+    manageUrl: "/admin",
   },
   {
     name: "Customer Portal",
@@ -51,12 +59,6 @@ const connectedIntegrations: Integration[] = [
 ];
 
 const availableIntegrations: Integration[] = [
-  {
-    name: "Shopify",
-    description: "Sync products, orders, and customer data from your Shopify store.",
-    icon: ShoppingCart,
-    status: "Not Connected",
-  },
   {
     name: "Mailchimp",
     description: "Sync contacts for email marketing campaigns and audience management.",

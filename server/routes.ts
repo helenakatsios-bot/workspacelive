@@ -6,7 +6,8 @@ import { pool, db } from "./db";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { eq, ilike, and } from "drizzle-orm";
+import { eq, ilike, and, sql, inArray } from "drizzle-orm";
+import express from "express";
 import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, insertQuoteSchema, emails as emailsTable, contacts, companies as companiesTable, outlookTokens as outlookTokensTable, crmSettings, portalUsers, attachments } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero, autoSyncXeroInvoices, repairMissingInvoiceRecords } from "./xero";
@@ -6859,6 +6860,316 @@ Rules:
     } catch (error) {
       console.error("Error deleting snippet:", error);
       res.status(500).json({ message: "Failed to delete snippet" });
+    }
+  });
+
+  // ==================== SHOPIFY INTEGRATION ====================
+
+  // Helper to get Shopify config from crm_settings
+  async function getShopifyConfig() {
+    const keys = ["shopify_store_domain", "shopify_api_token", "shopify_webhook_secret"];
+    const rows = await db.select().from(crmSettings).where(inArray(crmSettings.key, keys));
+    const map: Record<string, string> = {};
+    for (const r of rows) map[r.key] = r.value;
+    return {
+      storeDomain: map["shopify_store_domain"] || "",
+      apiToken: map["shopify_api_token"] || "",
+      webhookSecret: map["shopify_webhook_secret"] || "",
+    };
+  }
+
+  // Upsert a crm_setting value
+  async function upsertSetting(key: string, value: string) {
+    await db.insert(crmSettings).values({ key, value }).onConflictDoUpdate({
+      target: crmSettings.key,
+      set: { value, updatedAt: new Date() },
+    });
+  }
+
+  // GET shopify config (masks tokens)
+  app.get("/api/admin/shopify-config", requireAdmin, async (req, res) => {
+    try {
+      const config = await getShopifyConfig();
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      res.json({
+        storeDomain: config.storeDomain,
+        apiToken: config.apiToken ? "••••••••" + config.apiToken.slice(-4) : "",
+        webhookSecret: config.webhookSecret ? "••••••••" + config.webhookSecret.slice(-4) : "",
+        webhookUrl: `${protocol}://${host}/api/webhooks/shopify/orders/created`,
+        isConnected: !!(config.storeDomain && config.apiToken && config.webhookSecret),
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get Shopify config" });
+    }
+  });
+
+  // PUT shopify config
+  app.put("/api/admin/shopify-config", requireAdmin, async (req, res) => {
+    try {
+      const { storeDomain, apiToken, webhookSecret } = req.body;
+      if (storeDomain !== undefined) await upsertSetting("shopify_store_domain", storeDomain.trim().replace(/^https?:\/\//, "").replace(/\/$/, ""));
+      if (apiToken && !apiToken.startsWith("••••")) await upsertSetting("shopify_api_token", apiToken.trim());
+      if (webhookSecret && !webhookSecret.startsWith("••••")) await upsertSetting("shopify_webhook_secret", webhookSecret.trim());
+      res.json({ message: "Shopify configuration saved" });
+    } catch (error) {
+      console.error("Save Shopify config error:", error);
+      res.status(500).json({ message: "Failed to save configuration" });
+    }
+  });
+
+  // POST test Shopify connection
+  app.post("/api/admin/shopify-config/test", requireAdmin, async (req, res) => {
+    try {
+      const config = await getShopifyConfig();
+      if (!config.storeDomain || !config.apiToken) {
+        return res.status(400).json({ message: "Store domain and API token are required" });
+      }
+      const testRes = await fetch(`https://${config.storeDomain}/admin/api/2024-01/shop.json`, {
+        headers: { "X-Shopify-Access-Token": config.apiToken },
+      });
+      if (!testRes.ok) {
+        const body = await testRes.text();
+        return res.status(400).json({ message: `Shopify API error: ${testRes.status} — check your credentials`, detail: body });
+      }
+      const data = await testRes.json() as any;
+      res.json({ message: `Connected to ${data.shop?.name || config.storeDomain} successfully` });
+    } catch (error: any) {
+      res.status(500).json({ message: `Connection failed: ${error.message}` });
+    }
+  });
+
+  // POST public Shopify webhook — orders/created
+  app.post("/api/webhooks/shopify/orders/created", express.raw({ type: "application/json" }), async (req, res) => {
+    try {
+      const config = await getShopifyConfig();
+
+      // Verify HMAC signature if webhook secret is configured
+      if (config.webhookSecret) {
+        const shopifyHmac = req.headers["x-shopify-hmac-sha256"] as string;
+        if (!shopifyHmac) return res.status(401).json({ message: "Missing HMAC header" });
+        const crypto = await import("crypto");
+        const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body as string);
+        const digest = crypto.createHmac("sha256", config.webhookSecret).update(rawBody).digest("base64");
+        if (digest !== shopifyHmac) {
+          console.warn("[SHOPIFY] Webhook HMAC verification failed");
+          return res.status(401).json({ message: "HMAC verification failed" });
+        }
+      }
+
+      const payload = JSON.parse(Buffer.isBuffer(req.body) ? req.body.toString() : req.body as string) as any;
+      const shopifyOrderId = String(payload.id);
+      const shopifyOrderNumber = payload.name || `#${payload.order_number}`;
+
+      console.log(`[SHOPIFY] Received order webhook: ${shopifyOrderNumber} (id=${shopifyOrderId})`);
+
+      // Deduplicate — skip if already imported
+      const existing = await pool.query(
+        `SELECT id FROM orders WHERE shopify_order_id = $1 LIMIT 1`,
+        [shopifyOrderId]
+      );
+      if (existing.rows.length > 0) {
+        console.log(`[SHOPIFY] Order ${shopifyOrderNumber} already imported, skipping`);
+        return res.json({ message: "Order already imported" });
+      }
+
+      // Map Shopify customer/address
+      const customer = payload.customer || {};
+      const shipping = payload.shipping_address || payload.billing_address || {};
+      const customerName = shipping.name || `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || "Shopify Customer";
+      const customerEmail = customer.email || payload.email || null;
+      const customerPhone = shipping.phone || customer.phone || null;
+      const customerAddress = [
+        shipping.address1, shipping.address2, shipping.city,
+        shipping.province, shipping.zip, shipping.country
+      ].filter(Boolean).join("\n") || null;
+
+      // Find company by email domain or Shopify store domain
+      let companyId: string | null = null;
+      const allCompanies = await storage.getAllCompanies();
+      if (config.storeDomain) {
+        const storeName = config.storeDomain.replace(".myshopify.com", "");
+        const matched = allCompanies.find((c) => {
+          const ln = c.legalName.toLowerCase();
+          const tn = (c.tradingName || "").toLowerCase();
+          return ln.includes(storeName.toLowerCase()) || tn.includes(storeName.toLowerCase());
+        });
+        if (matched) companyId = matched.id;
+      }
+      if (!companyId && customerEmail) {
+        const domain = customerEmail.split("@")[1]?.toLowerCase();
+        if (domain && !["gmail.com", "hotmail.com", "yahoo.com", "outlook.com", "icloud.com"].includes(domain)) {
+          const matched = allCompanies.find((c) =>
+            c.emailAddresses?.some((e: string) => e.toLowerCase().endsWith("@" + domain))
+          );
+          if (matched) companyId = matched.id;
+        }
+      }
+      // Fall back to first company or create note
+      if (!companyId) {
+        const puradown = allCompanies.find((c) =>
+          (c.legalName || "").toLowerCase().includes("puradown") ||
+          (c.tradingName || "").toLowerCase().includes("puradown")
+        );
+        if (puradown) companyId = puradown.id;
+      }
+      if (!companyId) {
+        console.warn(`[SHOPIFY] Could not match company for order ${shopifyOrderNumber}`);
+        return res.status(422).json({ message: "Could not match order to a company in the CRM" });
+      }
+
+      // Get next order number
+      const maxRes = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
+      const orderNumber = String((parseInt(maxRes.rows[0].max_num) || 0) + 1);
+
+      // Financial
+      const subtotal = parseFloat(payload.subtotal_price || "0");
+      const tax = parseFloat(payload.total_tax || "0");
+      const total = parseFloat(payload.total_price || "0");
+      const paymentStatus = payload.financial_status === "paid" ? "paid" : "unpaid";
+
+      // Customer notes from order
+      const noteLines: string[] = [];
+      if (payload.note) noteLines.push(payload.note);
+      if (payload.note_attributes?.length) {
+        for (const attr of payload.note_attributes) noteLines.push(`${attr.name}: ${attr.value}`);
+      }
+
+      const orderRes = await pool.query(
+        `INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, 
+          customer_name, customer_email, customer_phone, customer_address, customer_notes, 
+          payment_status, shopify_order_id, shopify_order_number, created_at, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, 'new', NOW(), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+         RETURNING *`,
+        [orderNumber, companyId, subtotal.toFixed(2), tax.toFixed(2), total.toFixed(2),
+          customerName, customerEmail, customerPhone, customerAddress,
+          noteLines.join("\n") || null, paymentStatus, shopifyOrderId, shopifyOrderNumber]
+      );
+      const order = orderRes.rows[0];
+
+      // Create order lines from Shopify line items
+      const lineItems = payload.line_items || [];
+      for (const item of lineItems) {
+        const itemName = [item.title, item.variant_title].filter(Boolean).join(" — ");
+        const unitPrice = parseFloat(item.price || "0");
+        const qty = item.quantity || 1;
+        const lineTotal = unitPrice * qty;
+
+        // Try to match product by SKU
+        let productId: string | null = null;
+        if (item.sku) {
+          const productRes = await pool.query(`SELECT id FROM products WHERE sku = $1 LIMIT 1`, [item.sku]);
+          if (productRes.rows.length > 0) productId = productRes.rows[0].id;
+        }
+
+        await pool.query(
+          `INSERT INTO order_lines (id, order_id, product_id, description_override, quantity, unit_price, discount, line_total)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, '0', $6)`,
+          [order.id, productId, itemName, qty, unitPrice.toFixed(2), lineTotal.toFixed(2)]
+        );
+      }
+
+      // Shipping line as fee if present
+      if (payload.shipping_lines?.length) {
+        for (const sh of payload.shipping_lines) {
+          const shPrice = parseFloat(sh.price || "0");
+          if (shPrice > 0) {
+            await pool.query(
+              `INSERT INTO order_lines (id, order_id, product_id, description_override, quantity, unit_price, discount, line_total)
+               VALUES (gen_random_uuid(), $1, NULL, $2, 1, $3, '0', $3)`,
+              [order.id, sh.title || "Shipping", shPrice.toFixed(2)]
+            );
+          }
+        }
+      }
+
+      await storage.createActivity({
+        entityType: "order",
+        entityId: order.id,
+        activityType: "system",
+        content: `Order imported from Shopify (${shopifyOrderNumber})`,
+        createdBy: null as any,
+      });
+
+      console.log(`[SHOPIFY] Created CRM order ${orderNumber} from Shopify ${shopifyOrderNumber}`);
+      res.status(201).json({ message: "Order imported", orderId: order.id, orderNumber });
+    } catch (error: any) {
+      console.error("[SHOPIFY] Webhook error:", error);
+      res.status(500).json({ message: "Failed to process webhook" });
+    }
+  });
+
+  // POST fulfill an order in Shopify (CRM → Shopify)
+  app.post("/api/orders/:id/fulfill-shopify", requireEdit, async (req, res) => {
+    try {
+      const order = await storage.getOrder(req.params.id);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+      if (!(order as any).shopifyOrderId) return res.status(400).json({ message: "This order is not linked to a Shopify order" });
+
+      const config = await getShopifyConfig();
+      if (!config.storeDomain || !config.apiToken) {
+        return res.status(400).json({ message: "Shopify is not configured. Set up the integration in Admin Settings." });
+      }
+
+      const shopifyOrderId = (order as any).shopifyOrderId;
+
+      // Get fulfillment orders from Shopify
+      const foRes = await fetch(
+        `https://${config.storeDomain}/admin/api/2024-01/orders/${shopifyOrderId}/fulfillment_orders.json`,
+        { headers: { "X-Shopify-Access-Token": config.apiToken } }
+      );
+      if (!foRes.ok) {
+        const body = await foRes.text();
+        return res.status(400).json({ message: `Shopify API error: ${foRes.status}`, detail: body });
+      }
+      const foData = await foRes.json() as any;
+      const openFOs = (foData.fulfillment_orders || []).filter((fo: any) => fo.status === "open");
+
+      if (openFOs.length === 0) {
+        return res.status(400).json({ message: "No open fulfillment orders found in Shopify — may already be fulfilled" });
+      }
+
+      // Create fulfillment
+      const fulfillRes = await fetch(
+        `https://${config.storeDomain}/admin/api/2024-01/fulfillments.json`,
+        {
+          method: "POST",
+          headers: { "X-Shopify-Access-Token": config.apiToken, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fulfillment: {
+              line_items_by_fulfillment_order: openFOs.map((fo: any) => ({ fulfillment_order_id: fo.id })),
+              notify_customer: req.body.notifyCustomer ?? true,
+            },
+          }),
+        }
+      );
+
+      if (!fulfillRes.ok) {
+        const body = await fulfillRes.text();
+        return res.status(400).json({ message: `Shopify fulfillment error: ${fulfillRes.status}`, detail: body });
+      }
+      const fulfillData = await fulfillRes.json() as any;
+      const fulfillmentId = String(fulfillData.fulfillment?.id || "");
+
+      // Save fulfillment ID to order
+      await pool.query(
+        `UPDATE orders SET shopify_fulfillment_id = $1, updated_at = NOW() WHERE id = $2`,
+        [fulfillmentId, order.id]
+      );
+
+      await storage.createActivity({
+        entityType: "order",
+        entityId: order.id,
+        activityType: "system",
+        content: `Shopify fulfillment created (Fulfillment ID: ${fulfillmentId})`,
+        createdBy: req.session.userId,
+      });
+
+      console.log(`[SHOPIFY] Fulfilled order ${order.orderNumber} in Shopify (fulfillment_id=${fulfillmentId})`);
+      res.json({ message: "Order fulfilled in Shopify", fulfillmentId });
+    } catch (error: any) {
+      console.error("[SHOPIFY] Fulfill error:", error);
+      res.status(500).json({ message: "Failed to fulfill order in Shopify" });
     }
   });
 

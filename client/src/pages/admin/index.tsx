@@ -382,6 +382,63 @@ export default function AdminPage() {
     },
   });
 
+  // Shopify config
+  const [shopifyStoreDomain, setShopifyStoreDomain] = useState("");
+  const [shopifyApiToken, setShopifyApiToken] = useState("");
+  const [shopifyWebhookSecret, setShopifyWebhookSecret] = useState("");
+  const [shopifyFormDirty, setShopifyFormDirty] = useState(false);
+  const [showShopifyToken, setShowShopifyToken] = useState(false);
+  const [showShopifySecret, setShowShopifySecret] = useState(false);
+
+  const { data: shopifyConfig, isLoading: loadingShopify, refetch: refetchShopify } = useQuery<{
+    storeDomain: string; apiToken: string; webhookSecret: string; webhookUrl: string; isConnected: boolean;
+  }>({
+    queryKey: ["/api/admin/shopify-config"],
+    enabled: isAdmin,
+  });
+
+  useEffect(() => {
+    if (shopifyConfig && !shopifyFormDirty) {
+      setShopifyStoreDomain(shopifyConfig.storeDomain || "");
+      setShopifyApiToken(shopifyConfig.apiToken || "");
+      setShopifyWebhookSecret(shopifyConfig.webhookSecret || "");
+    }
+  }, [shopifyConfig, shopifyFormDirty]);
+
+  const saveShopifyConfigMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", "/api/admin/shopify-config", {
+        storeDomain: shopifyStoreDomain,
+        apiToken: shopifyApiToken,
+        webhookSecret: shopifyWebhookSecret,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Shopify configuration saved" });
+      setShopifyFormDirty(false);
+      refetchShopify();
+    },
+    onError: () => {
+      toast({ title: "Failed to save Shopify configuration", variant: "destructive" });
+    },
+  });
+
+  const testShopifyMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/shopify-config/test", {});
+      return res.json();
+    },
+    onSuccess: (data: { message: string }) => {
+      toast({ title: "Shopify connection test", description: data.message });
+    },
+    onError: async (error: any) => {
+      let msg = "Connection failed — check your credentials";
+      try { if (error?.message) msg = error.message; } catch {}
+      toast({ title: "Shopify test failed", description: msg, variant: "destructive" });
+    },
+  });
+
   const filteredAuditLogs = useMemo(() => {
     if (!auditLogs) return [];
     return auditLogs.filter((log) => {
@@ -872,6 +929,152 @@ export default function AdminPage() {
                   The Purax app needs a webhook endpoint at <span className="font-mono">/api/webhook/crm-order</span> to receive orders. Contact your administrator if this hasn't been set up yet.
                 </p>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Shopify Integration */}
+          <Card className="mt-6">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[#96bf48]/10 flex items-center justify-center">
+                  <ShoppingCart className="w-4 h-4 text-[#96bf48]" />
+                </div>
+                <div className="flex-1">
+                  <CardTitle className="text-lg">Shopify</CardTitle>
+                  <CardDescription>Automatically import Shopify orders into the CRM and push fulfillment status back to Shopify</CardDescription>
+                </div>
+                {shopifyConfig?.isConnected && (
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400 bg-green-500/10 border border-green-200 dark:border-green-800 rounded-full px-2.5 py-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Connected
+                  </span>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {loadingShopify ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading configuration...
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Store Domain</label>
+                      <input
+                        className="w-full border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                        placeholder="yourstore.myshopify.com"
+                        value={shopifyStoreDomain}
+                        onChange={(e) => { setShopifyStoreDomain(e.target.value); setShopifyFormDirty(true); }}
+                        data-testid="input-shopify-store-domain"
+                      />
+                      <p className="text-xs text-muted-foreground">Your Shopify store domain, e.g. puradown.myshopify.com</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Admin API Access Token</label>
+                      <div className="relative">
+                        <input
+                          className="w-full border rounded-md px-3 py-2 pr-10 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+                          placeholder="shpat_..."
+                          type={showShopifyToken ? "text" : "password"}
+                          value={shopifyApiToken}
+                          onChange={(e) => { setShopifyApiToken(e.target.value); setShopifyFormDirty(true); }}
+                          data-testid="input-shopify-api-token"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setShowShopifyToken(!showShopifyToken)}
+                        >
+                          {showShopifyToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Generate in Shopify Admin → Settings → Apps and sales channels → Develop apps</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Webhook Secret</label>
+                      <div className="relative">
+                        <input
+                          className="w-full border rounded-md px-3 py-2 pr-10 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+                          placeholder="Your webhook signing secret"
+                          type={showShopifySecret ? "text" : "password"}
+                          value={shopifyWebhookSecret}
+                          onChange={(e) => { setShopifyWebhookSecret(e.target.value); setShopifyFormDirty(true); }}
+                          data-testid="input-shopify-webhook-secret"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setShowShopifySecret(!showShopifySecret)}
+                        >
+                          {showShopifySecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {shopifyConfig?.webhookUrl && (
+                    <div className="rounded-lg border bg-muted/40 p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Webhook className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <p className="text-xs font-medium">Webhook URL — add this in Shopify Admin</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs font-mono bg-background border rounded px-2 py-1 flex-1 break-all">
+                          {shopifyConfig.webhookUrl}
+                        </code>
+                        <button
+                          type="button"
+                          className="shrink-0 text-muted-foreground hover:text-foreground"
+                          onClick={() => { navigator.clipboard.writeText(shopifyConfig.webhookUrl); toast({ title: "Copied to clipboard" }); }}
+                          data-testid="button-copy-shopify-webhook-url"
+                          title="Copy webhook URL"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">In Shopify: Settings → Notifications → Webhooks → Add webhook → Event: <strong>Order creation</strong></p>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      onClick={() => saveShopifyConfigMutation.mutate()}
+                      disabled={saveShopifyConfigMutation.isPending}
+                      data-testid="button-save-shopify-config"
+                    >
+                      {saveShopifyConfigMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      Save Configuration
+                    </Button>
+                    {shopifyConfig?.isConnected && (
+                      <Button
+                        variant="outline"
+                        onClick={() => testShopifyMutation.mutate()}
+                        disabled={testShopifyMutation.isPending}
+                        data-testid="button-test-shopify"
+                      >
+                        {testShopifyMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                        Test Connection
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border p-4 space-y-2">
+                    <h4 className="text-sm font-medium">How it works</h4>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">1</span>
+                      Customer places order in your Shopify store
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">2</span>
+                      Shopify sends a webhook → CRM automatically creates an order
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">3</span>
+                      When you mark the order completed, click "Sync to Shopify" to push fulfillment status back
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

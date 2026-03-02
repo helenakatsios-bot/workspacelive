@@ -70,3 +70,4 @@ Preferred communication style: Simple, everyday language.
 - **Xero Accounting**: Contact import and invoice synchronization (ready to connect).
 - **Outlook Email**: OAuth 2.0 authentication, email sync, sending, threading replies, and creating orders from emails using Microsoft Graph API.
 - **Purax Feather Holdings App**: Integrates for pushing CRM orders to the Purax app for further processing and Xero invoice creation, sending order PDFs via multipart/form-data.
+- **Shopify**: Two-way integration — Shopify orders are automatically imported into the CRM via HMAC-verified webhook (`/api/webhooks/shopify/orders/created`), and CRM orders can be fulfilled back in Shopify via the Fulfillments API. Config stored in `crm_settings` table. Orders table has `shopifyOrderId`, `shopifyOrderNumber`, `shopifyFulfillmentId` columns.

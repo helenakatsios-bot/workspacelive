@@ -180,6 +180,9 @@ export const orders = pgTable("orders", {
   puraxSyncStatus: text("purax_sync_status").default("not_sent"), // not_sent, sent, failed
   puraxSyncedAt: timestamp("purax_synced_at"),
   puraxOrderId: text("purax_order_id"),
+  shopifyOrderId: text("shopify_order_id"),
+  shopifyOrderNumber: text("shopify_order_number"),
+  shopifyFulfillmentId: text("shopify_fulfillment_id"),
   createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

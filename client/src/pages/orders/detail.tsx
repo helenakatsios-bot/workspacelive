@@ -525,6 +525,23 @@ export default function OrderDetailPage() {
     },
   });
 
+  const fulfillShopifyMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/orders/${params?.id}/fulfill-shopify`, { notifyCustomer: true });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id, "activities"] });
+      toast({ title: "Shopify fulfillment sent", description: data.message || "Order marked as fulfilled in Shopify." });
+    },
+    onError: async (error: any) => {
+      let msg = "Failed to fulfil order in Shopify. Check your integration settings.";
+      try { if (error?.message) msg = error.message; } catch {}
+      toast({ title: "Shopify sync failed", description: msg, variant: "destructive" });
+    },
+  });
+
   const handleAddNote = async () => {
     if (!newNote.trim()) return;
     setIsSubmittingNote(true);
@@ -1235,6 +1252,39 @@ export default function OrderDetailPage() {
                   )}
                 </div>
               </div>
+
+              {(order as any).shopifyOrderId && (
+                <div className="flex items-start gap-3 pt-2 border-t">
+                  <ShoppingCart className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Shopify Order</p>
+                    <p className="text-sm font-medium">{(order as any).shopifyOrderNumber || (order as any).shopifyOrderId}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {(order as any).shopifyFulfillmentId ? (
+                        <Badge variant="outline" className="gap-1 text-green-600 border-green-300 dark:text-green-400 dark:border-green-700">
+                          <CheckCircle className="w-3 h-3" />
+                          Fulfilled
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="gap-1">
+                          Unfulfilled
+                        </Badge>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-xs px-2"
+                        onClick={() => fulfillShopifyMutation.mutate()}
+                        disabled={fulfillShopifyMutation.isPending || !!(order as any).shopifyFulfillmentId}
+                        data-testid="button-fulfill-shopify"
+                      >
+                        {fulfillShopifyMutation.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Send className="w-3 h-3 mr-1" />}
+                        {(order as any).shopifyFulfillmentId ? "Fulfilled" : "Sync to Shopify"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
