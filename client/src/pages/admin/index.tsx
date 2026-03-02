@@ -199,6 +199,21 @@ export default function AdminPage() {
     }
   }, [location, toast, refetchXero, refetchOutlook]);
 
+  // Scroll to a section if the URL hash targets it (e.g. #shopify-config)
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash) return;
+    const tryScroll = (attempts = 0) => {
+      const el = document.getElementById(hash.replace("#", ""));
+      if (el) {
+        setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+      } else if (attempts < 10) {
+        setTimeout(() => tryScroll(attempts + 1), 200);
+      }
+    };
+    tryScroll();
+  }, []);
+
   const connectXeroMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("GET", "/api/xero/auth-url");
@@ -468,7 +483,7 @@ export default function AdminPage() {
         description="Manage users, view audit logs, and configure system settings"
       />
 
-      <Tabs defaultValue="users">
+      <Tabs defaultValue={new URLSearchParams(window.location.search).get("tab") || "users"}>
         <TabsList className="flex-wrap">
           <TabsTrigger value="users" className="gap-2">
             <Users className="w-4 h-4" />
@@ -933,7 +948,7 @@ export default function AdminPage() {
           </Card>
 
           {/* Shopify Integration */}
-          <Card className="mt-6">
+          <Card className="mt-6" id="shopify-config">
             <CardHeader>
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-[#96bf48]/10 flex items-center justify-center">

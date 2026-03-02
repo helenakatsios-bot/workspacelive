@@ -46,7 +46,7 @@ const connectedIntegrations: Integration[] = [
     icon: ShoppingCart,
     status: "Connected",
     lastSync: "Via webhook on order creation",
-    manageUrl: "/admin",
+    manageUrl: "/admin?tab=integrations#shopify-config",
   },
   {
     name: "Customer Portal",
@@ -147,7 +147,11 @@ export default function DataIntegrationPage() {
 
   const handleManage = (integration: Integration) => {
     if (integration.manageUrl) {
-      navigate(integration.manageUrl);
+      if (integration.manageUrl.includes("#")) {
+        window.location.href = integration.manageUrl;
+      } else {
+        navigate(integration.manageUrl);
+      }
     } else {
       toast({
         title: `Manage ${integration.name}`,
