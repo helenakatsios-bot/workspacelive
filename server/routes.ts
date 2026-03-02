@@ -2101,9 +2101,13 @@ export async function registerRoutes(
         lines: linesWithProducts,
       });
 
-      let orderDetailsText = linesWithProducts.map(line =>
-        `${line.quantity}x ${line.productName} @ $${line.unitPrice} = $${line.lineTotal}`
-      ).join("\n");
+      let orderDetailsText = [
+        `Order Number: ${order.orderNumber}`,
+        `Company: ${company?.tradingName || company?.legalName || ""}`,
+        ...linesWithProducts.map(line =>
+          `${line.quantity}x ${line.productName} @ $${line.unitPrice} = $${line.lineTotal}`
+        )
+      ].join("\n");
 
       if (!orderDetailsText && originalEmailHtml) {
         const emailPlainText = originalEmailHtml
@@ -2126,15 +2130,12 @@ export async function registerRoutes(
 
       const customerAddress = order.customerAddress || company?.shippingAddress || company?.billingAddress || "";
 
-      const customerDetails = customerName
-        ? `${order.orderNumber} ${customerName}`
-        : order.orderNumber;
-
-      // Build notes string combining customer notes and internal notes
+      // Build notes string — order number always at the top so Milo can clearly identify the order
       const noteParts: string[] = [];
+      noteParts.push(`CRM Order Number: ${order.orderNumber}`);
       if (order.customerNotes) noteParts.push(`Customer Notes:\n${order.customerNotes}`);
-      if (order.notes) noteParts.push(`Internal Notes:\n${order.notes}`);
-      const combinedNotes = noteParts.join("\n\n") || null;
+      if ((order as any).notes) noteParts.push(`Internal Notes:\n${(order as any).notes}`);
+      const combinedNotes = noteParts.join("\n\n");
 
       // Fetch attachment file data from DB and convert to base64 for Purax
       console.log(`[PURAX-SYNC] Found ${orderAttachments.length} attachment(s) for order ${order.orderNumber}`);
@@ -2187,7 +2188,7 @@ export async function registerRoutes(
       const webhookPayload = {
         orderNumber: order.orderNumber,
         companyName: company?.tradingName || company?.legalName || "",
-        customerName: customerDetails,
+        customerName: customerName || company?.tradingName || company?.legalName || "",
         customerAddress,
         customerPhone: order.customerPhone || contact?.phone || "",
         customerEmail: order.customerEmail || contact?.email || "",
