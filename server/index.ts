@@ -382,9 +382,9 @@ async function runStartupTasks() {
     if (blanketFix.rowCount && blanketFix.rowCount > 0) {
       console.log(`Normalized ${blanketFix.rowCount} blanket products into BLANKETS category`);
     }
-    const quiltFix = await pool.query("UPDATE products SET category = 'HUNGARIAN' WHERE category = 'STRIPPED QUILT'");
+    const quiltFix = await pool.query("UPDATE products SET category = 'HUNGARIAN WINTER STRIP' WHERE category IN ('STRIPPED QUILT', 'HUNGARIAN')");
     if (quiltFix.rowCount && quiltFix.rowCount > 0) {
-      console.log(`Renamed ${quiltFix.rowCount} STRIPPED QUILT products to HUNGARIAN`);
+      console.log(`Renamed ${quiltFix.rowCount} products to HUNGARIAN WINTER STRIP`);
     }
     const stripFix = await pool.query("UPDATE products SET category = 'HUNGARIAN PILLOW' WHERE category = 'STRIP PILLOW'");
     if (stripFix.rowCount && stripFix.rowCount > 0) {
@@ -393,6 +393,50 @@ async function runStartupTasks() {
     const quiltNameFix = await pool.query("UPDATE products SET name = REPLACE(name, ' - HUNGARIAN STRIPPED QUILT', ' - HUNGARIAN') WHERE name LIKE '% - HUNGARIAN STRIPPED QUILT'");
     if (quiltNameFix.rowCount && quiltNameFix.rowCount > 0) {
       console.log(`Updated ${quiltNameFix.rowCount} product names from HUNGARIAN STRIPPED QUILT to HUNGARIAN`);
+    }
+
+    // Ensure HUNGARIAN LIGHT FILL products exist (10 quilts)
+    const hungarianLiteSkus = [
+      { sku: 'HUNGARIAN LITE - 01', name: 'SINGLE - 80% HUNGARIAN G/DOWN ALL SEASONS CASS. 510GRMS', price: '121.00' },
+      { sku: 'HUNGARIAN LITE - 02', name: 'DOUBLE - 80% HUNGARIAN G/DOWN ALL SEASONS CASS. 610GRMS', price: '142.00' },
+      { sku: 'HUNGARIAN LITE - 03', name: 'QUEEN - 80% HUNGARIAN G/DOWN ALL SEASONS CASS. 720GRM', price: '170.00' },
+      { sku: 'HUNGARIAN LITE - 04', name: 'KING - 80% HUNGARIAN G/DOWN ALL SEASONS CASS. 820GRMS', price: '186.00' },
+      { sku: 'HUNGARIAN LITE - 05', name: 'SUPER KING - 80% HUNGARIAN G/DOWN ALL SEAS. CASS. 1050GRMS', price: '273.00' },
+      { sku: 'HUNGARIAN LITE - 06', name: 'SINGLE - 80% HUNGARIAN G/DOWN WARM CASSETTE 600GRMS', price: '159.00' },
+      { sku: 'HUNGARIAN LITE - 07', name: 'DOUBLE - 80% HUNGARIAN G/DOWN WARM CASSETTE 750GRMS', price: '183.00' },
+      { sku: 'HUNGARIAN LITE - 08', name: 'QUEEN - 80% HUNGARIAN G/DOWN WARM CASSETTE 850GRM', price: '216.50' },
+      { sku: 'HUNGARIAN LITE - 09', name: 'KING - 80% HUNGARIAN G/DOWN WARM CASSETTE 950GRMS', price: '232.00' },
+      { sku: 'HUNGARIAN LITE - 10', name: 'SUPER KING - 80% HUNGARIAN G/DOWN WARM CASSETTE 1300GRMS', price: '314.00' },
+    ];
+    const standardPL = await pool.query("SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1");
+    if (standardPL.rows.length > 0) {
+      const standardPLId = standardPL.rows[0].id;
+      for (const item of hungarianLiteSkus) {
+        const existsProd = await pool.query("SELECT id FROM products WHERE sku = $1", [item.sku]);
+        let productId: string;
+        if (existsProd.rows.length === 0) {
+          const ins = await pool.query(
+            "INSERT INTO products (id, sku, name, category, filling, unit_price, active) VALUES (gen_random_uuid(), $1, $2, 'HUNGARIAN LIGHT FILL', 'HUNGARIAN WINTER STRIP', $3, true) RETURNING id",
+            [item.sku, item.name, item.price]
+          );
+          productId = ins.rows[0].id;
+          console.log(`Created HUNGARIAN LIGHT FILL product: ${item.sku}`);
+        } else {
+          productId = existsProd.rows[0].id;
+          await pool.query("UPDATE products SET category = 'HUNGARIAN LIGHT FILL', filling = 'HUNGARIAN WINTER STRIP', active = true WHERE id = $1", [productId]);
+        }
+        const existsPrice = await pool.query(
+          "SELECT 1 FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 AND filling = 'HUNGARIAN WINTER STRIP' LIMIT 1",
+          [standardPLId, productId]
+        );
+        if (existsPrice.rows.length === 0) {
+          await pool.query(
+            "INSERT INTO price_list_prices (id, price_list_id, product_id, filling, weight, unit_price) VALUES (gen_random_uuid(), $1, $2, 'HUNGARIAN WINTER STRIP', NULL, $3)",
+            [standardPLId, productId, item.price]
+          );
+          console.log(`Added Standard price for ${item.sku}: $${item.price}`);
+        }
+      }
     }
 
     // Ensure FREIGHT, DROP SHIP FEE, SHOPIFY FEE exist in MISC category
