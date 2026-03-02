@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2, Webhook, Key, Globe, Building2, Pencil } from "lucide-react";
+import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2, Webhook, Key, Globe, Building2, Pencil, Save } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1239,6 +1239,84 @@ export default function AdminPage() {
   );
 }
 
+function MillieWebhookCard() {
+  const { toast } = useToast();
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const { data: setting, refetch } = useQuery<{ key: string; value: string }>({
+    queryKey: ["/api/settings", "millie_webhook_url"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings/millie_webhook_url");
+      if (!res.ok) return { key: "millie_webhook_url", value: "" };
+      return res.json();
+    },
+  });
+
+  useEffect(() => {
+    if (setting?.value !== undefined) setWebhookUrl(setting.value);
+  }, [setting?.value]);
+
+  const save = async () => {
+    setIsSaving(true);
+    try {
+      await apiRequest("PUT", "/api/settings/millie_webhook_url", { value: webhookUrl.trim() });
+      toast({ title: "Saved", description: "Millie webhook URL updated." });
+      refetch();
+    } catch {
+      toast({ title: "Error", description: "Failed to save webhook URL.", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Webhook className="w-5 h-5" />
+          Millie Notification Webhook
+        </CardTitle>
+        <CardDescription>
+          When an order is invoiced (sent to Xero or marked as sent/paid), the CRM will automatically POST a notification to this URL. Used to keep Millie in sync.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Webhook URL</label>
+          <div className="flex gap-2">
+            <Input
+              placeholder="https://millie-app.replit.app/api/webhook/order-completed"
+              value={webhookUrl}
+              onChange={(e) => setWebhookUrl(e.target.value)}
+              data-testid="input-millie-webhook-url"
+            />
+            <Button onClick={save} disabled={isSaving} data-testid="button-save-millie-webhook">
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            The CRM will send a POST with <code>Authorization: Bearer [CRM_API_KEY]</code> and a JSON payload containing the order number, company, invoice number, and timestamp.
+          </p>
+        </div>
+        <div className="rounded-md bg-muted p-3 text-xs space-y-1">
+          <p className="font-medium">Payload sent on each invoiced order:</p>
+          <pre className="whitespace-pre-wrap text-muted-foreground">{JSON.stringify({
+            event: "order_invoiced",
+            orderId: "...",
+            orderNumber: "ORD-0042",
+            companyName: "VINOD",
+            customerName: "Tracy McAllery",
+            xeroInvoiceNumber: "INV-154005",
+            totalAmount: "1250.00",
+            completedAt: new Date().toISOString(),
+          }, null, 2)}</pre>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function OrderFormSettings() {
   const { toast } = useToast();
   const [notificationEmail, setNotificationEmail] = useState("");
@@ -1476,6 +1554,8 @@ function OrderFormSettings() {
           )}
         </CardContent>
       </Card>
+
+      <MillieWebhookCard />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">

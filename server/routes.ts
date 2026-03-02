@@ -2339,6 +2339,39 @@ export async function registerRoutes(
     }
   });
 
+  // Helper: fire a webhook to Millie (or any configured URL) when an order is invoiced
+  async function notifyMillieWebhook(payload: Record<string, any>) {
+    try {
+      const millieWebhookUrl = await storage.getSetting("millie_webhook_url");
+      if (!millieWebhookUrl) return;
+
+      const apiKey = process.env.CRM_API_KEY;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+
+      try {
+        const resp = await fetch(millieWebhookUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        console.log(`[MILLIE-WEBHOOK] Notified ${millieWebhookUrl} — status ${resp.status}`);
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        console.warn("[MILLIE-WEBHOOK] Request timed out after 8s — skipping");
+      } else {
+        console.error("[MILLIE-WEBHOOK] Failed to notify:", err?.message);
+      }
+    }
+  }
+
   // Helper: when an invoice is sent/paid, auto-complete linked portal order and log it
   async function autoCompletePortalOrderForInvoice(invoice: any, updated: any) {
     try {
@@ -2363,15 +2396,30 @@ export async function registerRoutes(
       );
 
       // Add an activity log entry so the CRM shows what happened
+      const invoiceNumber = updated.invoiceNumber || invoice.invoiceNumber;
+      const invoiceStatus = updated.status || invoice.status;
       await storage.createActivity({
         entityType: "order",
         entityId: invoice.orderId,
         activityType: "system",
-        content: `Invoice ${updated.invoiceNumber || invoice.invoiceNumber} marked as ${updated.status} — portal order automatically marked as completed.`,
+        content: `Invoice ${invoiceNumber} marked as ${invoiceStatus} — portal order automatically marked as completed.`,
         createdBy: null as any,
       });
 
-      console.log(`[INVOICE] Portal order ${portalOrder.id} auto-completed after invoice ${updated.invoiceNumber || invoice.invoiceNumber} was marked ${updated.status}`);
+      console.log(`[INVOICE] Portal order ${portalOrder.id} auto-completed after invoice ${invoiceNumber} was marked ${invoiceStatus}`);
+
+      // Fire webhook to Millie (non-blocking — errors are caught inside)
+      const company = order.companyId ? await storage.getCompany(order.companyId) : null;
+      notifyMillieWebhook({
+        event: "order_invoiced",
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        companyName: company?.tradingName || company?.legalName || "",
+        customerName: order.customerName || "",
+        xeroInvoiceNumber: invoiceNumber,
+        totalAmount: invoice.total,
+        completedAt: new Date().toISOString(),
+      });
     } catch (err) {
       console.error("[INVOICE] Failed to auto-complete portal order:", err);
     }
