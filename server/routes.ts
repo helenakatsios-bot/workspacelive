@@ -7196,18 +7196,20 @@ Rules:
     try {
       const config = await getShopifyConfig();
 
-      // Verify HMAC signature if webhook secret is configured — log mismatch but always process
+      // Verify HMAC signature if webhook secret is configured
       if (config.webhookSecret) {
         const shopifyHmac = req.headers["x-shopify-hmac-sha256"] as string;
-        if (shopifyHmac) {
-          const crypto = await import("crypto");
-          const rawBuf = req.rawBody;
-          if (rawBuf) {
-            const digest = crypto.createHmac("sha256", config.webhookSecret).update(rawBuf).digest("base64");
-            if (digest !== shopifyHmac) {
-              console.warn("[SHOPIFY] HMAC mismatch — proceeding anyway (check webhook secret in Shopify admin settings)");
-            }
-          }
+        if (!shopifyHmac) return res.status(401).json({ message: "Missing HMAC header" });
+        const crypto = await import("crypto");
+        const rawBuf = req.rawBody;
+        if (!rawBuf) {
+          console.warn("[SHOPIFY] No rawBody available for HMAC verification");
+          return res.status(400).json({ message: "No raw body" });
+        }
+        const digest = crypto.createHmac("sha256", config.webhookSecret).update(rawBuf).digest("base64");
+        if (digest !== shopifyHmac) {
+          console.warn("[SHOPIFY] Webhook HMAC verification failed");
+          return res.status(401).json({ message: "HMAC verification failed" });
         }
       }
 
