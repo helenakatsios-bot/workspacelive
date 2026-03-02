@@ -4973,6 +4973,56 @@ Rules:
     }
   });
 
+  // ==================== MILLIE INCOMING WEBHOOK ====================
+  // POST /api/webhook/order-completed — receives notifications from Millie (or any external system)
+  // Secured with CRM_API_KEY as a Bearer token
+  app.post("/api/webhook/order-completed", async (req, res) => {
+    try {
+      const apiKey = process.env.CRM_API_KEY;
+      if (!apiKey) {
+        return res.status(503).json({ ok: false, message: "Webhook not configured — CRM_API_KEY missing" });
+      }
+
+      const authHeader = req.headers["authorization"] || "";
+      const provided = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+      if (provided !== apiKey) {
+        console.warn("[MILLIE-WEBHOOK-IN] Rejected request — invalid API key");
+        return res.status(401).json({ ok: false, message: "Invalid API key" });
+      }
+
+      const body = req.body as Record<string, any>;
+      const { event, orderId, orderNumber, companyName, customerName, xeroInvoiceNumber, totalAmount, completedAt } = body;
+
+      console.log(`[MILLIE-WEBHOOK-IN] Received event="${event}" orderNumber="${orderNumber}" invoice="${xeroInvoiceNumber}"`);
+
+      // If a CRM order ID was supplied, log an activity against it
+      if (orderId) {
+        try {
+          await storage.createActivity({
+            entityType: "order",
+            entityId: orderId,
+            activityType: "system",
+            content: `External notification received: ${event || "order_completed"}${xeroInvoiceNumber ? ` — Invoice ${xeroInvoiceNumber}` : ""}${completedAt ? ` at ${new Date(completedAt).toLocaleString("en-AU")}` : ""}.`,
+            createdBy: null as any,
+          });
+        } catch (_) {
+          // Non-fatal — the order may not exist in this CRM instance
+        }
+      }
+
+      res.json({
+        ok: true,
+        received: true,
+        event: event || "unknown",
+        orderNumber: orderNumber || null,
+        processedAt: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error("[MILLIE-WEBHOOK-IN] Error:", err?.message);
+      res.status(500).json({ ok: false, message: "Internal server error" });
+    }
+  });
+
   // ==================== CUSTOMER ORDER REQUESTS (ADMIN) ====================
   app.get("/api/customer-order-requests/pending-count", requireAuth, async (_req, res) => {
     try {

@@ -1270,6 +1270,10 @@ function MillieWebhookCard() {
     }
   };
 
+  const crmWebhookUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/api/webhook/order-completed`
+    : "/api/webhook/order-completed";
+
   return (
     <Card>
       <CardHeader>
@@ -1278,12 +1282,15 @@ function MillieWebhookCard() {
           Millie Notification Webhook
         </CardTitle>
         <CardDescription>
-          When an order is invoiced (sent to Xero or marked as sent/paid), the CRM will automatically POST a notification to this URL. Used to keep Millie in sync.
+          Two-way sync: the CRM notifies Millie when orders are invoiced, and Millie can notify the CRM back using the receiving URL below.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5">
+
+        {/* Outbound — CRM → Millie */}
         <div className="space-y-2">
-          <label className="text-sm font-medium">Webhook URL</label>
+          <p className="text-sm font-semibold">Outbound — CRM notifies Millie</p>
+          <label className="text-sm text-muted-foreground">Millie's webhook URL (paste Millie's endpoint here)</label>
           <div className="flex gap-2">
             <Input
               placeholder="https://millie-app.replit.app/api/webhook/order-completed"
@@ -1296,11 +1303,32 @@ function MillieWebhookCard() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            The CRM will send a POST with <code>Authorization: Bearer [CRM_API_KEY]</code> and a JSON payload containing the order number, company, invoice number, and timestamp.
+            Sent with <code>Authorization: Bearer [CRM_API_KEY]</code>. Fires automatically whenever an invoice is marked sent, paid, or synced to Xero.
           </p>
         </div>
-        <div className="rounded-md bg-muted p-3 text-xs space-y-1">
-          <p className="font-medium">Payload sent on each invoiced order:</p>
+
+        {/* Inbound — Millie → CRM */}
+        <div className="space-y-2 pt-3 border-t">
+          <p className="text-sm font-semibold">Inbound — Millie notifies this CRM</p>
+          <label className="text-sm text-muted-foreground">Give this URL to Millie so it can POST back here</label>
+          <div className="flex gap-2">
+            <Input readOnly value={crmWebhookUrl} className="font-mono text-xs" data-testid="text-crm-webhook-url" />
+            <Button
+              variant="outline"
+              onClick={() => { navigator.clipboard.writeText(crmWebhookUrl); }}
+              data-testid="button-copy-crm-webhook-url"
+            >
+              <Copy className="w-4 h-4" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Millie must send <code>Authorization: Bearer [CRM_API_KEY]</code> — the same key used on both sides.
+          </p>
+        </div>
+
+        {/* Payload reference */}
+        <div className="rounded-md bg-muted p-3 text-xs space-y-1 pt-3 border-t">
+          <p className="font-medium">Payload format (sent and received):</p>
           <pre className="whitespace-pre-wrap text-muted-foreground">{JSON.stringify({
             event: "order_invoiced",
             orderId: "...",
