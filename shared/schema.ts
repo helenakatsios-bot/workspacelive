@@ -405,6 +405,11 @@ export const customerOrderRequests = pgTable("customer_order_requests", {
   reviewedBy: varchar("reviewed_by", { length: 36 }).references(() => users.id),
   reviewedAt: timestamp("reviewed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  shopifyOrderId: text("shopify_order_id"),
+  shopifyOrderNumber: text("shopify_order_number"),
+  paymentStatus: text("payment_status"),
+  subtotal: text("subtotal"),
+  totalAmount: text("total_amount"),
 }, (table) => [
   index("customer_order_requests_status_idx").on(table.status),
   index("customer_order_requests_created_idx").on(table.createdAt),

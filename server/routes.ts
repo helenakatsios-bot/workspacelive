@@ -5194,10 +5194,14 @@ Rules:
       const customerPhone = orderRequest.contactPhone || company.phone || null;
       const customerAddress = orderRequest.shippingAddress || company.shippingAddress || company.billingAddress || null;
 
+      const shopifyOrderIdFromReq = (orderRequest as any).shopifyOrderId || null;
+      const shopifyOrderNumberFromReq = (orderRequest as any).shopifyOrderNumber || null;
+      const paymentStatusFromReq = (orderRequest as any).paymentStatus || "unpaid";
+
       const orderResult = await client.query(
-        `INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, customer_notes, customer_name, customer_email, customer_phone, customer_address, created_by, created_at)
-         VALUES (gen_random_uuid(), $1, $2, 'new', NOW(), $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()) RETURNING *`,
-        [orderNumber, company.id, subtotal.toFixed(2), tax.toFixed(2), total.toFixed(2), orderRequest.customerNotes || null, customerName, customerEmail, customerPhone, customerAddress, req.session.userId]
+        `INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, customer_notes, customer_name, customer_email, customer_phone, customer_address, created_by, shopify_order_id, shopify_order_number, payment_status, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'new', NOW(), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()) RETURNING *`,
+        [orderNumber, company.id, subtotal.toFixed(2), tax.toFixed(2), total.toFixed(2), orderRequest.customerNotes || null, customerName, customerEmail, customerPhone, customerAddress, req.session.userId, shopifyOrderIdFromReq, shopifyOrderNumberFromReq, paymentStatusFromReq]
       );
       const order = orderResult.rows[0];
 
@@ -7220,129 +7224,108 @@ Rules:
 
       console.log(`[SHOPIFY] Received order webhook: ${shopifyOrderNumber} (id=${shopifyOrderId})`);
 
-      // Deduplicate — skip if already imported
-      const existing = await pool.query(
+      // Deduplicate — skip if already imported as order or pending request
+      const existingOrder = await pool.query(
         `SELECT id FROM orders WHERE shopify_order_id = $1 LIMIT 1`,
         [shopifyOrderId]
       );
-      if (existing.rows.length > 0) {
-        console.log(`[SHOPIFY] Order ${shopifyOrderNumber} already imported, skipping`);
+      if (existingOrder.rows.length > 0) {
+        console.log(`[SHOPIFY] Order ${shopifyOrderNumber} already in orders, skipping`);
         return res.json({ message: "Order already imported" });
+      }
+      const existingReq = await pool.query(
+        `SELECT id FROM customer_order_requests WHERE shopify_order_id = $1 LIMIT 1`,
+        [shopifyOrderId]
+      );
+      if (existingReq.rows.length > 0) {
+        console.log(`[SHOPIFY] Order ${shopifyOrderNumber} already in order requests, skipping`);
+        return res.json({ message: "Order already in requests" });
       }
 
       // Map Shopify customer/address
       const customer = payload.customer || {};
       const shipping = payload.shipping_address || payload.billing_address || {};
       const customerName = shipping.name || `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || "Shopify Customer";
-      const customerEmail = customer.email || payload.email || null;
+      const customerEmail = customer.email || payload.email || "shopify@puradown.com.au";
       const customerPhone = shipping.phone || customer.phone || null;
       const customerAddress = [
         shipping.address1, shipping.address2, shipping.city,
         shipping.province, shipping.zip, shipping.country
       ].filter(Boolean).join("\n") || null;
 
-      // ALL Shopify webhook orders go to the configured company
-      // Admin can set shopify_company_id in settings; falls back to "Puradown Website Sales"
+      // Get the configured Shopify company name
       const allCompanies = await storage.getAllCompanies();
       const configuredCompanyId = await storage.getSetting("shopify_company_id");
       let shopifyCompany = configuredCompanyId
         ? allCompanies.find((c) => c.id === configuredCompanyId)
         : null;
-
       if (!shopifyCompany) {
-        const SHOPIFY_COMPANY_NAME = "Puradown Website Sales";
         shopifyCompany = allCompanies.find((c) =>
-          (c.legalName || "").toLowerCase() === SHOPIFY_COMPANY_NAME.toLowerCase() ||
-          (c.tradingName || "").toLowerCase() === SHOPIFY_COMPANY_NAME.toLowerCase()
-        );
-        if (!shopifyCompany) {
-          shopifyCompany = await storage.createCompany({
-            legalName: SHOPIFY_COMPANY_NAME,
-            tradingName: SHOPIFY_COMPANY_NAME,
-            creditStatus: "active",
-            paymentTerms: "Net 30",
-            internalNotes: "Auto-created for Shopify website orders",
-          });
-          console.log(`[SHOPIFY] Created company "${SHOPIFY_COMPANY_NAME}" (id=${shopifyCompany.id})`);
-        }
+          (c.legalName || "").toLowerCase().includes("puradown") ||
+          (c.tradingName || "").toLowerCase().includes("puradown")
+        ) || null;
       }
-      const companyId = shopifyCompany.id;
-
-      // Get next order number
-      const maxRes = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
-      const orderNumber = String((parseInt(maxRes.rows[0].max_num) || 0) + 1);
+      const companyName = shopifyCompany
+        ? (shopifyCompany.tradingName || shopifyCompany.legalName)
+        : "PURADOWN WEBSITE SALES";
 
       // Financial
       const subtotal = parseFloat(payload.subtotal_price || "0");
-      const tax = parseFloat(payload.total_tax || "0");
       const total = parseFloat(payload.total_price || "0");
       const paymentStatus = payload.financial_status === "paid" ? "paid" : "unpaid";
 
-      // Customer notes from order
-      const noteLines: string[] = [];
+      // Customer notes
+      const noteLines: string[] = [`Shopify Order ${shopifyOrderNumber} — Payment: ${paymentStatus}`];
       if (payload.note) noteLines.push(payload.note);
       if (payload.note_attributes?.length) {
         for (const attr of payload.note_attributes) noteLines.push(`${attr.name}: ${attr.value}`);
       }
+      if (payload.shipping_lines?.length) {
+        for (const sh of payload.shipping_lines) {
+          const shPrice = parseFloat(sh.price || "0");
+          if (shPrice > 0) noteLines.push(`Shipping (${sh.title || "Standard"}): $${shPrice.toFixed(2)}`);
+        }
+      }
 
-      const orderRes = await pool.query(
-        `INSERT INTO orders (id, order_number, company_id, status, order_date, subtotal, tax, total, 
-          customer_name, customer_email, customer_phone, customer_address, customer_notes, 
-          payment_status, shopify_order_id, shopify_order_number, created_at, updated_at)
-         VALUES (gen_random_uuid(), $1, $2, 'new', NOW(), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
-         RETURNING *`,
-        [orderNumber, companyId, subtotal.toFixed(2), tax.toFixed(2), total.toFixed(2),
-          customerName, customerEmail, customerPhone, customerAddress,
-          noteLines.join("\n") || null, paymentStatus, shopifyOrderId, shopifyOrderNumber]
-      );
-      const order = orderRes.rows[0];
-
-      // Create order lines from Shopify line items
+      // Map Shopify line items to order request items format
       const lineItems = payload.line_items || [];
+      const items: any[] = [];
       for (const item of lineItems) {
         const itemName = [item.title, item.variant_title].filter(Boolean).join(" — ");
         const unitPrice = parseFloat(item.price || "0");
         const qty = item.quantity || 1;
         const lineTotal = unitPrice * qty;
 
-        // Try to match product by SKU
         let productId: string | null = null;
         if (item.sku) {
           const productRes = await pool.query(`SELECT id FROM products WHERE sku = $1 LIMIT 1`, [item.sku]);
           if (productRes.rows.length > 0) productId = productRes.rows[0].id;
         }
 
-        await pool.query(
-          `INSERT INTO order_lines (id, order_id, product_id, description_override, quantity, unit_price, discount, line_total)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, '0', $6)`,
-          [order.id, productId, itemName, qty, unitPrice.toFixed(2), lineTotal.toFixed(2)]
-        );
+        items.push({
+          productId,
+          productName: itemName,
+          sku: item.sku || null,
+          quantity: qty,
+          unitPrice,
+          lineTotal,
+        });
       }
 
-      // Shipping line as fee if present
-      if (payload.shipping_lines?.length) {
-        for (const sh of payload.shipping_lines) {
-          const shPrice = parseFloat(sh.price || "0");
-          if (shPrice > 0) {
-            await pool.query(
-              `INSERT INTO order_lines (id, order_id, product_id, description_override, quantity, unit_price, discount, line_total)
-               VALUES (gen_random_uuid(), $1, NULL, $2, 1, $3, '0', $3)`,
-              [order.id, sh.title || "Shipping", shPrice.toFixed(2)]
-            );
-          }
-        }
-      }
+      // Create Order Request (pending review) instead of order directly
+      const reqRes = await pool.query(
+        `INSERT INTO customer_order_requests 
+          (id, company_name, contact_name, contact_email, contact_phone, shipping_address, customer_notes, items, status, shopify_order_id, shopify_order_number, payment_status, subtotal, total_amount, created_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11, $12, NOW())
+         RETURNING id`,
+        [companyName, customerName, customerEmail, customerPhone, customerAddress,
+          noteLines.join("\n"), JSON.stringify(items),
+          shopifyOrderId, shopifyOrderNumber, paymentStatus,
+          subtotal.toFixed(2), total.toFixed(2)]
+      );
 
-      await storage.createActivity({
-        entityType: "order",
-        entityId: order.id,
-        activityType: "system",
-        content: `Order imported from Shopify (${shopifyOrderNumber})`,
-        createdBy: null as any,
-      });
-
-      console.log(`[SHOPIFY] Created CRM order ${orderNumber} from Shopify ${shopifyOrderNumber}`);
-      res.status(201).json({ message: "Order imported", orderId: order.id, orderNumber });
+      console.log(`[SHOPIFY] Created order request from Shopify ${shopifyOrderNumber} (req id=${reqRes.rows[0].id})`);
+      res.status(201).json({ message: "Order request created", requestId: reqRes.rows[0].id });
     } catch (error: any) {
       console.error("[SHOPIFY] Webhook error:", error);
       res.status(500).json({ message: "Failed to process webhook" });

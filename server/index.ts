@@ -546,6 +546,11 @@ async function runStartupTasks() {
   try {
     await pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS portal_categories text[]`);
     await pool.query(`ALTER TABLE attachments ADD COLUMN IF NOT EXISTS file_data bytea`);
+    await pool.query(`ALTER TABLE customer_order_requests ADD COLUMN IF NOT EXISTS shopify_order_id text`);
+    await pool.query(`ALTER TABLE customer_order_requests ADD COLUMN IF NOT EXISTS shopify_order_number text`);
+    await pool.query(`ALTER TABLE customer_order_requests ADD COLUMN IF NOT EXISTS payment_status text`);
+    await pool.query(`ALTER TABLE customer_order_requests ADD COLUMN IF NOT EXISTS subtotal text`);
+    await pool.query(`ALTER TABLE customer_order_requests ADD COLUMN IF NOT EXISTS total_amount text`);
     const interiorsResult = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'interiors' LIMIT 1`);
     if (interiorsResult.rows.length > 0) {
       const interiorsId = interiorsResult.rows[0].id;

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, MapPin, Phone, Mail, User, Building2, FileText, Clock, Trash2, Pencil, Check, X, Paperclip, Download } from "lucide-react";
+import { Loader2, MapPin, Phone, Mail, User, Building2, FileText, Clock, Trash2, Pencil, Check, X, Paperclip, Download, ShoppingBag } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -196,9 +196,17 @@ export default function OrderRequestsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge className={statusBadgeClass(req.status)} data-testid={`badge-status-${req.id}`}>
-                        {req.status}
-                      </Badge>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge className={statusBadgeClass(req.status)} data-testid={`badge-status-${req.id}`}>
+                          {req.status}
+                        </Badge>
+                        {req.shopifyOrderNumber && (
+                          <Badge className="bg-green-600/10 text-green-700 dark:text-green-400 flex items-center gap-1" data-testid={`badge-shopify-${req.id}`}>
+                            <ShoppingBag className="w-3 h-3" />
+                            {req.shopifyOrderNumber}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -218,13 +226,27 @@ export default function OrderRequestsPage() {
             <>
               <DialogHeader>
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <DialogTitle className="text-xl" data-testid="text-request-title">Order Request</DialogTitle>
-                  <Badge className={statusBadgeClass(selectedRequest.status)} data-testid="badge-detail-status">
-                    {selectedRequest.status}
-                  </Badge>
+                  <DialogTitle className="text-xl" data-testid="text-request-title">
+                    {selectedRequest.shopifyOrderNumber
+                      ? `Shopify Order ${selectedRequest.shopifyOrderNumber}`
+                      : "Order Request"}
+                  </DialogTitle>
+                  <div className="flex items-center gap-1.5">
+                    {selectedRequest.shopifyOrderNumber && (
+                      <Badge className="bg-green-600/10 text-green-700 dark:text-green-400 flex items-center gap-1">
+                        <ShoppingBag className="w-3 h-3" />
+                        Shopify
+                      </Badge>
+                    )}
+                    <Badge className={statusBadgeClass(selectedRequest.status)} data-testid="badge-detail-status">
+                      {selectedRequest.status}
+                    </Badge>
+                  </div>
                 </div>
                 <DialogDescription>
                   Submitted {format(new Date(selectedRequest.createdAt), "dd MMMM yyyy 'at' h:mm a")}
+                  {selectedRequest.totalAmount && ` — Total: $${parseFloat(selectedRequest.totalAmount).toFixed(2)}`}
+                  {selectedRequest.paymentStatus && ` (${selectedRequest.paymentStatus})`}
                 </DialogDescription>
               </DialogHeader>
 
