@@ -425,13 +425,18 @@ async function runStartupTasks() {
           productId = existsProd.rows[0].id;
           await pool.query("UPDATE products SET category = 'HUNGARIAN LIGHT FILL', active = true WHERE id = $1", [productId]);
         }
+        // Fix any existing entries that wrongly have filling set
+        await pool.query(
+          "UPDATE price_list_prices SET filling = NULL WHERE price_list_id = $1 AND product_id = $2 AND filling IS NOT NULL",
+          [standardPLId, productId]
+        );
         const existsPrice = await pool.query(
-          "SELECT 1 FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 AND filling = 'HUNGARIAN WINTER STRIP' LIMIT 1",
+          "SELECT 1 FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 LIMIT 1",
           [standardPLId, productId]
         );
         if (existsPrice.rows.length === 0) {
           await pool.query(
-            "INSERT INTO price_list_prices (id, price_list_id, product_id, filling, weight, unit_price) VALUES (gen_random_uuid(), $1, $2, 'HUNGARIAN WINTER STRIP', NULL, $3)",
+            "INSERT INTO price_list_prices (id, price_list_id, product_id, filling, weight, unit_price) VALUES (gen_random_uuid(), $1, $2, NULL, NULL, $3)",
             [standardPLId, productId, item.price]
           );
           console.log(`Added Standard price for ${item.sku}: $${item.price}`);
