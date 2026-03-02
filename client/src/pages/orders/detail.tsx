@@ -34,6 +34,7 @@ import {
   X,
   Search,
   Receipt,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -173,6 +174,17 @@ export default function OrderDetailPage() {
   const { data: sourceEmail } = useQuery<any>({
     queryKey: ["/api/emails", order?.sourceEmailId, "detail"],
     enabled: !!order?.sourceEmailId,
+  });
+
+  const { data: orderInvoice } = useQuery<any>({
+    queryKey: ["/api/orders", params?.id, "invoice"],
+    queryFn: async () => {
+      const res = await fetch(`/api/orders/${params?.id}/invoice`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!params?.id,
+    retry: false,
   });
 
   const { data: companies } = useQuery<Company[]>({
@@ -1035,6 +1047,22 @@ export default function OrderDetailPage() {
                 <Receipt className="w-4 h-4 mr-2" />
                 Generate Invoice
               </Button>
+              {orderInvoice && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const companyName = order.company?.tradingName || order.company?.legalName || "the customer";
+                    const contactName = order.customerName || "";
+                    const msg = `Hi, order #${order.orderNumber} for ${contactName ? `${contactName} (${companyName})` : companyName} has been completed and invoiced in Xero (${orderInvoice.invoiceNumber}). The portal order has been automatically marked as completed. ✓`;
+                    navigator.clipboard.writeText(msg);
+                    toast({ title: "Message copied!", description: "Paste it anywhere to notify your team." });
+                  }}
+                  data-testid="button-copy-millie-message"
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copy Notification
+                </Button>
+              )}
             </>
           )}
           {canEdit && (
@@ -1252,6 +1280,25 @@ export default function OrderDetailPage() {
                   )}
                 </div>
               </div>
+
+              {orderInvoice && (
+                <div className="flex items-start gap-3 pt-2 border-t">
+                  <Receipt className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Invoice</p>
+                    <p className="text-sm font-medium">{orderInvoice.invoiceNumber}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge
+                        variant="outline"
+                        className={`gap-1 ${orderInvoice.status === "paid" ? "text-green-600 border-green-300 dark:text-green-400 dark:border-green-700" : orderInvoice.status === "sent" ? "text-blue-600 border-blue-300 dark:text-blue-400 dark:border-blue-700" : ""}`}
+                      >
+                        {(orderInvoice.status === "paid" || orderInvoice.status === "sent") && <CheckCircle className="w-3 h-3" />}
+                        {orderInvoice.status === "paid" ? "Paid" : orderInvoice.status === "sent" ? "Sent to Xero" : orderInvoice.status === "draft" ? "Draft" : orderInvoice.status}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {(order as any).shopifyOrderId && (
                 <div className="flex items-start gap-3 pt-2 border-t">

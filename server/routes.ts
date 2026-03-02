@@ -2339,6 +2339,44 @@ export async function registerRoutes(
     }
   });
 
+  // Helper: when an invoice is sent/paid, auto-complete linked portal order and log it
+  async function autoCompletePortalOrderForInvoice(invoice: any, updated: any) {
+    try {
+      if (!invoice.orderId) return;
+      const order = await storage.getOrder(invoice.orderId);
+      if (!order) return;
+
+      // Find the portal order request linked to this CRM order
+      const portalResult = await pool.query(
+        `SELECT id, status FROM customer_order_requests WHERE converted_order_id = $1 LIMIT 1`,
+        [invoice.orderId]
+      );
+      if (portalResult.rows.length === 0) return;
+
+      const portalOrder = portalResult.rows[0];
+      if (portalOrder.status === "completed") return; // Already done
+
+      // Mark the portal order as completed
+      await pool.query(
+        `UPDATE customer_order_requests SET status = 'completed' WHERE id = $1`,
+        [portalOrder.id]
+      );
+
+      // Add an activity log entry so the CRM shows what happened
+      await storage.createActivity({
+        entityType: "order",
+        entityId: invoice.orderId,
+        activityType: "system",
+        content: `Invoice ${updated.invoiceNumber || invoice.invoiceNumber} marked as ${updated.status} — portal order automatically marked as completed.`,
+        createdBy: null as any,
+      });
+
+      console.log(`[INVOICE] Portal order ${portalOrder.id} auto-completed after invoice ${updated.invoiceNumber || invoice.invoiceNumber} was marked ${updated.status}`);
+    } catch (err) {
+      console.error("[INVOICE] Failed to auto-complete portal order:", err);
+    }
+  }
+
   // ==================== INVOICES ROUTES ====================
   app.get("/api/invoices", requireAuth, async (req, res) => {
     try {
@@ -2467,6 +2505,11 @@ export async function registerRoutes(
         afterJson: updated,
       });
 
+      // When an invoice is marked sent or paid, auto-complete the linked portal order
+      if (data.status === "sent" || data.status === "paid") {
+        await autoCompletePortalOrderForInvoice(invoice, updated);
+      }
+
       res.json(updated);
     } catch (error: any) {
       console.error("Update invoice error:", error);
@@ -2532,6 +2575,18 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Generate invoice from order error:", error);
       res.status(500).json({ message: "Failed to generate invoice" });
+    }
+  });
+
+  // GET invoice for a specific order (used on order detail page)
+  app.get("/api/orders/:orderId/invoice", requireAuth, async (req, res) => {
+    try {
+      const allInvoices = await storage.getAllInvoices();
+      const invoice = allInvoices.find(inv => inv.orderId === req.params.orderId);
+      if (!invoice) return res.status(404).json({ message: "No invoice found for this order" });
+      res.json(invoice);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get invoice" });
     }
   });
 
@@ -3071,6 +3126,9 @@ export async function registerRoutes(
         entityType: "xero_sync",
         entityId: invoice.id,
       });
+
+      // Auto-complete linked portal order when synced to Xero
+      await autoCompletePortalOrderForInvoice(invoice, { ...invoice, status: "sent", invoiceNumber: invoice.invoiceNumber });
       
       res.json({ success: true });
     } catch (error) {
