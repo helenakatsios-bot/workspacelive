@@ -7141,24 +7141,30 @@ Rules:
         shipping.province, shipping.zip, shipping.country
       ].filter(Boolean).join("\n") || null;
 
-      // ALL Shopify webhook orders always go under "Puradown Website Sales"
-      // Find or auto-create that company
+      // ALL Shopify webhook orders go to the configured company
+      // Admin can set shopify_company_id in settings; falls back to "Puradown Website Sales"
       const allCompanies = await storage.getAllCompanies();
-      const SHOPIFY_COMPANY_NAME = "Puradown Website Sales";
-      let shopifyCompany = allCompanies.find((c) =>
-        (c.legalName || "").toLowerCase() === SHOPIFY_COMPANY_NAME.toLowerCase() ||
-        (c.tradingName || "").toLowerCase() === SHOPIFY_COMPANY_NAME.toLowerCase()
-      );
+      const configuredCompanyId = await storage.getSetting("shopify_company_id");
+      let shopifyCompany = configuredCompanyId
+        ? allCompanies.find((c) => c.id === configuredCompanyId)
+        : null;
+
       if (!shopifyCompany) {
-        // Auto-create it on first use
-        shopifyCompany = await storage.createCompany({
-          legalName: SHOPIFY_COMPANY_NAME,
-          tradingName: SHOPIFY_COMPANY_NAME,
-          creditStatus: "active",
-          paymentTerms: "Net 30",
-          internalNotes: "Auto-created for Shopify website orders",
-        });
-        console.log(`[SHOPIFY] Created company "${SHOPIFY_COMPANY_NAME}" (id=${shopifyCompany.id})`);
+        const SHOPIFY_COMPANY_NAME = "Puradown Website Sales";
+        shopifyCompany = allCompanies.find((c) =>
+          (c.legalName || "").toLowerCase() === SHOPIFY_COMPANY_NAME.toLowerCase() ||
+          (c.tradingName || "").toLowerCase() === SHOPIFY_COMPANY_NAME.toLowerCase()
+        );
+        if (!shopifyCompany) {
+          shopifyCompany = await storage.createCompany({
+            legalName: SHOPIFY_COMPANY_NAME,
+            tradingName: SHOPIFY_COMPANY_NAME,
+            creditStatus: "active",
+            paymentTerms: "Net 30",
+            internalNotes: "Auto-created for Shopify website orders",
+          });
+          console.log(`[SHOPIFY] Created company "${SHOPIFY_COMPANY_NAME}" (id=${shopifyCompany.id})`);
+        }
       }
       const companyId = shopifyCompany.id;
 

@@ -401,9 +401,25 @@ export default function AdminPage() {
   const [shopifyStoreDomain, setShopifyStoreDomain] = useState("");
   const [shopifyApiToken, setShopifyApiToken] = useState("");
   const [shopifyWebhookSecret, setShopifyWebhookSecret] = useState("");
+  const [shopifyCompanyId, setShopifyCompanyId] = useState("");
   const [shopifyFormDirty, setShopifyFormDirty] = useState(false);
   const [showShopifyToken, setShowShopifyToken] = useState(false);
   const [showShopifySecret, setShowShopifySecret] = useState(false);
+
+  const { data: allCompaniesForShopify } = useQuery<{ id: string; legalName: string; tradingName: string | null }[]>({
+    queryKey: ["/api/companies"],
+    enabled: isAdmin,
+  });
+
+  const { data: shopifyCompanySetting } = useQuery<{ key: string; value: string }>({
+    queryKey: ["/api/settings", "shopify_company_id"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings/shopify_company_id");
+      if (!res.ok) return { key: "shopify_company_id", value: "" };
+      return res.json();
+    },
+    enabled: isAdmin,
+  });
 
   const { data: shopifyConfig, isLoading: loadingShopify, refetch: refetchShopify } = useQuery<{
     storeDomain: string; apiToken: string; webhookSecret: string; webhookUrl: string; isConnected: boolean;
@@ -420,6 +436,10 @@ export default function AdminPage() {
     }
   }, [shopifyConfig, shopifyFormDirty]);
 
+  useEffect(() => {
+    if (shopifyCompanySetting?.value) setShopifyCompanyId(shopifyCompanySetting.value);
+  }, [shopifyCompanySetting?.value]);
+
   const saveShopifyConfigMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("PUT", "/api/admin/shopify-config", {
@@ -427,6 +447,10 @@ export default function AdminPage() {
         apiToken: shopifyApiToken,
         webhookSecret: shopifyWebhookSecret,
       });
+      // Also save the assigned company
+      if (shopifyCompanyId) {
+        await apiRequest("PUT", "/api/settings/shopify_company_id", { value: shopifyCompanyId });
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -1024,6 +1048,28 @@ export default function AdminPage() {
                           {showShopifySecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Assign Orders To</label>
+                      <Select
+                        value={shopifyCompanyId}
+                        onValueChange={(v) => { setShopifyCompanyId(v); setShopifyFormDirty(true); }}
+                      >
+                        <SelectTrigger data-testid="select-shopify-company">
+                          <SelectValue placeholder="Select a company..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(allCompaniesForShopify || [])
+                            .slice()
+                            .sort((a, b) => (a.tradingName || a.legalName).localeCompare(b.tradingName || b.legalName))
+                            .map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.tradingName || c.legalName}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">All incoming Shopify orders will be assigned to this company.</p>
                     </div>
                   </div>
 
