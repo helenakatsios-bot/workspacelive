@@ -399,12 +399,13 @@ export default function AdminPage() {
 
   // Shopify config
   const [shopifyStoreDomain, setShopifyStoreDomain] = useState("");
-  const [shopifyApiToken, setShopifyApiToken] = useState("");
+  const [shopifyClientId, setShopifyClientId] = useState("");
+  const [shopifyClientSecret, setShopifyClientSecret] = useState("");
   const [shopifyWebhookSecret, setShopifyWebhookSecret] = useState("");
   const [shopifyCompanyId, setShopifyCompanyId] = useState("");
   const [shopifyFormDirty, setShopifyFormDirty] = useState(false);
-  const [showShopifyToken, setShowShopifyToken] = useState(false);
   const [showShopifySecret, setShowShopifySecret] = useState(false);
+  const [showShopifyClientSecret, setShowShopifyClientSecret] = useState(false);
 
   const { data: allCompaniesForShopify } = useQuery<{ id: string; legalName: string; tradingName: string | null }[]>({
     queryKey: ["/api/companies"],
@@ -422,16 +423,43 @@ export default function AdminPage() {
   });
 
   const { data: shopifyConfig, isLoading: loadingShopify, refetch: refetchShopify } = useQuery<{
-    storeDomain: string; apiToken: string; webhookSecret: string; webhookUrl: string; isConnected: boolean;
+    storeDomain: string; apiToken: string; webhookSecret: string; webhookUrl: string;
+    oauthCallbackUrl: string; clientId: string; clientSecret: string;
+    isConnected: boolean; hasOAuthCredentials: boolean;
   }>({
     queryKey: ["/api/admin/shopify-config"],
     enabled: isAdmin,
   });
 
+  // Handle OAuth success/error redirects
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const success = params.get("shopify_success");
+    const error = params.get("shopify_error");
+    if (success) {
+      toast({ title: "Shopify connected!", description: "Access token saved. You can now sync fulfillments." });
+      refetchShopify();
+      window.history.replaceState({}, "", window.location.pathname + "?tab=integrations#shopify-config");
+    } else if (error) {
+      const messages: Record<string, string> = {
+        missing_config: "Store domain and Client ID are required before connecting.",
+        missing_credentials: "Client ID and Secret not configured.",
+        invalid_state: "OAuth state mismatch — please try again.",
+        hmac_failed: "Shopify signature verification failed.",
+        token_exchange: "Failed to exchange code for token — check your Client Secret.",
+        callback_failed: "OAuth callback failed — please try again.",
+        start_failed: "Failed to start OAuth — please try again.",
+      };
+      toast({ title: "Shopify connection failed", description: messages[error] || error, variant: "destructive" });
+      window.history.replaceState({}, "", window.location.pathname + "?tab=integrations#shopify-config");
+    }
+  }, []);
+
   useEffect(() => {
     if (shopifyConfig && !shopifyFormDirty) {
       setShopifyStoreDomain(shopifyConfig.storeDomain || "");
-      setShopifyApiToken(shopifyConfig.apiToken || "");
+      setShopifyClientId(shopifyConfig.clientId || "");
+      setShopifyClientSecret(shopifyConfig.clientSecret || "");
       setShopifyWebhookSecret(shopifyConfig.webhookSecret || "");
     }
   }, [shopifyConfig, shopifyFormDirty]);
@@ -444,10 +472,10 @@ export default function AdminPage() {
     mutationFn: async () => {
       const res = await apiRequest("PUT", "/api/admin/shopify-config", {
         storeDomain: shopifyStoreDomain,
-        apiToken: shopifyApiToken,
+        clientId: shopifyClientId,
+        clientSecret: shopifyClientSecret,
         webhookSecret: shopifyWebhookSecret,
       });
-      // Also save the assigned company
       if (shopifyCompanyId) {
         await apiRequest("PUT", "/api/settings/shopify_company_id", { value: shopifyCompanyId });
       }
@@ -460,6 +488,20 @@ export default function AdminPage() {
     },
     onError: () => {
       toast({ title: "Failed to save Shopify configuration", variant: "destructive" });
+    },
+  });
+
+  const disconnectShopifyMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", "/api/admin/shopify-config/disconnect", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Shopify disconnected" });
+      refetchShopify();
+    },
+    onError: () => {
+      toast({ title: "Failed to disconnect", variant: "destructive" });
     },
   });
 
@@ -982,9 +1024,13 @@ export default function AdminPage() {
                   <CardTitle className="text-lg">Shopify</CardTitle>
                   <CardDescription>Automatically import Shopify orders into the CRM and push fulfillment status back to Shopify</CardDescription>
                 </div>
-                {shopifyConfig?.isConnected && (
+                {shopifyConfig?.isConnected ? (
                   <span className="flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400 bg-green-500/10 border border-green-200 dark:border-green-800 rounded-full px-2.5 py-1">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Connected
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-muted border rounded-full px-2.5 py-1">
+                    Not connected
                   </span>
                 )}
               </div>
@@ -996,88 +1042,204 @@ export default function AdminPage() {
                 </div>
               ) : (
                 <>
-                  <div className="space-y-3">
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Store Domain</label>
-                      <input
-                        className="w-full border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                        placeholder="yourstore.myshopify.com"
-                        value={shopifyStoreDomain}
-                        onChange={(e) => { setShopifyStoreDomain(e.target.value); setShopifyFormDirty(true); }}
-                        data-testid="input-shopify-store-domain"
-                      />
-                      <p className="text-xs text-muted-foreground">Your Shopify store domain, e.g. puradown.myshopify.com</p>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Admin API Access Token</label>
-                      <div className="relative">
+                  {/* Step 1 — App Credentials */}
+                  <div className="rounded-lg border p-4 space-y-3">
+                    <h4 className="text-sm font-semibold flex items-center gap-2">
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold">1</span>
+                      Enter your Shopify app credentials
+                    </h4>
+                    <div className="space-y-3 pl-7">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Store Domain</label>
                         <input
-                          className="w-full border rounded-md px-3 py-2 pr-10 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
-                          placeholder="shpat_..."
-                          type={showShopifyToken ? "text" : "password"}
-                          value={shopifyApiToken}
-                          onChange={(e) => { setShopifyApiToken(e.target.value); setShopifyFormDirty(true); }}
-                          data-testid="input-shopify-api-token"
+                          className="w-full border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                          placeholder="yourstore.myshopify.com"
+                          value={shopifyStoreDomain}
+                          onChange={(e) => { setShopifyStoreDomain(e.target.value); setShopifyFormDirty(true); }}
+                          data-testid="input-shopify-store-domain"
                         />
-                        <button
-                          type="button"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                          onClick={() => setShowShopifyToken(!showShopifyToken)}
-                        >
-                          {showShopifyToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
                       </div>
-                      <p className="text-xs text-muted-foreground">Generate in Shopify Admin → Settings → Apps and sales channels → Develop apps</p>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Webhook Secret</label>
-                      <div className="relative">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Client ID</label>
                         <input
-                          className="w-full border rounded-md px-3 py-2 pr-10 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
-                          placeholder="Your webhook signing secret"
-                          type={showShopifySecret ? "text" : "password"}
-                          value={shopifyWebhookSecret}
-                          onChange={(e) => { setShopifyWebhookSecret(e.target.value); setShopifyFormDirty(true); }}
-                          data-testid="input-shopify-webhook-secret"
+                          className="w-full border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+                          placeholder="Your Shopify app Client ID"
+                          value={shopifyClientId}
+                          onChange={(e) => { setShopifyClientId(e.target.value); setShopifyFormDirty(true); }}
+                          data-testid="input-shopify-client-id"
                         />
-                        <button
-                          type="button"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                          onClick={() => setShowShopifySecret(!showShopifySecret)}
-                        >
-                          {showShopifySecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
+                        <p className="text-xs text-muted-foreground">Found in Shopify Partner Dashboard → Your app → Settings → Credentials</p>
                       </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Assign Orders To</label>
-                      <Select
-                        value={shopifyCompanyId}
-                        onValueChange={(v) => { setShopifyCompanyId(v); setShopifyFormDirty(true); }}
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Client Secret</label>
+                        <div className="relative">
+                          <input
+                            className="w-full border rounded-md px-3 py-2 pr-10 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+                            placeholder="Your Shopify app Client Secret"
+                            type={showShopifyClientSecret ? "text" : "password"}
+                            value={shopifyClientSecret}
+                            onChange={(e) => { setShopifyClientSecret(e.target.value); setShopifyFormDirty(true); }}
+                            data-testid="input-shopify-client-secret"
+                          />
+                          <button
+                            type="button"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => setShowShopifyClientSecret(!showShopifyClientSecret)}
+                          >
+                            {showShopifyClientSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Found in Shopify Partner Dashboard → Your app → Settings → Credentials → Show Secret</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Webhook Secret</label>
+                        <div className="relative">
+                          <input
+                            className="w-full border rounded-md px-3 py-2 pr-10 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+                            placeholder="Webhook signing secret"
+                            type={showShopifySecret ? "text" : "password"}
+                            value={shopifyWebhookSecret}
+                            onChange={(e) => { setShopifyWebhookSecret(e.target.value); setShopifyFormDirty(true); }}
+                            data-testid="input-shopify-webhook-secret"
+                          />
+                          <button
+                            type="button"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => setShowShopifySecret(!showShopifySecret)}
+                          >
+                            {showShopifySecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Found in Shopify Admin → Settings → Notifications → Webhooks</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Assign Orders To</label>
+                        <Select
+                          value={shopifyCompanyId}
+                          onValueChange={(v) => { setShopifyCompanyId(v); setShopifyFormDirty(true); }}
+                        >
+                          <SelectTrigger data-testid="select-shopify-company">
+                            <SelectValue placeholder="Select a company..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(allCompaniesForShopify || [])
+                              .slice()
+                              .sort((a, b) => (a.tradingName || a.legalName).localeCompare(b.tradingName || b.legalName))
+                              .map((c) => (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {c.tradingName || c.legalName}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">All incoming Shopify orders will be assigned to this company.</p>
+                      </div>
+                      <Button
+                        onClick={() => saveShopifyConfigMutation.mutate()}
+                        disabled={saveShopifyConfigMutation.isPending}
+                        data-testid="button-save-shopify-config"
                       >
-                        <SelectTrigger data-testid="select-shopify-company">
-                          <SelectValue placeholder="Select a company..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(allCompaniesForShopify || [])
-                            .slice()
-                            .sort((a, b) => (a.tradingName || a.legalName).localeCompare(b.tradingName || b.legalName))
-                            .map((c) => (
-                              <SelectItem key={c.id} value={c.id}>
-                                {c.tradingName || c.legalName}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">All incoming Shopify orders will be assigned to this company.</p>
+                        {saveShopifyConfigMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                        Save Configuration
+                      </Button>
                     </div>
                   </div>
 
+                  {/* Step 2 — Register redirect URI */}
+                  {shopifyConfig?.oauthCallbackUrl && (
+                    <div className="rounded-lg border p-4 space-y-3">
+                      <h4 className="text-sm font-semibold flex items-center gap-2">
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold">2</span>
+                        Register this redirect URL in your Shopify app
+                      </h4>
+                      <div className="pl-7 space-y-2">
+                        <p className="text-xs text-muted-foreground">In Shopify Partner Dashboard → Your app → Configuration → Allowed redirection URL(s), add:</p>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs font-mono bg-muted border rounded px-2 py-1 flex-1 break-all">
+                            {shopifyConfig.oauthCallbackUrl}
+                          </code>
+                          <button
+                            type="button"
+                            className="shrink-0 text-muted-foreground hover:text-foreground"
+                            onClick={() => { navigator.clipboard.writeText(shopifyConfig.oauthCallbackUrl); toast({ title: "Copied to clipboard" }); }}
+                            data-testid="button-copy-shopify-callback-url"
+                            title="Copy redirect URL"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Also make sure your app's scopes include: <code className="bg-muted rounded px-1">read_orders, write_orders, write_fulfillments, read_analytics</code></p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 3 — Connect */}
+                  <div className="rounded-lg border p-4 space-y-3">
+                    <h4 className="text-sm font-semibold flex items-center gap-2">
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold">3</span>
+                      Connect with Shopify
+                    </h4>
+                    <div className="pl-7 space-y-3">
+                      {shopifyConfig?.isConnected ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                            <CheckCircle2 className="w-4 h-4" />
+                            Access token active — fulfillment sync is enabled
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => testShopifyMutation.mutate()}
+                              disabled={testShopifyMutation.isPending}
+                              data-testid="button-test-shopify"
+                            >
+                              {testShopifyMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                              Test Connection
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                              onClick={() => {
+                                if (confirm("Disconnect Shopify? You'll need to reconnect via OAuth to use fulfillment sync again.")) {
+                                  disconnectShopifyMutation.mutate();
+                                }
+                              }}
+                              disabled={disconnectShopifyMutation.isPending}
+                              data-testid="button-disconnect-shopify"
+                            >
+                              {disconnectShopifyMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                              Disconnect
+                            </Button>
+                            <a href="/api/shopify/oauth/start" data-testid="button-reconnect-shopify">
+                              <Button variant="outline" size="sm">Re-connect</Button>
+                            </a>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <p className="text-sm text-muted-foreground">
+                            After saving your credentials above and registering the redirect URL, click below to authorise the CRM to access your Shopify store.
+                          </p>
+                          <a href="/api/shopify/oauth/start" data-testid="button-connect-shopify">
+                            <Button className="gap-2" disabled={!shopifyConfig?.hasOAuthCredentials || !shopifyConfig?.storeDomain}>
+                              <ShoppingCart className="w-4 h-4" />
+                              Connect with Shopify
+                            </Button>
+                          </a>
+                          {(!shopifyConfig?.hasOAuthCredentials || !shopifyConfig?.storeDomain) && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400">Save your Store Domain, Client ID and Client Secret first.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Webhook URL info */}
                   {shopifyConfig?.webhookUrl && (
                     <div className="rounded-lg border bg-muted/40 p-3 space-y-2">
                       <div className="flex items-center gap-2">
                         <Webhook className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <p className="text-xs font-medium">Webhook URL — add this in Shopify Admin</p>
+                        <p className="text-xs font-medium">Webhook URL — add this in Shopify Admin for automatic order import</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <code className="text-xs font-mono bg-background border rounded px-2 py-1 flex-1 break-all">
@@ -1096,44 +1258,6 @@ export default function AdminPage() {
                       <p className="text-xs text-muted-foreground">In Shopify: Settings → Notifications → Webhooks → Add webhook → Event: <strong>Order creation</strong></p>
                     </div>
                   )}
-
-                  <div className="flex items-center gap-2 pt-1">
-                    <Button
-                      onClick={() => saveShopifyConfigMutation.mutate()}
-                      disabled={saveShopifyConfigMutation.isPending}
-                      data-testid="button-save-shopify-config"
-                    >
-                      {saveShopifyConfigMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                      Save Configuration
-                    </Button>
-                    {shopifyConfig?.isConnected && (
-                      <Button
-                        variant="outline"
-                        onClick={() => testShopifyMutation.mutate()}
-                        disabled={testShopifyMutation.isPending}
-                        data-testid="button-test-shopify"
-                      >
-                        {testShopifyMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                        Test Connection
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="rounded-lg border p-4 space-y-2">
-                    <h4 className="text-sm font-medium">How it works</h4>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">1</span>
-                      Customer places order in your Shopify store
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">2</span>
-                      Shopify sends a webhook → CRM automatically creates an order
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">3</span>
-                      When you mark the order completed, click "Sync to Shopify" to push fulfillment status back
-                    </div>
-                  </div>
                 </>
               )}
             </CardContent>

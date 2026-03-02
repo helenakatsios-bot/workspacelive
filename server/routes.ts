@@ -7024,7 +7024,7 @@ Rules:
 
   // Helper to get Shopify config from crm_settings
   async function getShopifyConfig() {
-    const keys = ["shopify_store_domain", "shopify_api_token", "shopify_webhook_secret"];
+    const keys = ["shopify_store_domain", "shopify_api_token", "shopify_webhook_secret", "shopify_client_id", "shopify_client_secret"];
     const rows = await db.select().from(crmSettings).where(inArray(crmSettings.key, keys));
     const map: Record<string, string> = {};
     for (const r of rows) map[r.key] = r.value;
@@ -7032,6 +7032,8 @@ Rules:
       storeDomain: map["shopify_store_domain"] || "",
       apiToken: map["shopify_api_token"] || "",
       webhookSecret: map["shopify_webhook_secret"] || "",
+      clientId: map["shopify_client_id"] || "",
+      clientSecret: map["shopify_client_secret"] || "",
     };
   }
 
@@ -7053,8 +7055,12 @@ Rules:
         storeDomain: config.storeDomain,
         apiToken: config.apiToken ? "••••••••" + config.apiToken.slice(-4) : "",
         webhookSecret: config.webhookSecret ? "••••••••" + config.webhookSecret.slice(-4) : "",
+        clientId: config.clientId || "",
+        clientSecret: config.clientSecret ? "••••••••" + config.clientSecret.slice(-4) : "",
         webhookUrl: `${protocol}://${host}/api/webhooks/shopify/orders/created`,
-        isConnected: !!(config.storeDomain && config.apiToken && config.webhookSecret),
+        oauthCallbackUrl: `${protocol}://${host}/api/shopify/oauth/callback`,
+        isConnected: !!(config.storeDomain && config.apiToken),
+        hasOAuthCredentials: !!(config.clientId && config.clientSecret),
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to get Shopify config" });
@@ -7064,14 +7070,103 @@ Rules:
   // PUT shopify config
   app.put("/api/admin/shopify-config", requireAdmin, async (req, res) => {
     try {
-      const { storeDomain, apiToken, webhookSecret } = req.body;
+      const { storeDomain, apiToken, webhookSecret, clientId, clientSecret } = req.body;
       if (storeDomain !== undefined) await upsertSetting("shopify_store_domain", storeDomain.trim().replace(/^https?:\/\//, "").replace(/\/$/, ""));
       if (apiToken && !apiToken.startsWith("••••")) await upsertSetting("shopify_api_token", apiToken.trim());
       if (webhookSecret && !webhookSecret.startsWith("••••")) await upsertSetting("shopify_webhook_secret", webhookSecret.trim());
+      if (clientId !== undefined) await upsertSetting("shopify_client_id", clientId.trim());
+      if (clientSecret && !clientSecret.startsWith("••••")) await upsertSetting("shopify_client_secret", clientSecret.trim());
       res.json({ message: "Shopify configuration saved" });
     } catch (error) {
       console.error("Save Shopify config error:", error);
       res.status(500).json({ message: "Failed to save configuration" });
+    }
+  });
+
+  // GET start Shopify OAuth — redirects to Shopify authorization page
+  app.get("/api/shopify/oauth/start", requireAdmin, async (req, res) => {
+    try {
+      const config = await getShopifyConfig();
+      if (!config.storeDomain || !config.clientId) {
+        return res.redirect("/admin?tab=integrations&shopify_error=missing_config#shopify-config");
+      }
+      const crypto = await import("crypto");
+      const state = crypto.randomBytes(16).toString("hex");
+      (req.session as any).shopifyOAuthState = state;
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const redirectUri = `${protocol}://${host}/api/shopify/oauth/callback`;
+      const scopes = "read_orders,write_orders,write_fulfillments,read_analytics";
+      const authUrl = `https://${config.storeDomain}/admin/oauth/authorize?client_id=${config.clientId}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+      res.redirect(authUrl);
+    } catch (error: any) {
+      console.error("[SHOPIFY OAuth] Start error:", error);
+      res.redirect("/admin?tab=integrations&shopify_error=start_failed#shopify-config");
+    }
+  });
+
+  // GET Shopify OAuth callback — exchanges code for access token
+  app.get("/api/shopify/oauth/callback", async (req, res) => {
+    try {
+      const { code, state, hmac, shop } = req.query as Record<string, string>;
+      const storedState = (req.session as any).shopifyOAuthState;
+
+      if (!state || state !== storedState) {
+        return res.redirect("/admin?tab=integrations&shopify_error=invalid_state#shopify-config");
+      }
+      delete (req.session as any).shopifyOAuthState;
+
+      const config = await getShopifyConfig();
+      if (!config.clientId || !config.clientSecret) {
+        return res.redirect("/admin?tab=integrations&shopify_error=missing_credentials#shopify-config");
+      }
+
+      // Verify HMAC
+      if (hmac) {
+        const crypto = await import("crypto");
+        const params = Object.entries(req.query as Record<string, string>)
+          .filter(([k]) => k !== "hmac")
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([k, v]) => `${k}=${v}`)
+          .join("&");
+        const digest = crypto.createHmac("sha256", config.clientSecret).update(params).digest("hex");
+        if (digest !== hmac) {
+          return res.redirect("/admin?tab=integrations&shopify_error=hmac_failed#shopify-config");
+        }
+      }
+
+      // Exchange code for token
+      const tokenRes = await fetch(`https://${shop || config.storeDomain}/admin/oauth/access_token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: config.clientId, client_secret: config.clientSecret, code }),
+      });
+
+      if (!tokenRes.ok) {
+        const err = await tokenRes.text();
+        console.error("[SHOPIFY OAuth] Token exchange failed:", err);
+        return res.redirect("/admin?tab=integrations&shopify_error=token_exchange#shopify-config");
+      }
+
+      const tokenData = await tokenRes.json() as { access_token: string; scope: string };
+      await upsertSetting("shopify_api_token", tokenData.access_token);
+      if (shop) await upsertSetting("shopify_store_domain", shop.replace(/^https?:\/\//, "").replace(/\/$/, ""));
+
+      console.log(`[SHOPIFY OAuth] Successfully connected. Scopes: ${tokenData.scope}`);
+      res.redirect("/admin?tab=integrations&shopify_success=1#shopify-config");
+    } catch (error: any) {
+      console.error("[SHOPIFY OAuth] Callback error:", error);
+      res.redirect("/admin?tab=integrations&shopify_error=callback_failed#shopify-config");
+    }
+  });
+
+  // DELETE shopify OAuth token (disconnect)
+  app.delete("/api/admin/shopify-config/disconnect", requireAdmin, async (req, res) => {
+    try {
+      await upsertSetting("shopify_api_token", "");
+      res.json({ message: "Shopify disconnected" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to disconnect" });
     }
   });
 
