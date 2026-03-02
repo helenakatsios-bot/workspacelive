@@ -173,7 +173,8 @@ export default function OrderRequestsPage() {
                     data-testid={`order-request-row-${req.id}`}
                   >
                     <TableCell className="text-sm whitespace-nowrap">
-                      {format(new Date(req.createdAt), "dd MMM yyyy HH:mm")}
+                      <div>{format(new Date(req.createdAt), "dd MMM yyyy")}</div>
+                      <div className="text-xs text-muted-foreground">{format(new Date(req.createdAt), "h:mm a")}</div>
                     </TableCell>
                     <TableCell className="font-medium" data-testid={`text-company-${req.id}`}>
                       {req.companyName}
@@ -251,6 +252,11 @@ export default function OrderRequestsPage() {
               </DialogHeader>
 
               <Separator />
+
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock className="w-4 h-4" />
+                <span>Received: <span className="font-medium text-foreground">{format(new Date(selectedRequest.createdAt), "EEEE dd MMMM yyyy 'at' h:mm a")}</span></span>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-3">
