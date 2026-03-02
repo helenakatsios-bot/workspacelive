@@ -7141,39 +7141,26 @@ Rules:
         shipping.province, shipping.zip, shipping.country
       ].filter(Boolean).join("\n") || null;
 
-      // Find company by email domain or Shopify store domain
-      let companyId: string | null = null;
+      // ALL Shopify webhook orders always go under "Puradown Website Sales"
+      // Find or auto-create that company
       const allCompanies = await storage.getAllCompanies();
-      if (config.storeDomain) {
-        const storeName = config.storeDomain.replace(".myshopify.com", "");
-        const matched = allCompanies.find((c) => {
-          const ln = c.legalName.toLowerCase();
-          const tn = (c.tradingName || "").toLowerCase();
-          return ln.includes(storeName.toLowerCase()) || tn.includes(storeName.toLowerCase());
+      const SHOPIFY_COMPANY_NAME = "Puradown Website Sales";
+      let shopifyCompany = allCompanies.find((c) =>
+        (c.legalName || "").toLowerCase() === SHOPIFY_COMPANY_NAME.toLowerCase() ||
+        (c.tradingName || "").toLowerCase() === SHOPIFY_COMPANY_NAME.toLowerCase()
+      );
+      if (!shopifyCompany) {
+        // Auto-create it on first use
+        shopifyCompany = await storage.createCompany({
+          legalName: SHOPIFY_COMPANY_NAME,
+          tradingName: SHOPIFY_COMPANY_NAME,
+          creditStatus: "active",
+          paymentTerms: "Net 30",
+          internalNotes: "Auto-created for Shopify website orders",
         });
-        if (matched) companyId = matched.id;
+        console.log(`[SHOPIFY] Created company "${SHOPIFY_COMPANY_NAME}" (id=${shopifyCompany.id})`);
       }
-      if (!companyId && customerEmail) {
-        const domain = customerEmail.split("@")[1]?.toLowerCase();
-        if (domain && !["gmail.com", "hotmail.com", "yahoo.com", "outlook.com", "icloud.com"].includes(domain)) {
-          const matched = allCompanies.find((c) =>
-            c.emailAddresses?.some((e: string) => e.toLowerCase().endsWith("@" + domain))
-          );
-          if (matched) companyId = matched.id;
-        }
-      }
-      // Fall back to first company or create note
-      if (!companyId) {
-        const puradown = allCompanies.find((c) =>
-          (c.legalName || "").toLowerCase().includes("puradown") ||
-          (c.tradingName || "").toLowerCase().includes("puradown")
-        );
-        if (puradown) companyId = puradown.id;
-      }
-      if (!companyId) {
-        console.warn(`[SHOPIFY] Could not match company for order ${shopifyOrderNumber}`);
-        return res.status(422).json({ message: "Could not match order to a company in the CRM" });
-      }
+      const companyId = shopifyCompany.id;
 
       // Get next order number
       const maxRes = await pool.query(`SELECT COALESCE(MAX(CAST(order_number AS INTEGER)), 0) as max_num FROM orders WHERE order_number ~ '^[0-9]+$'`);
