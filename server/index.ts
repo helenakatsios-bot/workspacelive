@@ -416,14 +416,14 @@ async function runStartupTasks() {
         let productId: string;
         if (existsProd.rows.length === 0) {
           const ins = await pool.query(
-            "INSERT INTO products (id, sku, name, category, filling, unit_price, active) VALUES (gen_random_uuid(), $1, $2, 'HUNGARIAN LIGHT FILL', 'HUNGARIAN WINTER STRIP', $3, true) RETURNING id",
+            "INSERT INTO products (id, sku, name, category, unit_price, active) VALUES (gen_random_uuid(), $1, $2, 'HUNGARIAN LIGHT FILL', $3, true) RETURNING id",
             [item.sku, item.name, item.price]
           );
           productId = ins.rows[0].id;
           console.log(`Created HUNGARIAN LIGHT FILL product: ${item.sku}`);
         } else {
           productId = existsProd.rows[0].id;
-          await pool.query("UPDATE products SET category = 'HUNGARIAN LIGHT FILL', filling = 'HUNGARIAN WINTER STRIP', active = true WHERE id = $1", [productId]);
+          await pool.query("UPDATE products SET category = 'HUNGARIAN LIGHT FILL', active = true WHERE id = $1", [productId]);
         }
         const existsPrice = await pool.query(
           "SELECT 1 FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 AND filling = 'HUNGARIAN WINTER STRIP' LIMIT 1",
