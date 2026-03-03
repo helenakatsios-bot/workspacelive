@@ -642,17 +642,35 @@ async function runStartupTasks() {
     console.error("Email backfill error:", error);
   }
 
-  // Assign "COMER & KING" price list to the COMER & KING/COD company
+  // Ensure company_additional_price_lists table exists
   try {
-    const comerKingPl = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'COMER%KING' OR name ILIKE 'COMER & KING' LIMIT 1`);
-    if (comerKingPl.rows.length > 0) {
-      const plId = comerKingPl.rows[0].id;
-      const updated = await pool.query(
-        `UPDATE companies SET price_list_id = $1 WHERE (trading_name ILIKE '%COMER%KING%' OR legal_name ILIKE '%COMER%KING%') AND (price_list_id IS NULL OR price_list_id != $1)`,
-        [plId]
-      );
-      if (updated.rowCount && updated.rowCount > 0) {
-        console.log(`Assigned COMER & KING price list (${plId}) to ${updated.rowCount} company/companies`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS company_additional_price_lists (
+      id varchar(36) PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id varchar(36) NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      price_list_id varchar(36) NOT NULL REFERENCES price_lists(id) ON DELETE CASCADE,
+      created_at timestamp NOT NULL DEFAULT NOW(),
+      UNIQUE(company_id, price_list_id)
+    )`);
+  } catch (err: any) {
+    console.error("company_additional_price_lists table error:", err.message);
+  }
+
+  // COMER & KING: assign Interiors as main price list, COMER & KING list as additional
+  try {
+    const comerKingComp = await pool.query(`SELECT id FROM companies WHERE trading_name ILIKE '%COMER%KING%' OR legal_name ILIKE '%COMER%KING%' LIMIT 1`);
+    const interiorsPlResult = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'interiors' LIMIT 1`);
+    const comerKingPlResult = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'COMER%KING' OR name ILIKE 'COMER & KING' LIMIT 1`);
+    if (comerKingComp.rows.length > 0 && interiorsPlResult.rows.length > 0) {
+      const compId = comerKingComp.rows[0].id;
+      const interiorsId = interiorsPlResult.rows[0].id;
+      await pool.query(`UPDATE companies SET price_list_id = $1 WHERE id = $2 AND (price_list_id IS NULL OR price_list_id != $1)`, [interiorsId, compId]);
+      if (comerKingPlResult.rows.length > 0) {
+        const ckPlId = comerKingPlResult.rows[0].id;
+        await pool.query(
+          `INSERT INTO company_additional_price_lists (company_id, price_list_id) VALUES ($1, $2) ON CONFLICT (company_id, price_list_id) DO NOTHING`,
+          [compId, ckPlId]
+        );
+        console.log(`COMER & KING: main=Interiors, additional=COMER & KING price list`);
       }
     }
   } catch (err: any) {

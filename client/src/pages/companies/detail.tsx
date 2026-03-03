@@ -170,6 +170,35 @@ export default function CompanyDetailPage() {
     },
   });
 
+  const { data: additionalPriceLists, refetch: refetchAdditionalPriceLists } = useQuery<any[]>({
+    queryKey: ["/api/companies", params?.id, "additional-price-lists"],
+    enabled: !!params?.id,
+  });
+
+  const addAdditionalPriceListMutation = useMutation({
+    mutationFn: (priceListId: string) =>
+      apiRequest("POST", `/api/companies/${params?.id}/additional-price-lists`, { priceListId }),
+    onSuccess: () => {
+      refetchAdditionalPriceLists();
+      toast({ title: "Price list added", description: "Additional price list assigned to this company." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to add additional price list.", variant: "destructive" });
+    },
+  });
+
+  const removeAdditionalPriceListMutation = useMutation({
+    mutationFn: (priceListId: string) =>
+      apiRequest("DELETE", `/api/companies/${params?.id}/additional-price-lists/${priceListId}`),
+    onSuccess: () => {
+      refetchAdditionalPriceLists();
+      toast({ title: "Price list removed", description: "Additional price list removed." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to remove additional price list.", variant: "destructive" });
+    },
+  });
+
   const [portalDialogOpen, setPortalDialogOpen] = useState(false);
   const [editingPortalUser, setEditingPortalUser] = useState<any | null>(null);
   const [portalForm, setPortalForm] = useState({ name: "", email: "", password: "purax2026" });
@@ -835,6 +864,34 @@ export default function CompanyDetailPage() {
                     </p>
                   )}
                 </div>
+                {canEdit && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Additional Price Lists</p>
+                    <p className="text-xs text-muted-foreground/70 mb-1">Extra products shown in portal alongside main list</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {(additionalPriceLists || []).map((apl: any) => (
+                        <Badge key={apl.price_list_id} variant="secondary" className="text-xs cursor-pointer" onClick={() => removeAdditionalPriceListMutation.mutate(apl.price_list_id)}>
+                          {apl.name} ×
+                        </Badge>
+                      ))}
+                    </div>
+                    <Select
+                      value=""
+                      onValueChange={(value) => addAdditionalPriceListMutation.mutate(value)}
+                    >
+                      <SelectTrigger className="w-full mt-1 h-7 text-xs" data-testid="select-additional-price-list">
+                        <SelectValue placeholder="Add extra price list..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(priceLists || [])
+                          .filter(pl => pl.id !== company.priceListId && !(additionalPriceLists || []).some((a: any) => a.price_list_id === pl.id))
+                          .map((pl) => (
+                            <SelectItem key={pl.id} value={pl.id}>{pl.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 {canEdit && (
                   <div>
                     <p className="text-xs text-muted-foreground">Portal Extra Categories</p>

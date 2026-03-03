@@ -420,6 +420,52 @@ export async function registerRoutes(
     }
   });
 
+  // -------- Company Additional Price Lists --------
+  app.get("/api/companies/:id/additional-price-lists", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT capl.id, capl.price_list_id, pl.name
+         FROM company_additional_price_lists capl
+         JOIN price_lists pl ON pl.id = capl.price_list_id
+         WHERE capl.company_id = $1
+         ORDER BY pl.name`,
+        [req.params.id]
+      );
+      res.json(result.rows);
+    } catch (err) {
+      console.error("Get additional price lists error:", err);
+      res.status(500).json({ message: "Failed to fetch additional price lists" });
+    }
+  });
+
+  app.post("/api/companies/:id/additional-price-lists", requireEdit, async (req, res) => {
+    try {
+      const { priceListId } = req.body;
+      if (!priceListId) return res.status(400).json({ message: "priceListId is required" });
+      const result = await pool.query(
+        `INSERT INTO company_additional_price_lists (company_id, price_list_id) VALUES ($1, $2) ON CONFLICT (company_id, price_list_id) DO NOTHING RETURNING *`,
+        [req.params.id, priceListId]
+      );
+      res.status(201).json(result.rows[0] || { message: "Already assigned" });
+    } catch (err) {
+      console.error("Add additional price list error:", err);
+      res.status(500).json({ message: "Failed to add additional price list" });
+    }
+  });
+
+  app.delete("/api/companies/:id/additional-price-lists/:plId", requireEdit, async (req, res) => {
+    try {
+      await pool.query(
+        `DELETE FROM company_additional_price_lists WHERE company_id = $1 AND price_list_id = $2`,
+        [req.params.id, req.params.plId]
+      );
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Remove additional price list error:", err);
+      res.status(500).json({ message: "Failed to remove additional price list" });
+    }
+  });
+
   app.post("/api/companies/bulk-assign-price-list", requireAdmin, async (req, res) => {
     try {
       const { ids, priceListId } = req.body;
@@ -5912,6 +5958,49 @@ Rules:
       for (const vp of companyVariantResult.rows) {
         if (!companyVariantMap.has(vp.product_id)) companyVariantMap.set(vp.product_id, []);
         companyVariantMap.get(vp.product_id)!.push({ filling: vp.filling, weight: vp.weight, unitPrice: vp.unit_price });
+      }
+
+      // Load additional price lists for this company and merge their products in
+      const additionalPlResult = await pool.query(
+        `SELECT price_list_id FROM company_additional_price_lists WHERE company_id = $1`,
+        [companyId]
+      );
+      for (const aplRow of additionalPlResult.rows) {
+        const addlPrices = await pool.query(
+          `SELECT plp.product_id, plp.filling, plp.weight, plp.unit_price,
+                  p.id, p.sku, p.name, p.description, p.category
+           FROM price_list_prices plp
+           JOIN products p ON p.id = plp.product_id
+           WHERE plp.price_list_id = $1 AND p.active = true
+           AND p.name != 'Freight'
+           ORDER BY p.category, p.name, plp.filling, plp.weight`,
+          [aplRow.price_list_id]
+        );
+        for (const row of addlPrices.rows) {
+          const displayCategory = categoryRenames[row.category] || row.category;
+          if (!productMap.has(row.product_id)) {
+            productMap.set(row.product_id, {
+              id: row.product_id,
+              sku: row.sku,
+              name: row.name,
+              description: row.description,
+              category: displayCategory,
+              unitPrice: "0",
+            });
+          }
+          if (row.filling || row.weight) {
+            if (!variantMap.has(row.product_id)) variantMap.set(row.product_id, []);
+            const existing = variantMap.get(row.product_id)!;
+            const alreadyHas = existing.some(v => v.filling === (row.filling || "") && v.weight === row.weight);
+            if (!alreadyHas) {
+              existing.push({ filling: row.filling || "", weight: row.weight, unitPrice: row.unit_price });
+            }
+          } else {
+            if (!productMap.get(row.product_id)!.unitPrice || productMap.get(row.product_id)!.unitPrice === "0") {
+              productMap.get(row.product_id)!.unitPrice = row.unit_price;
+            }
+          }
+        }
       }
 
       const isNonZeroPrice = (p: string | null | undefined) => !!p && p !== "0.00" && p !== "0";

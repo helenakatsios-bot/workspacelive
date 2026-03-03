@@ -594,6 +594,14 @@ export const insertPriceListPriceSchema = createInsertSchema(priceListPrices).om
 export type InsertPriceListPrice = z.infer<typeof insertPriceListPriceSchema>;
 export type PriceListPrice = typeof priceListPrices.$inferSelect;
 
+// Additional price lists per company (supplements the main price_list_id)
+export const companyAdditionalPriceLists = pgTable("company_additional_price_lists", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id, { onDelete: "cascade" }),
+  priceListId: varchar("price_list_id", { length: 36 }).notNull().references(() => priceLists.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ============ CRM TASKS ============
 export const crmTasks = pgTable("crm_tasks", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
