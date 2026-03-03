@@ -2393,13 +2393,10 @@ export async function registerRoutes(
         lines: linesWithProducts,
       });
 
-      let orderDetailsText = [
-        `Order Number: ${order.orderNumber}`,
-        `Company: ${company?.tradingName || company?.legalName || ""}`,
-        ...linesWithProducts.map(line =>
-          `${line.quantity}x ${line.productName} @ $${line.unitPrice} = $${line.lineTotal}`
-        )
-      ].join("\n");
+      // Only include actual product lines — header info (order number, company) goes in notes/combinedNotes
+      let orderDetailsText = linesWithProducts.map(line =>
+        `${line.quantity}x ${line.productName} @ $${line.unitPrice} = $${line.lineTotal}`
+      ).join("\n");
 
       if (!orderDetailsText && originalEmailHtml) {
         const emailPlainText = originalEmailHtml
