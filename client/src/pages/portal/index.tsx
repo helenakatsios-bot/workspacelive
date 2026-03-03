@@ -1435,31 +1435,35 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                 </div>
                 <p className="text-xs text-muted-foreground">Attach shipping labels, purchase orders, or other documents</p>
                 <div className="space-y-2">
-                  {attachedFiles.map((file, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-sm bg-muted/50 rounded px-2 py-1" data-testid={`attached-file-${idx}`}>
-                      <Paperclip className="w-3 h-3 flex-shrink-0" />
-                      <span className="truncate flex-1">{file.name}</span>
-                      <span className="text-xs text-muted-foreground flex-shrink-0">{(file.size / 1024).toFixed(0)}KB</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-5 w-5 p-0"
-                        onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))}
-                        data-testid={`button-remove-file-${idx}`}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
+                  {attachedFiles.length > 0 && (
+                    <div className="rounded-md border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30 p-2 space-y-1">
+                      <p className="text-xs font-medium text-green-700 dark:text-green-400 mb-1">{attachedFiles.length} file{attachedFiles.length > 1 ? "s" : ""} ready to upload</p>
+                      {attachedFiles.map((file, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-sm" data-testid={`attached-file-${idx}`}>
+                          <Paperclip className="w-3 h-3 flex-shrink-0 text-green-600" />
+                          <span className="truncate flex-1 text-green-800 dark:text-green-300">{file.name}</span>
+                          <span className="text-xs text-green-600 dark:text-green-500 flex-shrink-0">{(file.size / 1024).toFixed(0)}KB</span>
+                          <button
+                            type="button"
+                            className="h-5 w-5 p-0 flex items-center justify-center rounded hover:bg-green-200 dark:hover:bg-green-800"
+                            onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))}
+                            data-testid={`button-remove-file-${idx}`}
+                            title="Remove file"
+                          >
+                            <Trash2 className="w-3 h-3 text-green-700" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
+                  )}
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-center gap-2 rounded-md border border-dashed border-muted-foreground/40 py-2 text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors"
                     onClick={() => document.getElementById("portal-file-input")?.click()}
                     data-testid="button-attach-files"
                   >
-                    <Plus className="w-4 h-4 mr-1" /> Add Files
-                  </Button>
+                    <Plus className="w-4 h-4" /> {attachedFiles.length > 0 ? "Add More Files" : "Click to attach files"}
+                  </button>
                   <input
                     id="portal-file-input"
                     type="file"
@@ -1467,8 +1471,9 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                     className="hidden"
                     accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.csv,.txt,.heic,.heif,.webp,.bmp,.tiff,image/*"
                     onChange={(e) => {
-                      if (e.target.files) {
-                        setAttachedFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+                      if (e.target.files && e.target.files.length > 0) {
+                        const newFiles = Array.from(e.target.files);
+                        setAttachedFiles((prev) => [...prev, ...newFiles]);
                         e.target.value = "";
                       }
                     }}
