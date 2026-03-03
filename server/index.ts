@@ -825,6 +825,67 @@ async function runStartupTasks() {
     console.error("CUST INSERTS rename error:", err.message);
   }
 
+  // Add '35x55 100% duck feather' to all CUSTOM INSERTS price lists
+  try {
+    const productName = "35x55 100% duck feather";
+    const productSku = "CI-35X55-DF";
+    const productPrice = 14.50;
+
+    // Ensure product exists
+    let existingProduct = await pool.query(
+      `SELECT id FROM products WHERE UPPER(name) = UPPER($1) LIMIT 1`,
+      [productName]
+    );
+    let productId: string;
+    if (existingProduct.rows.length === 0) {
+      const ins = await pool.query(
+        `INSERT INTO products (id, sku, name, category, unit_price, active)
+         VALUES (gen_random_uuid(), $1, $2, 'CUSTOM INSERTS', $3, true)
+         ON CONFLICT (sku) DO NOTHING
+         RETURNING id`,
+        [productSku, productName, productPrice]
+      );
+      if (ins.rows.length > 0) {
+        productId = ins.rows[0].id;
+        console.log(`Created product: ${productName} (${productId})`);
+      } else {
+        // SKU conflict — fetch existing
+        const ex = await pool.query(`SELECT id FROM products WHERE sku = $1`, [productSku]);
+        productId = ex.rows[0]?.id;
+      }
+    } else {
+      productId = existingProduct.rows[0].id;
+    }
+
+    if (productId!) {
+      // Add to every price list that has any CUSTOM INSERTS product
+      const priceLists = await pool.query(
+        `SELECT DISTINCT plp.price_list_id FROM price_list_prices plp
+         JOIN products p ON p.id = plp.product_id
+         WHERE UPPER(p.category) = 'CUSTOM INSERTS'`
+      );
+      let added = 0;
+      for (const row of priceLists.rows) {
+        const plId = row.price_list_id;
+        const exists = await pool.query(
+          `SELECT 1 FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 LIMIT 1`,
+          [plId, productId]
+        );
+        if (exists.rows.length === 0) {
+          await pool.query(
+            `INSERT INTO price_list_prices (id, price_list_id, product_id, unit_price)
+             VALUES (gen_random_uuid(), $1, $2, $3)`,
+            [plId, productId, productPrice]
+          );
+          added++;
+        }
+      }
+      if (added > 0) console.log(`Added ${productName} to ${added} price list(s)`);
+    }
+  } catch (err: any) {
+    console.error("35x55 product migration error:", err.message);
+  }
+
   // Add Xero invoice columns to orders table if not present
   try {
     await pool.query(`
