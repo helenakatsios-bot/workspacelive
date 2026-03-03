@@ -2253,11 +2253,10 @@ export async function registerRoutes(
 
       // 2. Build line items
       const xeroLineItems = lines.map((line: any) => ({
-        Description: line.descriptionOverride || "Item",
+        Description: line.descriptionOverride || line.productName || "Item",
         Quantity: parseFloat(line.quantity) || 1,
         UnitAmount: parseFloat(line.unitPrice) || 0,
         AccountCode: "200",
-        TaxType: "OUTPUT",
       }));
 
       // 3. Due date based on payment terms
@@ -2289,7 +2288,19 @@ export async function registerRoutes(
       if (!createRes.ok) {
         const errText = await createRes.text();
         console.error("[XERO] Failed to create invoice:", createRes.status, errText);
-        return res.status(500).json({ message: `Xero returned an error: ${createRes.status}. Check that Xero is connected in Settings.` });
+        let xeroMsg = `Xero returned an error (${createRes.status}).`;
+        try {
+          const errJson = JSON.parse(errText);
+          const elements = errJson?.Elements?.[0]?.ValidationErrors;
+          if (elements?.length) {
+            xeroMsg += " " + elements.map((e: any) => e.Message).join("; ");
+          } else if (errJson?.Detail) {
+            xeroMsg += " " + errJson.Detail;
+          } else if (errJson?.Message) {
+            xeroMsg += " " + errJson.Message;
+          }
+        } catch {}
+        return res.status(500).json({ message: xeroMsg });
       }
 
       const createData = await createRes.json() as any;
