@@ -2778,6 +2778,7 @@ export async function registerRoutes(
       }
       console.log(`[PURAX-SYNC] ${attachmentsPayload.length} attachment(s) will be sent to Purax (including source doc)`);
 
+      const crmBaseUrl = `${req.protocol}://${req.get("host")}`;
       const webhookPayload = {
         orderId: order.id,
         orderNumber: order.orderNumber,
@@ -2798,6 +2799,7 @@ export async function registerRoutes(
         originalEmailHtml: originalEmailHtml || null,
         attachments: attachmentsPayload,
         isUrgent: false,
+        callbackUrl: `${crmBaseUrl}/api/webhooks/milo/order-complete`,
       };
 
       const headers: Record<string, string> = {
@@ -5456,6 +5458,60 @@ Rules:
     } catch (error) {
       console.error("Error submitting form:", error);
       res.status(500).json({ message: "Failed to submit form" });
+    }
+  });
+
+  // ==================== MILO ORDER-COMPLETE CALLBACK WEBHOOK ====================
+  // Called by the Milo/Purax app when an order has been completed
+  app.post("/api/webhooks/milo/order-complete", async (req, res) => {
+    try {
+      // Authenticate using the Purax API key
+      const providedKey = req.headers["x-api-key"] || req.headers["authorization"]?.toString().replace("Bearer ", "");
+      const puraxApiKey = process.env.PURAX_API_KEY;
+      if (puraxApiKey && providedKey !== puraxApiKey) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { orderId, orderNumber } = req.body as { orderId?: string; orderNumber?: string };
+      if (!orderId && !orderNumber) {
+        return res.status(400).json({ message: "orderId or orderNumber is required" });
+      }
+
+      // Find the order
+      let order: any = null;
+      if (orderId) {
+        const r = await pool.query(`SELECT * FROM orders WHERE id = $1`, [orderId]);
+        order = r.rows[0];
+      }
+      if (!order && orderNumber) {
+        const r = await pool.query(`SELECT * FROM orders WHERE order_number = $1`, [orderNumber]);
+        order = r.rows[0];
+      }
+
+      if (!order) {
+        return res.status(404).json({ message: `Order not found (orderId=${orderId}, orderNumber=${orderNumber})` });
+      }
+
+      // Mark as completed
+      await pool.query(
+        `UPDATE orders SET status = 'completed', updated_at = NOW() WHERE id = $1`,
+        [order.id]
+      );
+
+      // Log the activity
+      await storage.createActivity({
+        entityType: "order",
+        entityId: order.id,
+        activityType: "system",
+        content: `Order marked as completed by Milo (Purax app callback)`,
+        createdBy: null,
+      });
+
+      console.log(`[MILO-CALLBACK] Order ${order.order_number} (${order.id}) marked as completed`);
+      return res.json({ success: true, message: `Order ${order.order_number} marked as completed` });
+    } catch (err: any) {
+      console.error("[MILO-CALLBACK] Error:", err.message);
+      return res.status(500).json({ message: "Internal server error" });
     }
   });
 
