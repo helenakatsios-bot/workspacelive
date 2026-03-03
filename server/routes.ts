@@ -656,6 +656,104 @@ export async function registerRoutes(
     }
   });
 
+  // ========== MERGE COMPANIES ==========
+  app.post("/api/companies/:id/merge", requireAdmin, async (req, res) => {
+    const targetId = req.params.id; // company to KEEP
+    const { sourceCompanyId } = req.body; // company to merge FROM (will be deleted)
+    if (!sourceCompanyId) return res.status(400).json({ message: "sourceCompanyId is required" });
+    if (sourceCompanyId === targetId) return res.status(400).json({ message: "Cannot merge a company with itself" });
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const target = await client.query("SELECT * FROM companies WHERE id = $1", [targetId]);
+      const source = await client.query("SELECT * FROM companies WHERE id = $1", [sourceCompanyId]);
+      if (target.rows.length === 0) throw new Error("Target company not found");
+      if (source.rows.length === 0) throw new Error("Source company not found");
+
+      const targetName = target.rows[0].trading_name || target.rows[0].legal_name;
+      const sourceName = source.rows[0].trading_name || source.rows[0].legal_name;
+      console.log(`[MERGE] Merging "${sourceName}" → "${targetName}"`);
+
+      // Simple re-parent tables
+      const simpleTables = [
+        "orders", "contacts", "invoices", "quotes", "deals",
+        "emails", "crm_calls", "crm_tasks", "crm_tickets", "form_submissions"
+      ];
+      for (const table of simpleTables) {
+        const r = await client.query(`UPDATE ${table} SET company_id = $1 WHERE company_id = $2`, [targetId, sourceCompanyId]);
+        if (r.rowCount && r.rowCount > 0) console.log(`[MERGE] Moved ${r.rowCount} rows in ${table}`);
+      }
+
+      // Portal users: only transfer if email not already in target company
+      await client.query(`
+        UPDATE portal_users SET company_id = $1
+        WHERE company_id = $2
+          AND email NOT IN (SELECT email FROM portal_users WHERE company_id = $1)
+      `, [targetId, sourceCompanyId]);
+      // Delete remaining portal users (email conflicts)
+      await client.query(`DELETE FROM portal_users WHERE company_id = $1`, [sourceCompanyId]);
+
+      // Company prices: insert only if product not already priced for target
+      const srcPrices = await client.query(`SELECT * FROM company_prices WHERE company_id = $1`, [sourceCompanyId]);
+      for (const row of srcPrices.rows) {
+        await client.query(`
+          INSERT INTO company_prices (id, company_id, product_id, unit_price, created_at, updated_at)
+          VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+          ON CONFLICT (company_id, product_id) DO NOTHING
+        `, [targetId, row.product_id, row.unit_price]);
+      }
+      await client.query(`DELETE FROM company_prices WHERE company_id = $1`, [sourceCompanyId]);
+
+      // Company variant prices: insert only if variant not already priced for target
+      const srcVariants = await client.query(`SELECT * FROM company_variant_prices WHERE company_id = $1`, [sourceCompanyId]);
+      for (const row of srcVariants.rows) {
+        await client.query(`
+          INSERT INTO company_variant_prices (id, company_id, product_id, filling, weight, unit_price)
+          SELECT gen_random_uuid(), $1, $2, $3, $4, $5
+          WHERE NOT EXISTS (
+            SELECT 1 FROM company_variant_prices
+            WHERE company_id = $1 AND product_id = $2 AND COALESCE(filling,'') = COALESCE($3,'') AND COALESCE(weight,'') = COALESCE($4,'')
+          )
+        `, [targetId, row.product_id, row.filling, row.weight, row.unit_price]);
+      }
+      await client.query(`DELETE FROM company_variant_prices WHERE company_id = $1`, [sourceCompanyId]);
+
+      // Additional price lists
+      const srcAddl = await client.query(`SELECT price_list_id FROM company_additional_price_lists WHERE company_id = $1`, [sourceCompanyId]);
+      for (const row of srcAddl.rows) {
+        const exists = await client.query(`SELECT 1 FROM company_additional_price_lists WHERE company_id = $1 AND price_list_id = $2`, [targetId, row.price_list_id]);
+        if (exists.rows.length === 0) {
+          await client.query(`INSERT INTO company_additional_price_lists (company_id, price_list_id) VALUES ($1, $2)`, [targetId, row.price_list_id]);
+        }
+      }
+      await client.query(`DELETE FROM company_additional_price_lists WHERE company_id = $1`, [sourceCompanyId]);
+
+      // Merge internal notes
+      if (source.rows[0].internal_notes) {
+        const existingNotes = target.rows[0].internal_notes || "";
+        const mergedNotes = existingNotes
+          ? `${existingNotes}\n\n[Merged from ${sourceName}]: ${source.rows[0].internal_notes}`
+          : `[Merged from ${sourceName}]: ${source.rows[0].internal_notes}`;
+        await client.query(`UPDATE companies SET internal_notes = $1 WHERE id = $2`, [mergedNotes, targetId]);
+      }
+
+      // Delete the source company (cascade handles any remaining FK references)
+      await client.query(`DELETE FROM companies WHERE id = $1`, [sourceCompanyId]);
+
+      await client.query("COMMIT");
+      console.log(`[MERGE] Completed: "${sourceName}" merged into "${targetName}" and deleted`);
+      res.json({ success: true, message: `${sourceName} has been merged into ${targetName} and deleted.` });
+    } catch (err: any) {
+      await client.query("ROLLBACK");
+      console.error("[MERGE] Error:", err.message);
+      res.status(500).json({ message: `Merge failed: ${err.message}` });
+    } finally {
+      client.release();
+    }
+  });
+
   app.delete("/api/companies/:id", requireAdmin, async (req, res) => {
     try {
       const company = await storage.getCompany(req.params.id);
