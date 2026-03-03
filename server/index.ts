@@ -776,6 +776,39 @@ async function runStartupTasks() {
     console.error("COMER & KING price list assignment error:", err.message);
   }
 
+  // Add "Custom Inserts" as additional price list to all companies on Interiors or Standard
+  try {
+    const customInsertsResult = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'custom inserts' LIMIT 1`);
+    if (customInsertsResult.rows.length === 0) {
+      console.log("Custom Inserts price list not found — skipping bulk assignment");
+    } else {
+      const customInsertsId = customInsertsResult.rows[0].id;
+      // Get all companies whose main price list is Interiors or Standard
+      const companiesResult = await pool.query(`
+        SELECT c.id FROM companies c
+        JOIN price_lists pl ON pl.id = c.price_list_id
+        WHERE pl.name IN ('Interiors', 'Standard')
+      `);
+      let added = 0;
+      for (const row of companiesResult.rows) {
+        const already = await pool.query(
+          `SELECT 1 FROM company_additional_price_lists WHERE company_id = $1 AND price_list_id = $2`,
+          [row.id, customInsertsId]
+        );
+        if (already.rows.length === 0) {
+          await pool.query(
+            `INSERT INTO company_additional_price_lists (company_id, price_list_id) VALUES ($1, $2)`,
+            [row.id, customInsertsId]
+          );
+          added++;
+        }
+      }
+      console.log(`Custom Inserts assigned to ${added} new companies (${companiesResult.rows.length} total on Interiors/Standard)`);
+    }
+  } catch (err: any) {
+    console.error("Custom Inserts bulk assignment error:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 
