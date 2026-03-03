@@ -886,6 +886,52 @@ async function runStartupTasks() {
     console.error("35x55 product migration error:", err.message);
   }
 
+  // Add 3 Hungarian Goose Pillow products to Hotel Luxury Collection price list
+  try {
+    const hlcResult = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) LIKE '%hotel luxury%' LIMIT 1`);
+    const hlcId = hlcResult.rows[0]?.id;
+    if (hlcId) {
+      const newPillows = [
+        { sku: "HLC31", name: "STANDARD HUNGARIAN GOOSE PILLOW STRIP", price: 112.00 },
+        { sku: "HLC32", name: "QUEEN HUNGARIAN GOOSE PILLOW", price: 117.00 },
+        { sku: "HLC33", name: "KING HUNGARIAN GOOSE PILLOW", price: 125.00 },
+      ];
+      for (const pillow of newPillows) {
+        // Create product if not exists
+        let pidRes = await pool.query(`SELECT id FROM products WHERE sku = $1`, [pillow.sku]);
+        let pid: string;
+        if (pidRes.rows.length === 0) {
+          const ins = await pool.query(
+            `INSERT INTO products (id, sku, name, category, unit_price, active)
+             VALUES (gen_random_uuid(), $1, $2, 'PILLOW', $3, true) RETURNING id`,
+            [pillow.sku, pillow.name, pillow.price]
+          );
+          pid = ins.rows[0].id;
+          console.log(`Created product: ${pillow.name}`);
+        } else {
+          pid = pidRes.rows[0].id;
+        }
+        // Add to Hotel Luxury Collection if not already there
+        const exists = await pool.query(
+          `SELECT 1 FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 LIMIT 1`,
+          [hlcId, pid]
+        );
+        if (exists.rows.length === 0) {
+          await pool.query(
+            `INSERT INTO price_list_prices (id, price_list_id, product_id, unit_price)
+             VALUES (gen_random_uuid(), $1, $2, $3)`,
+            [hlcId, pid, pillow.price]
+          );
+          console.log(`Added ${pillow.name} ($${pillow.price}) to Hotel Luxury Collection`);
+        }
+      }
+    } else {
+      console.warn("Hotel Luxury Collection price list not found — skipping pillow migration");
+    }
+  } catch (err: any) {
+    console.error("Hungarian Goose Pillow migration error:", err.message);
+  }
+
   // Add Xero invoice columns to orders table if not present
   try {
     await pool.query(`
