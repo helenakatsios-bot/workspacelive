@@ -1142,6 +1142,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
           {Object.entries(grouped).map(([category, prods]) => {
             const hasFillingOption = FILLING_CATEGORIES.includes(category);
             const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+              'INSERTS': 'INSERTS STANDARD SIZE',
               '50% WINTER FILLED': '50% DUCK WINTER FILLED',
               '80% WINTER FILLED': 'WINTER 80% DOWN',
               'BULK': 'BULK LOOSE FILLING',
