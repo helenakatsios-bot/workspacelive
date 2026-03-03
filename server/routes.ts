@@ -2491,6 +2491,7 @@ export async function registerRoutes(
       console.log(`[PURAX-SYNC] ${attachmentsPayload.length} attachment(s) will be sent to Purax (including source doc)`);
 
       const webhookPayload = {
+        orderId: order.id,
         orderNumber: order.orderNumber,
         companyName: company?.tradingName || company?.legalName || "",
         customerName: customerName || company?.tradingName || company?.legalName || "",
@@ -5298,21 +5299,42 @@ Rules:
       const body = req.body as Record<string, any>;
       const { event, orderId, orderNumber, companyName, customerName, xeroInvoiceNumber, totalAmount, completedAt } = body;
 
-      console.log(`[MILLIE-WEBHOOK-IN] Received event="${event}" orderNumber="${orderNumber}" invoice="${xeroInvoiceNumber}"`);
+      console.log(`[MILLIE-WEBHOOK-IN] Received event="${event}" orderNumber="${orderNumber}" orderId="${orderId}" invoice="${xeroInvoiceNumber}"`);
 
-      // If a CRM order ID was supplied, log an activity against it
-      if (orderId) {
+      // Resolve the CRM order — try by ID first, then by order number
+      let resolvedOrderId: string | null = orderId || null;
+      if (!resolvedOrderId && orderNumber) {
         try {
+          const found = await pool.query(
+            `SELECT id FROM orders WHERE order_number = $1 LIMIT 1`,
+            [String(orderNumber)]
+          );
+          if (found.rows.length > 0) resolvedOrderId = found.rows[0].id;
+        } catch (_) {}
+      }
+
+      // Mark the order as completed
+      if (resolvedOrderId) {
+        try {
+          await pool.query(
+            `UPDATE orders SET status = 'completed', updated_at = NOW() WHERE id = $1 AND status != 'completed'`,
+            [resolvedOrderId]
+          );
+          console.log(`[MILLIE-WEBHOOK-IN] Order ${resolvedOrderId} (${orderNumber || ""}) marked as completed`);
+
+          // Log an activity note against the order
           await storage.createActivity({
             entityType: "order",
-            entityId: orderId,
+            entityId: resolvedOrderId,
             activityType: "system",
-            content: `External notification received: ${event || "order_completed"}${xeroInvoiceNumber ? ` — Invoice ${xeroInvoiceNumber}` : ""}${completedAt ? ` at ${new Date(completedAt).toLocaleString("en-AU")}` : ""}.`,
+            content: `Order marked as completed — Milo notification received${xeroInvoiceNumber ? ` (Invoice ${xeroInvoiceNumber})` : ""}${completedAt ? ` at ${new Date(completedAt).toLocaleString("en-AU")}` : ""}.`,
             createdBy: null as any,
           });
-        } catch (_) {
-          // Non-fatal — the order may not exist in this CRM instance
+        } catch (err: any) {
+          console.error("[MILLIE-WEBHOOK-IN] Failed to update order status:", err?.message);
         }
+      } else {
+        console.warn(`[MILLIE-WEBHOOK-IN] Could not resolve order — orderId="${orderId}" orderNumber="${orderNumber}"`);
       }
 
       res.json({
@@ -5320,6 +5342,7 @@ Rules:
         received: true,
         event: event || "unknown",
         orderNumber: orderNumber || null,
+        orderId: resolvedOrderId || null,
         processedAt: new Date().toISOString(),
       });
     } catch (err: any) {
