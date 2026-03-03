@@ -1465,7 +1465,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                     type="file"
                     multiple
                     className="hidden"
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.csv,.txt"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.csv,.txt,.heic,.heif,.webp,.bmp,.tiff,image/*"
                     onChange={(e) => {
                       if (e.target.files) {
                         setAttachedFiles((prev) => [...prev, ...Array.from(e.target.files!)]);

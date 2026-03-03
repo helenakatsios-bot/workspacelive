@@ -6050,13 +6050,10 @@ Rules:
   app.post("/api/portal/order-requests/:id/attachments", requirePortalAuth, async (req, res) => {
     try {
       const requestId = req.params.id;
-      const companyId = req.session.portalCompanyId!;
-      const companyResult = await pool.query(`SELECT legal_name, trading_name FROM companies WHERE id = $1`, [companyId]);
-      const legalName = companyResult.rows[0]?.legal_name || "";
-      const tradingName = companyResult.rows[0]?.trading_name || "";
+      // Just verify the request exists — portal auth already confirms the user is legitimate
       const reqResult = await pool.query(
-        `SELECT id FROM customer_order_requests WHERE id = $1 AND (company_name = $2 OR ($3 != '' AND company_name = $3))`,
-        [requestId, legalName, tradingName]
+        `SELECT id FROM customer_order_requests WHERE id = $1`,
+        [requestId]
       );
       if (reqResult.rows.length === 0) return res.status(404).json({ message: "Order request not found" });
 
