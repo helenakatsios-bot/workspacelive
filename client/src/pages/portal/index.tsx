@@ -1251,13 +1251,13 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                         {customLines.map((line) => (
                           <TableRow key={line.id} data-testid={`row-custom-${line.id}`}>
                             <TableCell>
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-col gap-1.5">
                                 <p className="font-medium text-sm whitespace-nowrap">CUSTOM INSERT</p>
                                 <Input
                                   placeholder="Enter size (e.g. 70x70cm)"
                                   value={line.size}
                                   onChange={(e) => updateCustomLine(line.id, "size", e.target.value)}
-                                  className="h-8 text-xs"
+                                  className="h-10 text-sm min-w-[180px] font-medium"
                                   data-testid={`input-custom-size-${line.id}`}
                                 />
                               </div>
