@@ -847,6 +847,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
 
   const PORTAL_CATEGORY_ORDER = [
     'INSERTS',
+    'CUSTOM INSERTS',
     'BULK',
     'RAW MATERIAL',
     '80% WINTER FILLED',
