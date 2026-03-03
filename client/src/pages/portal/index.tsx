@@ -835,7 +835,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
     for (const [cat, set] of Object.entries(wOpts)) weightOptions[cat] = toSorted(set);
     return { fillingOptions, weightOptions };
   }, [products]);
-  const FILLING_CATEGORIES = Object.keys(fillingOptions).filter(c => c !== 'RAW MATERIAL' && c !== 'BULK');
+  const FILLING_CATEGORIES = Object.keys(fillingOptions).filter(c => c !== 'RAW MATERIAL' && c !== 'BULK LOOSE FILLING' && c !== 'BULK');
   const WEIGHT_CATEGORIES = Object.keys(weightOptions);
 
   const filteredProducts = useMemo(() => {
@@ -848,6 +848,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
   const PORTAL_CATEGORY_ORDER = [
     'INSERTS',
     'CUSTOM INSERTS',
+    'BULK LOOSE FILLING',
     'BULK',
     'RAW MATERIAL',
     '80% WINTER FILLED',
@@ -1138,6 +1139,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
             const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
               '50% WINTER FILLED': '50% DUCK WINTER FILLED',
               '80% WINTER FILLED': 'WINTER 80% DOWN',
+              'BULK': 'BULK LOOSE FILLING',
             };
             const displayCategory = CATEGORY_DISPLAY_NAMES[category] || category;
             const isExpanded = expandedCategories.has(category);

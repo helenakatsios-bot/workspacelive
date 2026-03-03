@@ -809,6 +809,16 @@ async function runStartupTasks() {
     console.error("Custom Inserts bulk assignment error:", err.message);
   }
 
+  // Rename product category 'BULK' → 'BULK LOOSE FILLING' everywhere
+  try {
+    const r1 = await pool.query(`UPDATE products SET category = 'BULK LOOSE FILLING' WHERE UPPER(TRIM(category)) = 'BULK'`);
+    const r2 = await pool.query(`UPDATE price_list_prices SET category = 'BULK LOOSE FILLING' WHERE UPPER(TRIM(category)) = 'BULK'`);
+    const total = (r1.rowCount || 0) + (r2.rowCount || 0);
+    if (total > 0) console.log(`Renamed BULK → BULK LOOSE FILLING: ${r1.rowCount} products, ${r2.rowCount} price_list_prices`);
+  } catch (err: any) {
+    console.error("BULK rename error:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 
