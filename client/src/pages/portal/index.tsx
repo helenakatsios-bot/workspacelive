@@ -1164,19 +1164,26 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                         </TableCell>
                         {hasFillingOption && (
                           <TableCell>
-                            <Select
-                              value={fillings[product.id] || ""}
-                              onValueChange={(val) => setFillings((prev) => ({ ...prev, [product.id]: val }))}
-                            >
-                              <SelectTrigger className="w-[120px]" data-testid={`select-filling-${product.id}`}>
-                                <SelectValue placeholder="Select..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(fillingOptions[category] || []).map((opt) => (
-                                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            {(() => {
+                              const productFillings: string[] = product.variantPrices && product.variantPrices.length > 0
+                                ? Array.from(new Set<string>(product.variantPrices.map((vp: any) => vp.filling).filter(Boolean).map((f: string) => f.trim()))).sort()
+                                : (fillingOptions[category] || []);
+                              return (
+                                <Select
+                                  value={fillings[product.id] || ""}
+                                  onValueChange={(val) => setFillings((prev) => ({ ...prev, [product.id]: val }))}
+                                >
+                                  <SelectTrigger className="w-[120px]" data-testid={`select-filling-${product.id}`}>
+                                    <SelectValue placeholder="Select..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {productFillings.map((opt) => (
+                                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              );
+                            })()}
                           </TableCell>
                         )}
                         {WEIGHT_CATEGORIES.includes(category) && (
@@ -1456,19 +1463,18 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                       ))}
                     </div>
                   )}
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-center gap-2 rounded-md border border-dashed border-muted-foreground/40 py-2 text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors"
-                    onClick={() => document.getElementById("portal-file-input")?.click()}
+                  <label
+                    htmlFor="portal-file-input"
+                    className="w-full flex items-center justify-center gap-2 rounded-md border border-dashed border-muted-foreground/40 py-2 text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer"
                     data-testid="button-attach-files"
                   >
                     <Plus className="w-4 h-4" /> {attachedFiles.length > 0 ? "Add More Files" : "Click to attach files"}
-                  </button>
+                  </label>
                   <input
                     id="portal-file-input"
                     type="file"
                     multiple
-                    className="hidden"
+                    style={{ display: "none" }}
                     accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.csv,.txt,.heic,.heif,.webp,.bmp,.tiff,image/*"
                     onChange={(e) => {
                       if (e.target.files && e.target.files.length > 0) {
