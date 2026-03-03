@@ -1395,7 +1395,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {cartItems.length === 0 ? (
+              {cartItems.length === 0 && !customLines.some((l) => l.size && l.qty > 0) ? (
                 <p className="text-sm text-muted-foreground text-center py-4">No items added yet</p>
               ) : (
                 <div className="space-y-2">
@@ -1406,6 +1406,19 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                         {fillings[item.id] && <span className="text-xs text-muted-foreground ml-1">({fillings[item.id]}{weights[item.id] ? `, ${weights[item.id]}` : ""})</span>}
                       </span>
                       <span className="flex-shrink-0 font-medium">${(item.qty * parseFloat(item.effectivePrice || item.unitPrice || "0")).toFixed(2)}</span>
+                    </div>
+                  ))}
+                  {customLines.filter((l) => l.size && l.qty > 0).map((line) => (
+                    <div key={line.id} className="flex justify-between text-sm" data-testid={`cart-custom-${line.id}`}>
+                      <span className="truncate mr-2">
+                        <span className="font-medium">Custom Insert: {line.size}</span> x{line.qty}
+                        {(line.filling || line.weight) && (
+                          <span className="text-xs text-muted-foreground ml-1">
+                            ({[line.filling, line.weight].filter(Boolean).join(", ")})
+                          </span>
+                        )}
+                      </span>
+                      <span className="flex-shrink-0 text-muted-foreground text-xs mt-0.5">TBD</span>
                     </div>
                   ))}
                   <div className="border-t pt-2 flex justify-between font-semibold">
