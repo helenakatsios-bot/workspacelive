@@ -2275,7 +2275,7 @@ export async function registerRoutes(
           DueDate: fmt(dueDate),
           Status: "DRAFT",
           Reference: `Order #${order.orderNumber}`,
-          LineAmountTypes: "EXCLUSIVE",
+          LineAmountTypes: "EXCLUSIVE_OF_TAX",
         }],
       };
 
