@@ -6333,7 +6333,10 @@ Rules:
       const productMap = new Map<string, any>();
       const variantMap = new Map<string, Array<{ filling: string; weight: string | null; unitPrice: string }>>();
 
-      const categoryRenames: Record<string, string> = {};
+      const categoryRenames: Record<string, string> = {
+        'CUST INSERTS': 'CUSTOM INSERTS',
+        'CUST INSERT': 'CUSTOM INSERTS',
+      };
       if (portalCategories.map(c => c.toUpperCase()).includes('CASES')) {
         categoryRenames['CASES'] = 'RAW MATERIAL';
       }

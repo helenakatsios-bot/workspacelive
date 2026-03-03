@@ -760,6 +760,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
   const [customerOrderNumber, setCustomerOrderNumber] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [search, setSearch] = useState("");
+  const [customInsertSearch, setCustomInsertSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [editLoaded, setEditLoaded] = useState(false);
 
@@ -887,8 +888,12 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
   const toggleCategory = (cat: string) => {
     setExpandedCategories(prev => {
       const next = new Set(prev);
-      if (next.has(cat)) next.delete(cat);
-      else next.add(cat);
+      if (next.has(cat)) {
+        next.delete(cat);
+        if (cat === 'CUSTOM INSERTS') setCustomInsertSearch("");
+      } else {
+        next.add(cat);
+      }
       return next;
     });
   };
@@ -1160,6 +1165,18 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
               </button>
               {isExpanded && (
               <CardContent className="p-0 pt-0">
+                {category === 'CUSTOM INSERTS' && (
+                  <div className="relative p-3 pb-0">
+                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search custom inserts..."
+                      value={customInsertSearch}
+                      onChange={(e) => setCustomInsertSearch(e.target.value)}
+                      className="pl-10"
+                      data-testid="input-search-custom-inserts"
+                    />
+                  </div>
+                )}
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1171,7 +1188,14 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {prods.filter((product: any) => product.name !== 'CUSTOM INSERT').map((product: any) => (
+                    {prods.filter((product: any) => {
+                      if (product.name === 'CUSTOM INSERT') return false;
+                      if (category === 'CUSTOM INSERTS' && customInsertSearch) {
+                        const q = customInsertSearch.toLowerCase();
+                        return product.name.toLowerCase().includes(q) || (product.description || '').toLowerCase().includes(q) || (product.sku || '').toLowerCase().includes(q);
+                      }
+                      return true;
+                    }).map((product: any) => (
                       <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
                         <TableCell>
                           <p className="font-medium">{product.name}</p>
