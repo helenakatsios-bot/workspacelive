@@ -2243,43 +2243,96 @@ export async function registerRoutes(
             );
             if (shopifyRes.ok) {
               const { order: so } = await shopifyRes.json() as any;
-              const lineItemRows = (so.line_items || []).map((li: any) => `
-                <tr>
-                  <td style="padding:6px 8px;border-bottom:1px solid #eee;">${li.title}${li.variant_title ? ` — ${li.variant_title}` : ""}</td>
-                  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">${li.quantity}</td>
-                  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">$${parseFloat(li.price).toFixed(2)}</td>
-                  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">$${(li.quantity * parseFloat(li.price)).toFixed(2)}</td>
-                </tr>`).join("");
-              const shipping = so.shipping_address || so.billing_address || {};
-              const shippingLines = (so.shipping_lines || []).map((sl: any) =>
-                `<tr><td colspan="3" style="padding:6px 8px;border-bottom:1px solid #eee;">Shipping: ${sl.title}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">$${parseFloat(sl.price).toFixed(2)}</td></tr>`
-              ).join("");
-              const shopifyHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
-                <style>body{font-family:Arial,sans-serif;font-size:13px;color:#222;margin:30px;}
-                h1{font-size:20px;margin-bottom:4px;}
-                table{width:100%;border-collapse:collapse;margin-top:16px;}
-                th{background:#f5f5f5;padding:8px;text-align:left;border-bottom:2px solid #ddd;font-size:12px;}
-                .total-row td{font-weight:bold;padding:8px;border-top:2px solid #ccc;}
-                .meta{color:#555;margin-bottom:4px;font-size:12px;}
-                </style></head><body>
-                <h1>Shopify Order ${so.name}</h1>
-                <p class="meta"><strong>Date:</strong> ${new Date(so.created_at).toLocaleString("en-AU")}</p>
-                <p class="meta"><strong>Payment:</strong> ${so.financial_status}</p>
-                <p class="meta"><strong>Customer:</strong> ${so.customer?.first_name || ""} ${so.customer?.last_name || ""} — ${so.customer?.email || ""}</p>
-                ${shipping.address1 ? `<p class="meta"><strong>Ship to:</strong> ${[shipping.address1, shipping.address2, shipping.city, shipping.province, shipping.zip, shipping.country].filter(Boolean).join(", ")}</p>` : ""}
-                ${so.note ? `<p class="meta"><strong>Customer Note:</strong> ${so.note}</p>` : ""}
-                <table>
-                  <thead><tr><th>Product</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Unit Price</th><th style="text-align:right;">Total</th></tr></thead>
-                  <tbody>${lineItemRows}${shippingLines}</tbody>
-                  <tfoot>
-                    <tr class="total-row"><td colspan="3">Subtotal</td><td style="text-align:right;">$${parseFloat(so.subtotal_price).toFixed(2)}</td></tr>
-                    <tr class="total-row"><td colspan="3">Tax</td><td style="text-align:right;">$${parseFloat(so.total_tax).toFixed(2)}</td></tr>
-                    <tr class="total-row"><td colspan="3">TOTAL</td><td style="text-align:right;">$${parseFloat(so.total_price).toFixed(2)}</td></tr>
-                  </tfoot>
-                </table>
-                </body></html>`;
-              const { convertHtmlToPdf } = await import("./html-to-pdf");
-              const shopifyPdfBuffer = await convertHtmlToPdf(shopifyHtml);
+              // Build PDF directly with PDFKit — bypass the email HTML parser
+              const shopifyPdfBuffer: Buffer = await new Promise((resolve, reject) => {
+                const PDFDoc = require("pdfkit");
+                const doc = new PDFDoc({ size: "A4", margin: 50 });
+                const chunks: Buffer[] = [];
+                doc.on("data", (c: Buffer) => chunks.push(c));
+                doc.on("end", () => resolve(Buffer.concat(chunks)));
+                doc.on("error", reject);
+
+                const W = doc.page.width - 100;
+                const ship = so.shipping_address || so.billing_address || {};
+                const customerName = `${so.customer?.first_name || ""} ${so.customer?.last_name || ""}`.trim();
+
+                // Header
+                doc.fontSize(20).font("Helvetica-Bold").fillColor("#000000").text(`Shopify Order ${so.name}`, 50, 50);
+                doc.moveDown(0.4);
+                doc.fontSize(10).font("Helvetica").fillColor("#555555");
+                doc.text(`Date: ${new Date(so.created_at).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" })}`);
+                doc.text(`Payment: ${so.financial_status}`);
+                if (customerName) doc.text(`Customer: ${customerName}${so.customer?.email ? ` — ${so.customer.email}` : ""}`);
+                if (so.customer?.phone) doc.text(`Phone: ${so.customer.phone}`);
+                if (ship.address1) {
+                  const addrParts = [ship.address1, ship.address2, ship.city, ship.province_code || ship.province, ship.zip, ship.country].filter(Boolean);
+                  doc.text(`Ship to: ${addrParts.join(", ")}`);
+                }
+
+                doc.moveDown(1.5);
+                doc.moveTo(50, doc.y).lineTo(50 + W, doc.y).strokeColor("#cccccc").lineWidth(1).stroke();
+                doc.moveDown(0.5);
+
+                // Column headers
+                const col1 = 50, col2 = 50 + W - 180, col3 = 50 + W - 100, col4 = 50 + W - 40;
+                doc.fontSize(9).font("Helvetica-Bold").fillColor("#666666");
+                doc.text("PRODUCT", col1, doc.y, { width: col2 - col1 - 10 });
+                doc.text("QTY", col2, doc.y - doc.currentLineHeight(), { width: 40, align: "center" });
+                doc.text("UNIT", col3, doc.y - doc.currentLineHeight(), { width: 50, align: "right" });
+                doc.text("TOTAL", col4 - 10, doc.y - doc.currentLineHeight(), { width: 60, align: "right" });
+                doc.moveDown(0.3);
+                doc.moveTo(50, doc.y).lineTo(50 + W, doc.y).strokeColor("#cccccc").lineWidth(0.5).stroke();
+                doc.moveDown(0.5);
+
+                // Line items
+                for (const li of so.line_items || []) {
+                  if (doc.y > doc.page.height - 120) doc.addPage();
+                  const itemName = li.title + (li.variant_title && li.variant_title !== "Default Title" ? ` — ${li.variant_title}` : "");
+                  const unitPrice = parseFloat(li.price || "0");
+                  const lineTotal = unitPrice * (li.quantity || 1);
+                  const rowY = doc.y;
+                  doc.fontSize(10).font("Helvetica").fillColor("#000000");
+                  doc.text(itemName, col1, rowY, { width: col2 - col1 - 10 });
+                  doc.text(String(li.quantity || 1), col2, rowY, { width: 40, align: "center" });
+                  doc.text(`$${unitPrice.toFixed(2)}`, col3, rowY, { width: 50, align: "right" });
+                  doc.text(`$${lineTotal.toFixed(2)}`, col4 - 10, rowY, { width: 60, align: "right" });
+                  const afterY = doc.y;
+                  doc.y = Math.max(afterY, rowY + 16);
+                  doc.moveDown(0.3);
+                }
+
+                // Shipping lines
+                for (const sl of so.shipping_lines || []) {
+                  const rowY = doc.y;
+                  doc.fontSize(10).font("Helvetica").fillColor("#555555");
+                  doc.text(`Shipping: ${sl.title}`, col1, rowY, { width: col2 - col1 - 10 });
+                  doc.text(`$${parseFloat(sl.price || "0").toFixed(2)}`, col4 - 10, rowY, { width: 60, align: "right" });
+                  doc.y = Math.max(doc.y, rowY + 16);
+                  doc.moveDown(0.3);
+                }
+
+                doc.moveDown(0.5);
+                doc.moveTo(50, doc.y).lineTo(50 + W, doc.y).strokeColor("#cccccc").lineWidth(1).stroke();
+                doc.moveDown(0.5);
+
+                // Totals
+                const totals = [
+                  ["Subtotal", `$${parseFloat(so.subtotal_price || "0").toFixed(2)}`],
+                  ["Tax (GST included)", `$${parseFloat(so.total_tax || "0").toFixed(2)}`],
+                  ["TOTAL", `$${parseFloat(so.total_price || "0").toFixed(2)} AUD`],
+                ];
+                for (const [label, val] of totals) {
+                  const rowY = doc.y;
+                  const isBold = label === "TOTAL";
+                  doc.fontSize(isBold ? 11 : 10).font(isBold ? "Helvetica-Bold" : "Helvetica").fillColor("#000000");
+                  doc.text(label, col1, rowY);
+                  doc.text(val, col4 - 10, rowY, { width: 60, align: "right" });
+                  doc.y = Math.max(doc.y, rowY + (isBold ? 18 : 14));
+                  doc.moveDown(0.2);
+                }
+
+                doc.end();
+              });
               shopifyOrderPdfEntry = {
                 fileName: `Shopify_Order_${so.name.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`,
                 mimeType: "application/pdf",
@@ -2479,18 +2532,28 @@ export async function registerRoutes(
           }
         })
       ).then(results => results.filter(Boolean));
-      // Prepend source document PDFs so they appear first in Milo — one for each order type
-      if (portalRequestPdfEntry) {
-        attachmentsPayload.unshift(portalRequestPdfEntry);
-        console.log(`[PURAX-SYNC] Prepended portal original order PDF: ${portalRequestPdfEntry.fileName}`);
-      }
-      if (emailOriginalPdfEntry) {
-        attachmentsPayload.unshift(emailOriginalPdfEntry);
-        console.log(`[PURAX-SYNC] Prepended email original order PDF: ${emailOriginalPdfEntry.fileName}`);
-      }
+      // For Shopify orders: use the Shopify PDF as pdfData (primary doc Milo processes as "Original Invoice")
+      // and add the CRM summary PDF as an attachment. For all other orders keep CRM PDF as pdfData.
+      let primaryPdfData: string;
       if (shopifyOrderPdfEntry) {
-        attachmentsPayload.unshift(shopifyOrderPdfEntry);
-        console.log(`[PURAX-SYNC] Prepended Shopify original order PDF: ${shopifyOrderPdfEntry.fileName}`);
+        primaryPdfData = shopifyOrderPdfEntry.data;
+        // CRM summary goes as an attachment after the Shopify original
+        attachmentsPayload.unshift({
+          fileName: `CRM_Order_Summary_${order.orderNumber}.pdf`,
+          mimeType: "application/pdf",
+          data: pdfBuffer.toString("base64"),
+        });
+        console.log(`[PURAX-SYNC] Shopify order: using Shopify PDF as pdfData (${shopifyOrderPdfEntry.data.length} base64 chars), CRM PDF as attachment`);
+      } else {
+        primaryPdfData = pdfBuffer.toString("base64");
+        if (portalRequestPdfEntry) {
+          attachmentsPayload.unshift(portalRequestPdfEntry);
+          console.log(`[PURAX-SYNC] Prepended portal original order PDF: ${portalRequestPdfEntry.fileName}`);
+        }
+        if (emailOriginalPdfEntry) {
+          attachmentsPayload.unshift(emailOriginalPdfEntry);
+          console.log(`[PURAX-SYNC] Prepended email original order PDF: ${emailOriginalPdfEntry.fileName}`);
+        }
       }
       console.log(`[PURAX-SYNC] ${attachmentsPayload.length} attachment(s) will be sent to Purax (including source doc)`);
 
@@ -2510,7 +2573,7 @@ export async function registerRoutes(
         subtotal: `$${order.subtotal}`,
         tax: `$${order.tax}`,
         totalAmount: `$${order.total}`,
-        pdfData: pdfBuffer.toString("base64"),
+        pdfData: primaryPdfData,
         originalEmailHtml: originalEmailHtml || null,
         attachments: attachmentsPayload,
         isUrgent: false,
