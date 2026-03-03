@@ -2077,6 +2077,72 @@ export async function registerRoutes(
         }
       }
 
+      // If this order came from Shopify, fetch the original Shopify order and generate a PDF to attach
+      let shopifyOrderPdfEntry: { fileName: string; mimeType: string; data: string } | null = null;
+      const shopifyOrderId = (order as any).shopifyOrderId;
+      const shopifyOrderNumber = (order as any).shopifyOrderNumber;
+      if (shopifyOrderId) {
+        try {
+          const shopifyConfig = await getShopifyConfig();
+          if (shopifyConfig.storeDomain && shopifyConfig.apiToken) {
+            const shopifyRes = await fetch(
+              `https://${shopifyConfig.storeDomain}/admin/api/2026-01/orders/${shopifyOrderId}.json`,
+              { headers: { "X-Shopify-Access-Token": shopifyConfig.apiToken, "Content-Type": "application/json" } }
+            );
+            if (shopifyRes.ok) {
+              const { order: so } = await shopifyRes.json() as any;
+              const lineItemRows = (so.line_items || []).map((li: any) => `
+                <tr>
+                  <td style="padding:6px 8px;border-bottom:1px solid #eee;">${li.title}${li.variant_title ? ` — ${li.variant_title}` : ""}</td>
+                  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">${li.quantity}</td>
+                  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">$${parseFloat(li.price).toFixed(2)}</td>
+                  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">$${(li.quantity * parseFloat(li.price)).toFixed(2)}</td>
+                </tr>`).join("");
+              const shipping = so.shipping_address || so.billing_address || {};
+              const shippingLines = (so.shipping_lines || []).map((sl: any) =>
+                `<tr><td colspan="3" style="padding:6px 8px;border-bottom:1px solid #eee;">Shipping: ${sl.title}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">$${parseFloat(sl.price).toFixed(2)}</td></tr>`
+              ).join("");
+              const shopifyHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
+                <style>body{font-family:Arial,sans-serif;font-size:13px;color:#222;margin:30px;}
+                h1{font-size:20px;margin-bottom:4px;}
+                table{width:100%;border-collapse:collapse;margin-top:16px;}
+                th{background:#f5f5f5;padding:8px;text-align:left;border-bottom:2px solid #ddd;font-size:12px;}
+                .total-row td{font-weight:bold;padding:8px;border-top:2px solid #ccc;}
+                .meta{color:#555;margin-bottom:4px;font-size:12px;}
+                </style></head><body>
+                <h1>Shopify Order ${so.name}</h1>
+                <p class="meta"><strong>Date:</strong> ${new Date(so.created_at).toLocaleString("en-AU")}</p>
+                <p class="meta"><strong>Payment:</strong> ${so.financial_status}</p>
+                <p class="meta"><strong>Customer:</strong> ${so.customer?.first_name || ""} ${so.customer?.last_name || ""} — ${so.customer?.email || ""}</p>
+                ${shipping.address1 ? `<p class="meta"><strong>Ship to:</strong> ${[shipping.address1, shipping.address2, shipping.city, shipping.province, shipping.zip, shipping.country].filter(Boolean).join(", ")}</p>` : ""}
+                ${so.note ? `<p class="meta"><strong>Customer Note:</strong> ${so.note}</p>` : ""}
+                <table>
+                  <thead><tr><th>Product</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Unit Price</th><th style="text-align:right;">Total</th></tr></thead>
+                  <tbody>${lineItemRows}${shippingLines}</tbody>
+                  <tfoot>
+                    <tr class="total-row"><td colspan="3">Subtotal</td><td style="text-align:right;">$${parseFloat(so.subtotal_price).toFixed(2)}</td></tr>
+                    <tr class="total-row"><td colspan="3">Tax</td><td style="text-align:right;">$${parseFloat(so.total_tax).toFixed(2)}</td></tr>
+                    <tr class="total-row"><td colspan="3">TOTAL</td><td style="text-align:right;">$${parseFloat(so.total_price).toFixed(2)}</td></tr>
+                  </tfoot>
+                </table>
+                </body></html>`;
+              const { convertHtmlToPdf } = await import("./html-to-pdf");
+              const shopifyPdfBuffer = await convertHtmlToPdf(shopifyHtml);
+              shopifyOrderPdfEntry = {
+                fileName: `Shopify_Order_${so.name.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`,
+                mimeType: "application/pdf",
+                data: shopifyPdfBuffer.toString("base64"),
+              };
+              console.log(`[PURAX-SYNC] Generated Shopify original order PDF for ${so.name} (${shopifyPdfBuffer.length} bytes)`);
+            } else {
+              console.warn(`[PURAX-SYNC] Could not fetch Shopify order ${shopifyOrderId}: ${shopifyRes.status}`);
+            }
+          }
+        } catch (shopifyErr: any) {
+          console.warn(`[PURAX-SYNC] Failed to fetch/generate Shopify order PDF:`, shopifyErr.message);
+        }
+      }
+
       const linesWithProducts = await Promise.all(
         lines.map(async (line) => {
           let productName = line.descriptionOverride || "Unknown Item";
@@ -2183,6 +2249,11 @@ export async function registerRoutes(
           }
         })
       ).then(results => results.filter(Boolean));
+      // Prepend the original Shopify order PDF so it appears first in Milo
+      if (shopifyOrderPdfEntry) {
+        attachmentsPayload.unshift(shopifyOrderPdfEntry);
+        console.log(`[PURAX-SYNC] Prepended Shopify original order PDF: ${shopifyOrderPdfEntry.fileName}`);
+      }
       console.log(`[PURAX-SYNC] ${attachmentsPayload.length} attachment(s) will be sent to Purax`);
 
       const webhookPayload = {
