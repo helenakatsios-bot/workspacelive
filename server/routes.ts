@@ -442,11 +442,19 @@ export async function registerRoutes(
     try {
       const { priceListId } = req.body;
       if (!priceListId) return res.status(400).json({ message: "priceListId is required" });
-      const result = await pool.query(
-        `INSERT INTO company_additional_price_lists (company_id, price_list_id) VALUES ($1, $2) ON CONFLICT (company_id, price_list_id) DO NOTHING RETURNING *`,
+      // Check if already assigned to avoid duplicate errors if constraint doesn't exist yet
+      const existing = await pool.query(
+        `SELECT id FROM company_additional_price_lists WHERE company_id = $1 AND price_list_id = $2`,
         [req.params.id, priceListId]
       );
-      res.status(201).json(result.rows[0] || { message: "Already assigned" });
+      if (existing.rows.length > 0) {
+        return res.status(201).json({ message: "Already assigned" });
+      }
+      const result = await pool.query(
+        `INSERT INTO company_additional_price_lists (company_id, price_list_id) VALUES ($1, $2) RETURNING *`,
+        [req.params.id, priceListId]
+      );
+      res.status(201).json(result.rows[0]);
     } catch (err) {
       console.error("Add additional price list error:", err);
       res.status(500).json({ message: "Failed to add additional price list" });

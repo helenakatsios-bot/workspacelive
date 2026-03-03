@@ -642,15 +642,27 @@ async function runStartupTasks() {
     console.error("Email backfill error:", error);
   }
 
-  // Ensure company_additional_price_lists table exists
+  // Ensure company_additional_price_lists table exists with unique constraint
   try {
     await pool.query(`CREATE TABLE IF NOT EXISTS company_additional_price_lists (
       id varchar(36) PRIMARY KEY DEFAULT gen_random_uuid(),
       company_id varchar(36) NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
       price_list_id varchar(36) NOT NULL REFERENCES price_lists(id) ON DELETE CASCADE,
-      created_at timestamp NOT NULL DEFAULT NOW(),
-      UNIQUE(company_id, price_list_id)
+      created_at timestamp NOT NULL DEFAULT NOW()
     )`);
+    // Add unique constraint if missing (handles tables created before constraint was defined)
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'capl_company_pricelist_unique'
+          AND conrelid = 'company_additional_price_lists'::regclass
+        ) THEN
+          ALTER TABLE company_additional_price_lists
+          ADD CONSTRAINT capl_company_pricelist_unique UNIQUE (company_id, price_list_id);
+        END IF;
+      END $$;
+    `);
   } catch (err: any) {
     console.error("company_additional_price_lists table error:", err.message);
   }
@@ -700,10 +712,10 @@ async function runStartupTasks() {
       await pool.query(`UPDATE companies SET price_list_id = $1 WHERE id = $2 AND (price_list_id IS NULL OR price_list_id != $1)`, [interiorsId, compId]);
       if (comerKingPlResult.rows.length > 0) {
         const ckPlId = comerKingPlResult.rows[0].id;
-        await pool.query(
-          `INSERT INTO company_additional_price_lists (company_id, price_list_id) VALUES ($1, $2) ON CONFLICT (company_id, price_list_id) DO NOTHING`,
-          [compId, ckPlId]
-        );
+        const ckExists = await pool.query(`SELECT id FROM company_additional_price_lists WHERE company_id = $1 AND price_list_id = $2`, [compId, ckPlId]);
+        if (ckExists.rows.length === 0) {
+          await pool.query(`INSERT INTO company_additional_price_lists (company_id, price_list_id) VALUES ($1, $2)`, [compId, ckPlId]);
+        }
         console.log(`COMER & KING: main=Interiors, additional=COMER & KING price list`);
       }
     }
