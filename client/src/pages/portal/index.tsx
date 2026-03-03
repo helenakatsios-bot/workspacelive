@@ -1006,7 +1006,19 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
       const fullNotes = [notes, ...extraNotes].filter(Boolean).join("\n\n");
       const activeCustomLines = customLines.filter((l) => l.size && l.qty > 0);
       const payload = {
-        items: cartItems.map((item) => ({ productId: item.id, quantity: item.qty, filling: fillings[item.id] || undefined, weight: weights[item.id] || undefined })),
+        items: cartItems.map((item) => {
+          const unitPrice = parseFloat(item.effectivePrice || item.unitPrice || "0");
+          const lineTotal = Math.round(item.qty * unitPrice * 100) / 100;
+          return {
+            productId: item.id,
+            productName: item.name,
+            quantity: item.qty,
+            filling: fillings[item.id] || undefined,
+            weight: weights[item.id] || undefined,
+            unitPrice,
+            lineTotal,
+          };
+        }),
         customItems: activeCustomLines.map((l) => ({ size: l.size, filling: l.filling, weight: l.weight, quantity: l.qty })),
         customerNotes: fullNotes,
         customerName: customerName || undefined,
