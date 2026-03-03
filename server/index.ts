@@ -701,6 +701,59 @@ async function runStartupTasks() {
     console.error("50X110CM price fix error:", err.message);
   }
 
+  // Fix 50X110CM prices across ALL fillings in 6 price lists (Standard, Interiors, Poulos, Frontline, Hotel Luxury Collection, Dyne)
+  try {
+    const targetLists2 = await pool.query(`
+      SELECT id FROM price_lists WHERE name IN ('Standard', 'Interiors', 'Poulos', 'Frontline', 'Hotel Luxury Collection', 'Dyne')
+    `);
+    if (targetLists2.rows.length > 0) {
+      const targetIds2 = targetLists2.rows.map((r: any) => r.id);
+      const allCorrections = [
+        { filling: '100% Feather',         weight: 'Normal',          price: '50.00'  },
+        { filling: '100% Feather',         weight: 'Firm Fill',       price: '50.60'  },
+        { filling: '100% Feather',         weight: 'Extra Firm Fill', price: '51.80'  },
+        { filling: 'Duck Feather - Foam',  weight: 'Normal',          price: '50.00'  },
+        { filling: 'Duck Feather - Foam',  weight: 'Firm Fill',       price: '50.60'  },
+        { filling: 'Duck Feather - Foam',  weight: 'Extra Firm Fill', price: '51.20'  },
+        { filling: 'Duck Feather - Fibre', weight: 'Normal',          price: '50.00'  },
+        { filling: 'Duck Feather - Fibre', weight: 'Firm Fill',       price: '50.60'  },
+        { filling: 'Duck Feather - Fibre', weight: 'Extra Firm Fill', price: '51.20'  },
+        { filling: '100% Polyester',       weight: 'Normal',          price: '46.00'  },
+        { filling: '100% Polyester',       weight: 'Firm Fill',       price: '46.60'  },
+        { filling: '100% Polyester',       weight: 'Extra Firm Fill', price: '47.20'  },
+        { filling: '30% Down 70% Feather', weight: 'Normal',          price: '95.00'  },
+        { filling: '30% Down 70% Feather', weight: 'Firm Fill',       price: '96.00'  },
+        { filling: '30% Down 70% Feather', weight: 'Extra Firm Fill', price: '96.60'  },
+        { filling: '50% Down 50% Feather', weight: 'Normal',          price: '113.25' },
+        { filling: '50% Down 50% Feather', weight: 'Firm Fill',       price: '114.25' },
+        { filling: '50% Down 50% Feather', weight: 'Extra Firm Fill', price: '114.85' },
+        { filling: '80% Down 20% Feather', weight: 'Normal',          price: '136.25' },
+        { filling: '80% Down 20% Feather', weight: 'Firm Fill',       price: '137.25' },
+        { filling: '80% Down 20% Feather', weight: 'Extra Firm Fill', price: '137.85' },
+      ];
+      let fixCount2 = 0;
+      for (const { filling, weight, price } of allCorrections) {
+        const res = await pool.query(`
+          UPDATE price_list_prices plp
+          SET unit_price = $1, updated_at = NOW()
+          FROM products p
+          WHERE plp.product_id = p.id
+            AND p.name ILIKE '%50%110%'
+            AND p.category ILIKE '%insert%'
+            AND plp.filling = $2
+            AND plp.weight = $3
+            AND plp.price_list_id = ANY($4::varchar[])
+            AND plp.unit_price != $1
+        `, [price, filling, weight, targetIds2]);
+        if (res.rowCount && res.rowCount > 0) fixCount2 += res.rowCount;
+      }
+      if (fixCount2 > 0) console.log(`Fixed ${fixCount2} 50X110CM price entries across all fillings and 6 price lists`);
+      else console.log(`50X110CM prices already correct across all 6 price lists`);
+    }
+  } catch (err: any) {
+    console.error("50X110CM full price fix error:", err.message);
+  }
+
   // COMER & KING: assign Interiors as main price list, COMER & KING list as additional
   try {
     const comerKingComp = await pool.query(`SELECT id FROM companies WHERE trading_name ILIKE '%COMER%KING%' OR legal_name ILIKE '%COMER%KING%' LIMIT 1`);
