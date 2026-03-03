@@ -817,6 +817,14 @@ async function runStartupTasks() {
     console.error("BULK rename error:", err.message);
   }
 
+  // Rename 'CUST INSERTS' / 'CUST INSERT' → 'CUSTOM INSERTS' in products table
+  try {
+    const r2 = await pool.query(`UPDATE products SET category = 'CUSTOM INSERTS' WHERE UPPER(TRIM(category)) IN ('CUST INSERTS', 'CUST INSERT', 'CUSTOM INSERT')`);
+    if (r2.rowCount && r2.rowCount > 0) console.log(`Renamed CUST INSERTS → CUSTOM INSERTS: ${r2.rowCount} products`);
+  } catch (err: any) {
+    console.error("CUST INSERTS rename error:", err.message);
+  }
+
   // Add Xero invoice columns to orders table if not present
   try {
     await pool.query(`
