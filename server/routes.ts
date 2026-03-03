@@ -2194,11 +2194,12 @@ export async function registerRoutes(
       const token = await getStoredToken();
       if (!token) return res.status(400).json({ message: "Xero not connected. Go to Settings → Xero to connect your account first." });
 
-      // Refresh token if needed
+      // Refresh token if needed — if this returns false the token is expired and can't be refreshed
       const xero = createXeroClient(`${req.protocol}://${req.get("host")}/api/xero/callback`);
-      await refreshTokenIfNeeded(xero, token);
+      const refreshed = await refreshTokenIfNeeded(xero, token);
+      if (!refreshed) return res.status(401).json({ message: "Your Xero connection has expired. Please go to Settings → Xero and reconnect your account." });
       const freshToken = await getStoredToken();
-      if (!freshToken) return res.status(400).json({ message: "Xero token expired. Please reconnect in Settings → Xero." });
+      if (!freshToken) return res.status(401).json({ message: "Your Xero connection has expired. Please go to Settings → Xero and reconnect your account." });
 
       const accessToken = freshToken.accessToken;
       const tenantId = freshToken.tenantId;
@@ -2348,9 +2349,10 @@ export async function registerRoutes(
       if (!token) return res.status(400).json({ message: "Xero not connected." });
 
       const xero = createXeroClient(`${req.protocol}://${req.get("host")}/api/xero/callback`);
-      await refreshTokenIfNeeded(xero, token);
+      const refreshed2 = await refreshTokenIfNeeded(xero, token);
+      if (!refreshed2) return res.status(401).json({ message: "Your Xero connection has expired. Please go to Settings → Xero and reconnect your account." });
       const freshToken = await getStoredToken();
-      if (!freshToken) return res.status(400).json({ message: "Xero token expired. Please reconnect." });
+      if (!freshToken) return res.status(401).json({ message: "Your Xero connection has expired. Please reconnect." });
 
       const fetchRes = await fetch(`https://api.xero.com/api.xro/2.0/Invoices/${xeroInvoiceId}`, {
         headers: { Authorization: `Bearer ${freshToken.accessToken}`, "Xero-Tenant-Id": freshToken.tenantId, Accept: "application/json" },
