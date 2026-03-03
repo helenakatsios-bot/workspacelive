@@ -655,6 +655,40 @@ async function runStartupTasks() {
     console.error("company_additional_price_lists table error:", err.message);
   }
 
+  // Fix 50X110CM 100% Feather prices in 5 price lists (Normal=$50, Firm Fill=$50.60, Extra Firm Fill=$51.80)
+  try {
+    const targetLists = await pool.query(`
+      SELECT id FROM price_lists WHERE name IN ('Standard', 'Interiors', 'Poulos', 'Frontline', 'Hotel Luxury Collection')
+    `);
+    if (targetLists.rows.length > 0) {
+      const targetIds = targetLists.rows.map((r: any) => r.id);
+      const corrections = [
+        { weight: 'Normal',          price: '50.00' },
+        { weight: 'Firm Fill',       price: '50.60' },
+        { weight: 'Extra Firm Fill', price: '51.80' },
+      ];
+      let fixCount = 0;
+      for (const { weight, price } of corrections) {
+        const res = await pool.query(`
+          UPDATE price_list_prices plp
+          SET unit_price = $1, updated_at = NOW()
+          FROM products p
+          WHERE plp.product_id = p.id
+            AND p.name ILIKE '%50%110%'
+            AND p.category ILIKE '%insert%'
+            AND plp.filling ILIKE '%100% feather%'
+            AND plp.weight = $2
+            AND plp.price_list_id = ANY($3::varchar[])
+            AND plp.unit_price != $1
+        `, [price, weight, targetIds]);
+        if (res.rowCount && res.rowCount > 0) fixCount += res.rowCount;
+      }
+      if (fixCount > 0) console.log(`Fixed ${fixCount} 50X110CM 100% Feather price entries across 5 price lists`);
+    }
+  } catch (err: any) {
+    console.error("50X110CM price fix error:", err.message);
+  }
+
   // COMER & KING: assign Interiors as main price list, COMER & KING list as additional
   try {
     const comerKingComp = await pool.query(`SELECT id FROM companies WHERE trading_name ILIKE '%COMER%KING%' OR legal_name ILIKE '%COMER%KING%' LIMIT 1`);
