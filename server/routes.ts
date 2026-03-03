@@ -2143,6 +2143,80 @@ export async function registerRoutes(
         }
       }
 
+      // For email-sourced orders (non-Shopify): convert original email to a PDF attachment
+      let emailOriginalPdfEntry: { fileName: string; mimeType: string; data: string } | null = null;
+      if (!shopifyOrderId && originalEmailHtml) {
+        try {
+          const { convertHtmlToPdf } = await import("./html-to-pdf");
+          const emailPdfBuffer = await convertHtmlToPdf(originalEmailHtml);
+          emailOriginalPdfEntry = {
+            fileName: `Original_Email_Order_${order.orderNumber}.pdf`,
+            mimeType: "application/pdf",
+            data: emailPdfBuffer.toString("base64"),
+          };
+          console.log(`[PURAX-SYNC] Generated original email PDF for order ${order.orderNumber} (${emailPdfBuffer.length} bytes)`);
+        } catch (emailPdfErr: any) {
+          console.warn(`[PURAX-SYNC] Failed to generate email PDF:`, emailPdfErr.message);
+        }
+      }
+
+      // For portal order requests (non-Shopify, non-email): generate a summary PDF of what the customer submitted
+      let portalRequestPdfEntry: { fileName: string; mimeType: string; data: string } | null = null;
+      if (!shopifyOrderId && !originalEmailHtml) {
+        try {
+          const srcReqResult = await pool.query(
+            `SELECT cor.*, c.trading_name, c.legal_name
+             FROM customer_order_requests cor
+             LEFT JOIN companies c ON c.id = cor.company_id
+             WHERE cor.converted_order_id = $1 LIMIT 1`,
+            [order.id]
+          );
+          if (srcReqResult.rows.length > 0) {
+            const req = srcReqResult.rows[0];
+            const items: any[] = Array.isArray(req.items) ? req.items : (req.items ? JSON.parse(req.items) : []);
+            const customerLines = [
+              ...items.map((item: any) =>
+                `<tr><td style="padding:6px 8px;border-bottom:1px solid #eee;">${item.productName || item.name || "Item"}</td>
+                 <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">${item.quantity || item.qty || 1}</td>
+                 <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">$${parseFloat(item.unitPrice || item.price || "0").toFixed(2)}</td>
+                 <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">$${(parseFloat(item.unitPrice || item.price || "0") * parseInt(item.quantity || item.qty || "1")).toFixed(2)}</td></tr>`
+              ),
+            ].join("");
+            const companyDisplay = req.trading_name || req.legal_name || req.company_name || "";
+            const submittedAt = req.created_at ? new Date(req.created_at).toLocaleString("en-AU") : "";
+            const portalHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
+              <style>body{font-family:Arial,sans-serif;font-size:13px;color:#222;margin:30px;}
+              h1{font-size:20px;margin-bottom:4px;}
+              table{width:100%;border-collapse:collapse;margin-top:16px;}
+              th{background:#f5f5f5;padding:8px;text-align:left;border-bottom:2px solid #ddd;font-size:12px;}
+              .meta{color:#555;margin-bottom:4px;font-size:12px;}
+              </style></head><body>
+              <h1>Original Customer Portal Order</h1>
+              <p class="meta"><strong>Submitted:</strong> ${submittedAt}</p>
+              <p class="meta"><strong>Company:</strong> ${companyDisplay}</p>
+              ${req.customer_name ? `<p class="meta"><strong>Contact:</strong> ${req.customer_name}</p>` : ""}
+              ${req.customer_email ? `<p class="meta"><strong>Email:</strong> ${req.customer_email}</p>` : ""}
+              ${req.customer_notes ? `<p class="meta"><strong>Customer Notes:</strong> ${req.customer_notes}</p>` : ""}
+              <table>
+                <thead><tr><th>Product</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Unit Price</th><th style="text-align:right;">Total</th></tr></thead>
+                <tbody>${customerLines || '<tr><td colspan="4" style="padding:8px;color:#888;">(No line items recorded)</td></tr>'}</tbody>
+                ${req.total_amount ? `<tfoot><tr><td colspan="3" style="padding:8px;font-weight:bold;">Total</td><td style="padding:8px;font-weight:bold;text-align:right;">$${parseFloat(req.total_amount).toFixed(2)}</td></tr></tfoot>` : ""}
+              </table>
+              </body></html>`;
+            const { convertHtmlToPdf } = await import("./html-to-pdf");
+            const portalPdfBuffer = await convertHtmlToPdf(portalHtml);
+            portalRequestPdfEntry = {
+              fileName: `Original_Portal_Order_${order.orderNumber}.pdf`,
+              mimeType: "application/pdf",
+              data: portalPdfBuffer.toString("base64"),
+            };
+            console.log(`[PURAX-SYNC] Generated portal order request PDF for order ${order.orderNumber} (${portalPdfBuffer.length} bytes)`);
+          }
+        } catch (portalPdfErr: any) {
+          console.warn(`[PURAX-SYNC] Failed to generate portal order request PDF:`, portalPdfErr.message);
+        }
+      }
+
       const linesWithProducts = await Promise.all(
         lines.map(async (line) => {
           let productName = line.descriptionOverride || "Unknown Item";
@@ -2249,12 +2323,20 @@ export async function registerRoutes(
           }
         })
       ).then(results => results.filter(Boolean));
-      // Prepend the original Shopify order PDF so it appears first in Milo
+      // Prepend source document PDFs so they appear first in Milo — one for each order type
+      if (portalRequestPdfEntry) {
+        attachmentsPayload.unshift(portalRequestPdfEntry);
+        console.log(`[PURAX-SYNC] Prepended portal original order PDF: ${portalRequestPdfEntry.fileName}`);
+      }
+      if (emailOriginalPdfEntry) {
+        attachmentsPayload.unshift(emailOriginalPdfEntry);
+        console.log(`[PURAX-SYNC] Prepended email original order PDF: ${emailOriginalPdfEntry.fileName}`);
+      }
       if (shopifyOrderPdfEntry) {
         attachmentsPayload.unshift(shopifyOrderPdfEntry);
         console.log(`[PURAX-SYNC] Prepended Shopify original order PDF: ${shopifyOrderPdfEntry.fileName}`);
       }
-      console.log(`[PURAX-SYNC] ${attachmentsPayload.length} attachment(s) will be sent to Purax`);
+      console.log(`[PURAX-SYNC] ${attachmentsPayload.length} attachment(s) will be sent to Purax (including source doc)`);
 
       const webhookPayload = {
         orderNumber: order.orderNumber,
