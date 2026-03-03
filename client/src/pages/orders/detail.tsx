@@ -554,6 +554,40 @@ export default function OrderDetailPage() {
     },
   });
 
+  const sendToXeroMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/orders/${params?.id}/send-to-xero`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id, "activities"] });
+      toast({ title: "Sent to Xero", description: data.message || "Draft invoice created in Xero." });
+    },
+    onError: async (error: any) => {
+      let msg = "Failed to send to Xero.";
+      try { if (error?.message) msg = error.message; } catch {}
+      toast({ title: "Xero sync failed", description: msg, variant: "destructive" });
+    },
+  });
+
+  const syncXeroStatusMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/orders/${params?.id}/sync-xero-status`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id, "activities"] });
+      toast({ title: "Xero status synced", description: data.message });
+    },
+    onError: async (error: any) => {
+      let msg = "Failed to check Xero status.";
+      try { if (error?.message) msg = error.message; } catch {}
+      toast({ title: "Xero sync failed", description: msg, variant: "destructive" });
+    },
+  });
+
   const handleAddNote = async () => {
     if (!newNote.trim()) return;
     setIsSubmittingNote(true);
@@ -1039,14 +1073,47 @@ export default function OrderDetailPage() {
           </Button>
           {canEdit && (
             <>
-              <Button
-                variant="outline"
-                onClick={() => navigate(`/invoices/new?orderId=${params?.id}`)}
-                data-testid="button-generate-invoice"
-              >
-                <Receipt className="w-4 h-4 mr-2" />
-                Generate Invoice
-              </Button>
+              {!(order as any).xeroInvoiceId ? (
+                <Button
+                  variant="outline"
+                  onClick={() => sendToXeroMutation.mutate()}
+                  disabled={sendToXeroMutation.isPending}
+                  data-testid="button-send-to-xero"
+                >
+                  {sendToXeroMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                  )}
+                  {sendToXeroMutation.isPending ? "Sending..." : "Send to Xero"}
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => syncXeroStatusMutation.mutate()}
+                    disabled={syncXeroStatusMutation.isPending}
+                    data-testid="button-sync-xero-status"
+                  >
+                    {syncXeroStatusMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                    )}
+                    {syncXeroStatusMutation.isPending ? "Checking..." : "Check Xero Payment"}
+                  </Button>
+                  {(order as any).xeroOnlineUrl && (
+                    <Button
+                      variant="outline"
+                      onClick={() => window.open((order as any).xeroOnlineUrl, "_blank")}
+                      data-testid="button-open-xero"
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Open in Xero
+                    </Button>
+                  )}
+                </>
+              )}
               {orderInvoice && (
                 <Button
                   variant="outline"
@@ -1280,6 +1347,42 @@ export default function OrderDetailPage() {
                   )}
                 </div>
               </div>
+
+              {(order as any).xeroInvoiceId && (
+                <div className="flex items-start gap-3 pt-2 border-t">
+                  <ExternalLink className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Xero Invoice</p>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      {(order as any).xeroInvoiceStatus === "PAID" ? (
+                        <Badge variant="outline" className="gap-1 text-green-600 border-green-300 dark:text-green-400 dark:border-green-700">
+                          <CheckCircle className="w-3 h-3" />
+                          Paid
+                        </Badge>
+                      ) : (order as any).xeroInvoiceStatus === "AUTHORISED" ? (
+                        <Badge variant="outline" className="gap-1 text-blue-600 border-blue-300 dark:text-blue-400 dark:border-blue-700">
+                          <CheckCircle className="w-3 h-3" />
+                          Approved
+                        </Badge>
+                      ) : (order as any).xeroInvoiceStatus === "VOIDED" ? (
+                        <Badge variant="outline" className="gap-1 text-red-600 border-red-300">
+                          <AlertTriangle className="w-3 h-3" />
+                          Voided
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="gap-1">
+                          {(order as any).xeroInvoiceStatus || "Draft"}
+                        </Badge>
+                      )}
+                      {(order as any).xeroOnlineUrl && (
+                        <a href={(order as any).xeroOnlineUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline dark:text-blue-400">
+                          View in Xero →
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {orderInvoice && (
                 <div className="flex items-start gap-3 pt-2 border-t">

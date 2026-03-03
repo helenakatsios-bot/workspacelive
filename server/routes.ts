@@ -10,7 +10,7 @@ import { eq, ilike, and, sql, inArray } from "drizzle-orm";
 import express from "express";
 import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, insertQuoteSchema, emails as emailsTable, contacts, companies as companiesTable, outlookTokens as outlookTokensTable, crmSettings, portalUsers, attachments } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
-import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero, autoSyncXeroInvoices, repairMissingInvoiceRecords } from "./xero";
+import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero, autoSyncXeroInvoices, repairMissingInvoiceRecords, getXeroSyncMapping, saveXeroSyncMapping } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks, fetchEmailAttachments, downloadAttachment } from "./outlook";
 
 declare module "express-session" {
@@ -2180,6 +2180,214 @@ export async function registerRoutes(
     } catch (error) {
       console.error("PDF generation error:", error);
       res.status(500).json({ message: "Failed to generate PDF" });
+    }
+  });
+
+  // ==================== XERO INVOICE ROUTES ====================
+
+  // Send order to Xero as a DRAFT invoice
+  app.post("/api/orders/:id/send-to-xero", requireEdit, async (req, res) => {
+    try {
+      const order = await storage.getOrder(req.params.id);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+
+      const token = await getStoredToken();
+      if (!token) return res.status(400).json({ message: "Xero not connected. Go to Settings → Xero to connect your account first." });
+
+      // Refresh token if needed
+      const xero = createXeroClient(`${req.protocol}://${req.get("host")}/api/xero/callback`);
+      await refreshTokenIfNeeded(xero, token);
+      const freshToken = await getStoredToken();
+      if (!freshToken) return res.status(400).json({ message: "Xero token expired. Please reconnect in Settings → Xero." });
+
+      const accessToken = freshToken.accessToken;
+      const tenantId = freshToken.tenantId;
+
+      // Get company and order lines
+      const company = order.companyId ? await storage.getCompany(order.companyId) : null;
+      if (!company) return res.status(400).json({ message: "Order has no company — cannot create Xero invoice." });
+
+      const lines = await storage.getOrderLines(order.id);
+      if (!lines.length) return res.status(400).json({ message: "Order has no line items — add items before sending to Xero." });
+
+      // 1. Get or create Xero contact for this company
+      let xeroContactId: string | null = null;
+      const companyMapping = await getXeroSyncMapping("company", company.id);
+      if (companyMapping) {
+        xeroContactId = companyMapping.xeroId;
+      } else {
+        // Search Xero for matching contact by name
+        const searchRes = await fetch(
+          `https://api.xero.com/api.xro/2.0/Contacts?searchTerm=${encodeURIComponent(company.tradingName || company.legalName)}`,
+          { headers: { Authorization: `Bearer ${accessToken}`, "Xero-Tenant-Id": tenantId, Accept: "application/json" } }
+        );
+        if (searchRes.ok) {
+          const searchData = await searchRes.json() as any;
+          const found = searchData.Contacts?.find((c: any) =>
+            c.Name?.toLowerCase() === (company.tradingName || company.legalName)?.toLowerCase()
+          );
+          if (found?.ContactID) {
+            xeroContactId = found.ContactID;
+            await saveXeroSyncMapping("company", company.id, xeroContactId!);
+          }
+        }
+        // If still not found, create new contact in Xero
+        if (!xeroContactId) {
+          const createContactRes = await fetch("https://api.xero.com/api.xro/2.0/Contacts", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Xero-Tenant-Id": tenantId, "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ Contacts: [{ Name: company.tradingName || company.legalName }] }),
+          });
+          if (!createContactRes.ok) {
+            const err = await createContactRes.text();
+            console.error("[XERO] Failed to create contact:", err);
+            return res.status(500).json({ message: "Failed to create Xero contact for this company." });
+          }
+          const contactData = await createContactRes.json() as any;
+          xeroContactId = contactData.Contacts?.[0]?.ContactID;
+          if (xeroContactId) await saveXeroSyncMapping("company", company.id, xeroContactId);
+        }
+      }
+      if (!xeroContactId) return res.status(500).json({ message: "Could not create or find Xero contact." });
+
+      // 2. Build line items
+      const xeroLineItems = lines.map((line: any) => ({
+        Description: line.descriptionOverride || "Item",
+        Quantity: parseFloat(line.quantity) || 1,
+        UnitAmount: parseFloat(line.unitPrice) || 0,
+        AccountCode: "200",
+        TaxType: "OUTPUT",
+      }));
+
+      // 3. Due date based on payment terms
+      const issueDate = new Date();
+      const dueDays = company.paymentTerms === "Net 60" ? 60 : company.paymentTerms === "Net 45" ? 45 : company.paymentTerms === "Net 30" ? 30 : company.paymentTerms === "Net 14" ? 14 : company.paymentTerms === "Net 7" ? 7 : 30;
+      const dueDate = new Date(issueDate.getTime() + dueDays * 86400000);
+      const fmt = (d: Date) => d.toISOString().split("T")[0];
+
+      // 4. Create DRAFT invoice in Xero
+      const invoicePayload = {
+        Invoices: [{
+          Type: "ACCREC",
+          Contact: { ContactID: xeroContactId },
+          LineItems: xeroLineItems,
+          Date: fmt(issueDate),
+          DueDate: fmt(dueDate),
+          Status: "DRAFT",
+          Reference: `Order #${order.orderNumber}`,
+          LineAmountTypes: "EXCLUSIVE",
+        }],
+      };
+
+      const createRes = await fetch("https://api.xero.com/api.xro/2.0/Invoices", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Xero-Tenant-Id": tenantId, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(invoicePayload),
+      });
+
+      if (!createRes.ok) {
+        const errText = await createRes.text();
+        console.error("[XERO] Failed to create invoice:", createRes.status, errText);
+        return res.status(500).json({ message: `Xero returned an error: ${createRes.status}. Check that Xero is connected in Settings.` });
+      }
+
+      const createData = await createRes.json() as any;
+      const xeroInv = createData.Invoices?.[0];
+      if (!xeroInv?.InvoiceID) return res.status(500).json({ message: "Xero did not return an invoice ID." });
+
+      // 5. Get online invoice URL
+      let onlineUrl: string | null = null;
+      try {
+        const urlRes = await fetch(`https://api.xero.com/api.xro/2.0/Invoices/${xeroInv.InvoiceID}/OnlineInvoice`, {
+          headers: { Authorization: `Bearer ${accessToken}`, "Xero-Tenant-Id": tenantId, Accept: "application/json" },
+        });
+        if (urlRes.ok) {
+          const urlData = await urlRes.json() as any;
+          onlineUrl = urlData.OnlineInvoices?.[0]?.OnlineInvoiceUrl || null;
+        }
+      } catch {}
+
+      // 6. Save Xero invoice ID on the order
+      await pool.query(
+        `UPDATE orders SET xero_invoice_id = $1, xero_invoice_status = 'DRAFT', xero_online_url = $2, updated_at = NOW() WHERE id = $3`,
+        [xeroInv.InvoiceID, onlineUrl, order.id]
+      );
+
+      // 7. Log activity
+      await storage.createActivity({
+        entityType: "order",
+        entityId: order.id,
+        activityType: "system",
+        content: `Sent to Xero as draft invoice (Xero Invoice ID: ${xeroInv.InvoiceID})`,
+        createdBy: (req as any).session?.userId || null,
+      });
+
+      return res.json({
+        success: true,
+        xeroInvoiceId: xeroInv.InvoiceID,
+        xeroInvoiceStatus: "DRAFT",
+        xeroOnlineUrl: onlineUrl,
+        message: `Draft invoice created in Xero for Order #${order.orderNumber}. Open Xero to review, approve, and send to the customer.`,
+      });
+    } catch (err: any) {
+      console.error("[XERO] Send to Xero error:", err.message);
+      return res.status(500).json({ message: err.message || "Failed to send to Xero." });
+    }
+  });
+
+  // Sync Xero invoice status back to the CRM order
+  app.post("/api/orders/:id/sync-xero-status", requireEdit, async (req, res) => {
+    try {
+      const order = await storage.getOrder(req.params.id);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+
+      const xeroInvoiceId = (order as any).xeroInvoiceId;
+      if (!xeroInvoiceId) return res.status(400).json({ message: "This order has not been sent to Xero yet." });
+
+      const token = await getStoredToken();
+      if (!token) return res.status(400).json({ message: "Xero not connected." });
+
+      const xero = createXeroClient(`${req.protocol}://${req.get("host")}/api/xero/callback`);
+      await refreshTokenIfNeeded(xero, token);
+      const freshToken = await getStoredToken();
+      if (!freshToken) return res.status(400).json({ message: "Xero token expired. Please reconnect." });
+
+      const fetchRes = await fetch(`https://api.xero.com/api.xro/2.0/Invoices/${xeroInvoiceId}`, {
+        headers: { Authorization: `Bearer ${freshToken.accessToken}`, "Xero-Tenant-Id": freshToken.tenantId, Accept: "application/json" },
+      });
+      if (!fetchRes.ok) return res.status(500).json({ message: "Could not fetch invoice status from Xero." });
+
+      const data = await fetchRes.json() as any;
+      const xeroInv = data.Invoices?.[0];
+      if (!xeroInv) return res.status(404).json({ message: "Invoice not found in Xero." });
+
+      const newStatus = xeroInv.Status as string; // DRAFT, SUBMITTED, AUTHORISED, PAID, VOIDED
+      const isPaid = newStatus === "PAID";
+
+      await pool.query(
+        `UPDATE orders SET xero_invoice_status = $1, payment_status = $2, updated_at = NOW() WHERE id = $3`,
+        [newStatus, isPaid ? "paid" : (order as any).paymentStatus, order.id]
+      );
+
+      if (isPaid) {
+        await storage.createActivity({
+          entityType: "order",
+          activityType: "system",
+          entityId: order.id,
+          content: `Xero invoice marked as PAID — payment synced to order`,
+          createdBy: (req as any).session?.userId || null,
+        });
+      }
+
+      return res.json({
+        success: true,
+        xeroInvoiceStatus: newStatus,
+        isPaid,
+        message: isPaid ? "Invoice is PAID in Xero — order marked as paid." : `Invoice status in Xero: ${newStatus}`,
+      });
+    } catch (err: any) {
+      console.error("[XERO] Sync status error:", err.message);
+      return res.status(500).json({ message: err.message || "Failed to sync Xero status." });
     }
   });
 

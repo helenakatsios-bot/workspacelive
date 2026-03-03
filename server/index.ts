@@ -817,6 +817,18 @@ async function runStartupTasks() {
     console.error("BULK rename error:", err.message);
   }
 
+  // Add Xero invoice columns to orders table if not present
+  try {
+    await pool.query(`
+      ALTER TABLE orders
+        ADD COLUMN IF NOT EXISTS xero_invoice_id TEXT,
+        ADD COLUMN IF NOT EXISTS xero_invoice_status TEXT,
+        ADD COLUMN IF NOT EXISTS xero_online_url TEXT
+    `);
+  } catch (err: any) {
+    console.error("Xero columns migration error:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 

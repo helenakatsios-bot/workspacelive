@@ -183,6 +183,9 @@ export const orders = pgTable("orders", {
   shopifyOrderId: text("shopify_order_id"),
   shopifyOrderNumber: text("shopify_order_number"),
   shopifyFulfillmentId: text("shopify_fulfillment_id"),
+  xeroInvoiceId: text("xero_invoice_id"),
+  xeroInvoiceStatus: text("xero_invoice_status"), // DRAFT, SUBMITTED, AUTHORISED, PAID, VOIDED
+  xeroOnlineUrl: text("xero_online_url"),
   createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
