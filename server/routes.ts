@@ -2419,12 +2419,19 @@ export async function registerRoutes(
 
       const customerAddress = order.customerAddress || company?.shippingAddress || company?.billingAddress || "";
 
-      // Build notes string — order number always at the top so Milo can clearly identify the order
-      const noteParts: string[] = [];
-      noteParts.push(`CRM Order Number: ${order.orderNumber}`);
-      if (order.customerNotes) noteParts.push(`Customer Notes:\n${order.customerNotes}`);
-      if ((order as any).notes) noteParts.push(`Internal Notes:\n${(order as any).notes}`);
-      const combinedNotes = noteParts.join("\n\n");
+      // Build notes — for Shopify orders show only the Shopify order number; for others include CRM context
+      let combinedNotes: string;
+      if (shopifyOrderNumber) {
+        // Shopify orders: just the Shopify order number (clean and simple for Milo)
+        combinedNotes = `Shopify Order ${shopifyOrderNumber}`;
+        if ((order as any).notes) combinedNotes += `\n\n${(order as any).notes}`;
+      } else {
+        const noteParts: string[] = [];
+        noteParts.push(`CRM Order Number: ${order.orderNumber}`);
+        if (order.customerNotes) noteParts.push(`Customer Notes:\n${order.customerNotes}`);
+        if ((order as any).notes) noteParts.push(`Internal Notes:\n${(order as any).notes}`);
+        combinedNotes = noteParts.join("\n\n");
+      }
 
       // Fetch attachment file data from DB and convert to base64 for Purax
       console.log(`[PURAX-SYNC] Found ${orderAttachments.length} attachment(s) for order ${order.orderNumber}`);
@@ -7639,18 +7646,9 @@ Rules:
       const total = parseFloat(payload.total_price || "0");
       const paymentStatus = payload.financial_status === "paid" ? "paid" : "unpaid";
 
-      // Customer notes
-      const noteLines: string[] = [`Shopify Order ${shopifyOrderNumber} — Payment: ${paymentStatus}`];
+      // Customer notes — only store the Shopify order number (clean and minimal for Milo)
+      const noteLines: string[] = [`Shopify Order ${shopifyOrderNumber}`];
       if (payload.note) noteLines.push(payload.note);
-      if (payload.note_attributes?.length) {
-        for (const attr of payload.note_attributes) noteLines.push(`${attr.name}: ${attr.value}`);
-      }
-      if (payload.shipping_lines?.length) {
-        for (const sh of payload.shipping_lines) {
-          const shPrice = parseFloat(sh.price || "0");
-          if (shPrice > 0) noteLines.push(`Shipping (${sh.title || "Standard"}): $${shPrice.toFixed(2)}`);
-        }
-      }
 
       // Map Shopify line items to order request items format
       const lineItems = payload.line_items || [];
