@@ -677,23 +677,6 @@ async function runStartupTasks() {
     console.error("COMER & KING price list assignment error:", err.message);
   }
 
-  // Fix 50X110CM INSERT prices across POULOS, INTERIORS, HOTEL LUXURY COLLECTION, FRONTLINE, STANDARD
-  try {
-    const targetLists = ['poulos','interiors','hotel luxury collection','frontline','standard'];
-    const prods = await pool.query(`SELECT id FROM products WHERE name ILIKE '%50%110%' AND category = 'INSERTS'`);
-    const productIds = prods.rows.map((r: any) => r.id);
-    if (productIds.length > 0) {
-      const r1 = await pool.query(`UPDATE price_list_prices plp SET unit_price = '50.00' FROM price_lists pl WHERE plp.price_list_id = pl.id AND LOWER(pl.name) = ANY($1::text[]) AND plp.product_id = ANY($2::varchar[]) AND LOWER(plp.weight) = 'normal'`, [targetLists, productIds]);
-      const r2 = await pool.query(`UPDATE price_list_prices plp SET unit_price = '50.60' FROM price_lists pl WHERE plp.price_list_id = pl.id AND LOWER(pl.name) = ANY($1::text[]) AND plp.product_id = ANY($2::varchar[]) AND LOWER(plp.weight) = 'firm fill'`, [targetLists, productIds]);
-      const r3 = await pool.query(`UPDATE price_list_prices plp SET unit_price = '51.80' FROM price_lists pl WHERE plp.price_list_id = pl.id AND LOWER(pl.name) = ANY($1::text[]) AND plp.product_id = ANY($2::varchar[]) AND LOWER(plp.weight) = 'extra firm fill'`, [targetLists, productIds]);
-      if ((r1.rowCount || 0) + (r2.rowCount || 0) + (r3.rowCount || 0) > 0) {
-        console.log(`50X110CM price fix: Normal=${r1.rowCount} Firm=${r2.rowCount} ExtraFirm=${r3.rowCount} rows updated`);
-      }
-    }
-  } catch (err: any) {
-    console.error("50X110CM price fix error:", err.message);
-  }
-
   console.log("All startup tasks completed");
 }
 
