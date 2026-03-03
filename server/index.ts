@@ -642,6 +642,23 @@ async function runStartupTasks() {
     console.error("Email backfill error:", error);
   }
 
+  // Assign "COMER & KING" price list to the COMER & KING/COD company
+  try {
+    const comerKingPl = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'COMER%KING' OR name ILIKE 'COMER & KING' LIMIT 1`);
+    if (comerKingPl.rows.length > 0) {
+      const plId = comerKingPl.rows[0].id;
+      const updated = await pool.query(
+        `UPDATE companies SET price_list_id = $1 WHERE (trading_name ILIKE '%COMER%KING%' OR legal_name ILIKE '%COMER%KING%') AND (price_list_id IS NULL OR price_list_id != $1)`,
+        [plId]
+      );
+      if (updated.rowCount && updated.rowCount > 0) {
+        console.log(`Assigned COMER & KING price list (${plId}) to ${updated.rowCount} company/companies`);
+      }
+    }
+  } catch (err: any) {
+    console.error("COMER & KING price list assignment error:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 
