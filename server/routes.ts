@@ -2305,14 +2305,21 @@ export async function registerRoutes(
         return "200"; // default fallback — review in Xero
       };
 
+      // Frontline gets a 6.5% discount on everything except INSERTS, BULK, and JACKETS
+      const isFrontline = (company.tradingName || company.legalName || "").toUpperCase().includes("FRONTLINE");
+      const FRONTLINE_DISCOUNT_EXEMPT_CATS = ['INSERT', 'BULK', 'JACKET'];
       const xeroLineItems = lines.map((line: any) => {
         const info = productInfoMap[line.productId] || { category: "", name: "" };
         const description = line.descriptionOverride || "";
+        const cat = (info.category || "").toUpperCase();
+        const isDiscountExempt = FRONTLINE_DISCOUNT_EXEMPT_CATS.some(e => cat.includes(e));
+        const discountRate = isFrontline && !isDiscountExempt ? 6.5 : undefined;
         return {
           Description: description || info.name || "Item",
           Quantity: parseFloat(line.quantity) || 1,
           UnitAmount: parseFloat(line.unitPrice) || 0,
           AccountCode: getXeroAccountCode(info.category, info.name, description),
+          ...(discountRate !== undefined ? { DiscountRate: discountRate } : {}),
         };
       });
 

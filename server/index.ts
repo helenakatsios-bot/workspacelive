@@ -957,9 +957,8 @@ async function runStartupTasks() {
   }
 
 
-  // ===== JENNIFER BUTTON PRICE LIST MIGRATION =====
+  // ===== JENNIFER BUTTON PRICE LIST MIGRATION (always re-imports from CSV) =====
   try {
-    // Find Jennifer Button's company and their current price list
     const jbResult = await pool.query(
       `SELECT c.id, c.price_list_id FROM companies c
        JOIN portal_users pu ON pu.company_id = c.id
@@ -967,37 +966,55 @@ async function runStartupTasks() {
     );
     if (jbResult.rows.length > 0 && jbResult.rows[0].price_list_id) {
       const jbPriceListId = jbResult.rows[0].price_list_id;
-      const existingCount = await pool.query(
-        `SELECT COUNT(*) FROM price_list_prices WHERE price_list_id = $1`,
-        [jbPriceListId]
-      );
-      const count = parseInt(existingCount.rows[0].count);
-      if (count === 0) {
-        console.log(`[JB-PRICES] Jennifer Button price list ${jbPriceListId} is empty — importing prices...`);
-        // Load the CSV
-        const csvPath = path.join(process.cwd(), "server/data/jennifer_button_prices.csv");
-        if (!fs.existsSync(csvPath)) {
-          console.log("[JB-PRICES] CSV file not found, skipping");
+      const csvPath = path.join(process.cwd(), "server/data/jennifer_button_prices.csv");
+      if (!fs.existsSync(csvPath)) {
+        console.log("[JB-PRICES] CSV file not found, skipping");
+      } else {
+        const csvText = fs.readFileSync(csvPath, "utf8");
+        const csvLines = csvText.split("\n").filter(l => l.trim());
+        const csvRowCount = csvLines.length - 1; // minus header
+
+        // Check if already imported this exact CSV version (match by row count)
+        const existingCount = await pool.query(
+          `SELECT COUNT(*) FROM price_list_prices WHERE price_list_id = $1`,
+          [jbPriceListId]
+        );
+        const currentCount = parseInt(existingCount.rows[0].count);
+        if (currentCount === csvRowCount) {
+          console.log(`[JB-PRICES] Already up to date (${currentCount} prices) — skipping`);
         } else {
-          const csvText = fs.readFileSync(csvPath, "utf8");
-          const lines = csvText.split("\n").filter(l => l.trim());
-          // header: Product Name,Category,SKU,Filling,Weight,Customer Price,...
-          const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim().toLowerCase());
+          console.log(`[JB-PRICES] Reimporting JB price list (DB has ${currentCount}, CSV has ${csvRowCount} rows)...`);
+
+          // Clear existing prices
+          await pool.query(`DELETE FROM price_list_prices WHERE price_list_id = $1`, [jbPriceListId]);
+
+          // Parse headers
+          const headers = csvLines[0].split(",").map(h => h.replace(/"/g, "").trim().toLowerCase());
           const nameIdx = headers.findIndex(h => h === "product name" || h === "product" || h === "name");
           const fillingIdx = headers.findIndex(h => h === "filling");
           const weightIdx = headers.findIndex(h => h === "weight");
           const priceIdx = headers.findIndex(h => h.includes("price") && !h.includes("product"));
 
-          // Load products for matching
-          const allProds = await pool.query("SELECT id, name, category FROM products WHERE active = true");
-          const productByName = new Map();
+          // JB CSV names that differ from DB product names
+          const JB_NAME_MAP: Record<string, string> = {
+            'SINGLE - HUNGARIAN STRIPPED QUILT': 'SINGLE - HUNGARIAN',
+            'DOUBLE - HUNGARIAN STRIPPED QUILT': 'DOUBLE - HUNGARIAN',
+            'QUEEN - HUNGARIAN STRIPPED QUILT': 'QUEEN - HUNGARIAN',
+            'KING - HUNGARIAN STRIPPED QUILT': 'KING - HUNGARIAN',
+            'SUPER KING - HUNGARIAN STRIPPED QUILT': 'SUPER KING - HUNGARIAN',
+          };
+
+          // Load all products for exact name matching (take first match per name)
+          const allProds = await pool.query("SELECT id, name FROM products WHERE active = true ORDER BY id");
+          const productByName = new Map<string, string>();
           for (const p of allProds.rows) {
-            productByName.set(p.name.toUpperCase().trim(), p.id);
+            const key = p.name.toUpperCase().trim();
+            if (!productByName.has(key)) productByName.set(key, p.id);
           }
 
           let imported = 0, skipped = 0;
-          for (let i = 1; i < lines.length; i++) {
-            const parts = lines[i].split(",").map(p => p.replace(/"/g, "").trim());
+          for (let i = 1; i < csvLines.length; i++) {
+            const parts = csvLines[i].split(",").map((p: string) => p.replace(/"/g, "").trim());
             const productName = nameIdx >= 0 ? (parts[nameIdx] || "") : "";
             const filling = fillingIdx >= 0 ? (parts[fillingIdx] || null) : null;
             const weight = weightIdx >= 0 ? (parts[weightIdx] || null) : null;
@@ -1006,7 +1023,10 @@ async function runStartupTasks() {
 
             if (!productName || isNaN(price) || price <= 0) { skipped++; continue; }
 
-            const productId = productByName.get(productName.toUpperCase().trim());
+            // Try exact name, then JB name map fallback
+            const upperName = productName.toUpperCase().trim();
+            const mappedName = (JB_NAME_MAP[upperName] || upperName).toUpperCase().trim();
+            const productId = productByName.get(upperName) || productByName.get(mappedName);
             if (!productId) { skipped++; continue; }
 
             try {
@@ -1020,10 +1040,8 @@ async function runStartupTasks() {
               skipped++;
             }
           }
-          console.log(`[JB-PRICES] Imported ${imported} prices, skipped ${skipped}`);
+          console.log(`[JB-PRICES] Done: imported ${imported}, skipped ${skipped} (no matching product)`);
         }
-      } else {
-        console.log(`[JB-PRICES] Jennifer Button price list already has ${count} prices — skipping`);
       }
     }
   } catch (err: any) {
