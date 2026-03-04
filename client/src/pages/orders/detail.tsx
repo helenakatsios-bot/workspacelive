@@ -1091,6 +1091,19 @@ export default function OrderDetailPage() {
                 <>
                   <Button
                     variant="outline"
+                    onClick={() => sendToXeroMutation.mutate()}
+                    disabled={sendToXeroMutation.isPending}
+                    data-testid="button-resend-to-xero"
+                  >
+                    {sendToXeroMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                    )}
+                    {sendToXeroMutation.isPending ? "Sending..." : "Resend to Xero"}
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={() => syncXeroStatusMutation.mutate()}
                     disabled={syncXeroStatusMutation.isPending}
                     data-testid="button-sync-xero-status"
