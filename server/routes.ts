@@ -2684,9 +2684,8 @@ export async function registerRoutes(
       if (!shopifyOrderId && !originalEmailHtml) {
         try {
           const srcReqResult = await pool.query(
-            `SELECT cor.*, c.trading_name, c.legal_name
+            `SELECT cor.*
              FROM customer_order_requests cor
-             LEFT JOIN companies c ON c.id = cor.company_id
              WHERE cor.converted_order_id = $1 LIMIT 1`,
             [order.id]
           );
@@ -2701,7 +2700,9 @@ export async function registerRoutes(
                  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">$${(parseFloat(item.unitPrice || item.price || "0") * parseInt(item.quantity || item.qty || "1")).toFixed(2)}</td></tr>`
               ),
             ].join("");
-            const companyDisplay = req.trading_name || req.legal_name || req.company_name || "";
+            const companyDisplay = req.company_name || "";
+            const contactDisplay = req.contact_name || "";
+            const contactEmail = req.contact_email || "";
             const submittedAt = req.created_at ? new Date(req.created_at).toLocaleString("en-AU") : "";
             const portalHtml = `<!DOCTYPE html><html><head><meta charset="utf-8">
               <style>body{font-family:Arial,sans-serif;font-size:13px;color:#222;margin:30px;}
@@ -2713,8 +2714,8 @@ export async function registerRoutes(
               <h1>Original Customer Portal Order</h1>
               <p class="meta"><strong>Submitted:</strong> ${submittedAt}</p>
               <p class="meta"><strong>Company:</strong> ${companyDisplay}</p>
-              ${req.customer_name ? `<p class="meta"><strong>Contact:</strong> ${req.customer_name}</p>` : ""}
-              ${req.customer_email ? `<p class="meta"><strong>Email:</strong> ${req.customer_email}</p>` : ""}
+              ${contactDisplay ? `<p class="meta"><strong>Contact:</strong> ${contactDisplay}</p>` : ""}
+              ${contactEmail ? `<p class="meta"><strong>Email:</strong> ${contactEmail}</p>` : ""}
               ${req.customer_notes ? `<p class="meta"><strong>Customer Notes:</strong> ${req.customer_notes}</p>` : ""}
               <table>
                 <thead><tr><th>Product</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Unit Price</th><th style="text-align:right;">Total</th></tr></thead>
