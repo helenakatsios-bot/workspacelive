@@ -2468,6 +2468,33 @@ export async function registerRoutes(
   });
 
   // ==================== PURAX SYNC ROUTES ====================
+  // Manually mark an order as completed (e.g. after Milo finishes it)
+  app.post("/api/orders/:id/mark-completed", requireEdit, async (req, res) => {
+    try {
+      const order = await storage.getOrder(req.params.id);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+
+      await pool.query(
+        `UPDATE orders SET status = 'completed', updated_at = NOW() WHERE id = $1`,
+        [order.id]
+      );
+
+      await storage.createActivity({
+        entityType: "order",
+        entityId: order.id,
+        activityType: "system",
+        content: `Order manually marked as completed (Milo order done).`,
+        createdBy: (req.user as any)?.id || null,
+      });
+
+      console.log(`[MARK-COMPLETED] Order ${order.orderNumber} marked as completed by user ${(req.user as any)?.name || "unknown"}`);
+      return res.json({ success: true, message: "Order marked as completed" });
+    } catch (err: any) {
+      console.error("[MARK-COMPLETED] Error:", err.message);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/orders/:id/sync-purax", requireEdit, async (req, res) => {
     try {
       const order = await storage.getOrder(req.params.id);

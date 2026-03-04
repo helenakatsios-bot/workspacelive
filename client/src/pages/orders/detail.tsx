@@ -537,6 +537,22 @@ export default function OrderDetailPage() {
     },
   });
 
+  const markCompletedMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/orders/${params?.id}/mark-completed`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id, "activities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({ title: "Order completed", description: "Order has been marked as completed. Customers can now see it's done in their portal." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed", description: error?.message || "Could not mark order as completed.", variant: "destructive" });
+    },
+  });
+
   const fulfillShopifyMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/orders/${params?.id}/fulfill-shopify`, { notifyCustomer: true });
@@ -1212,6 +1228,26 @@ export default function OrderDetailPage() {
                       ? "Retry Purax"
                       : "Send to Purax"}
               </Button>
+              {order.puraxSyncStatus === "sent" && order.status !== "completed" && (
+                <Button
+                  variant="default"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => {
+                    if (window.confirm("Mark this order as completed? This will update the order status and notify the customer portal.")) {
+                      markCompletedMutation.mutate();
+                    }
+                  }}
+                  disabled={markCompletedMutation.isPending}
+                  data-testid="button-mark-completed"
+                >
+                  {markCompletedMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                  )}
+                  {markCompletedMutation.isPending ? "Completing..." : "Mark as Completed"}
+                </Button>
+              )}
             </>
           )}
         </div>
