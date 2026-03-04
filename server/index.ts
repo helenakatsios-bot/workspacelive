@@ -1,4 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
+import fs from "fs";
+import path from "path";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -952,6 +954,80 @@ async function runStartupTasks() {
     `);
   } catch (err: any) {
     console.error("Xero columns migration error:", err.message);
+  }
+
+
+  // ===== JENNIFER BUTTON PRICE LIST MIGRATION =====
+  try {
+    // Find Jennifer Button's company and their current price list
+    const jbResult = await pool.query(
+      `SELECT c.id, c.price_list_id FROM companies c
+       JOIN portal_users pu ON pu.company_id = c.id
+       WHERE pu.email = 'jennifer@jenniferbutton.com.au' LIMIT 1`
+    );
+    if (jbResult.rows.length > 0 && jbResult.rows[0].price_list_id) {
+      const jbPriceListId = jbResult.rows[0].price_list_id;
+      const existingCount = await pool.query(
+        `SELECT COUNT(*) FROM price_list_prices WHERE price_list_id = $1`,
+        [jbPriceListId]
+      );
+      const count = parseInt(existingCount.rows[0].count);
+      if (count === 0) {
+        console.log(`[JB-PRICES] Jennifer Button price list ${jbPriceListId} is empty — importing prices...`);
+        // Load the CSV
+        const csvPath = path.join(process.cwd(), "server/data/jennifer_button_prices.csv");
+        if (!fs.existsSync(csvPath)) {
+          console.log("[JB-PRICES] CSV file not found, skipping");
+        } else {
+          const csvText = fs.readFileSync(csvPath, "utf8");
+          const lines = csvText.split("\n").filter(l => l.trim());
+          // header: Product Name,Category,SKU,Filling,Weight,Customer Price,...
+          const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim().toLowerCase());
+          const nameIdx = headers.findIndex(h => h === "product name" || h === "product" || h === "name");
+          const fillingIdx = headers.findIndex(h => h === "filling");
+          const weightIdx = headers.findIndex(h => h === "weight");
+          const priceIdx = headers.findIndex(h => h.includes("price") && !h.includes("product"));
+
+          // Load products for matching
+          const allProds = await pool.query("SELECT id, name, category FROM products WHERE active = true");
+          const productByName = new Map();
+          for (const p of allProds.rows) {
+            productByName.set(p.name.toUpperCase().trim(), p.id);
+          }
+
+          let imported = 0, skipped = 0;
+          for (let i = 1; i < lines.length; i++) {
+            const parts = lines[i].split(",").map(p => p.replace(/"/g, "").trim());
+            const productName = nameIdx >= 0 ? (parts[nameIdx] || "") : "";
+            const filling = fillingIdx >= 0 ? (parts[fillingIdx] || null) : null;
+            const weight = weightIdx >= 0 ? (parts[weightIdx] || null) : null;
+            const priceRaw = priceIdx >= 0 ? parts[priceIdx].replace(/[^0-9.]/g, "") : "";
+            const price = parseFloat(priceRaw);
+
+            if (!productName || isNaN(price) || price <= 0) { skipped++; continue; }
+
+            const productId = productByName.get(productName.toUpperCase().trim());
+            if (!productId) { skipped++; continue; }
+
+            try {
+              await pool.query(
+                `INSERT INTO price_list_prices (id, price_list_id, product_id, filling, weight, unit_price)
+                 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)`,
+                [jbPriceListId, productId, filling || null, weight || null, price.toFixed(2)]
+              );
+              imported++;
+            } catch (e: any) {
+              skipped++;
+            }
+          }
+          console.log(`[JB-PRICES] Imported ${imported} prices, skipped ${skipped}`);
+        }
+      } else {
+        console.log(`[JB-PRICES] Jennifer Button price list already has ${count} prices — skipping`);
+      }
+    }
+  } catch (err: any) {
+    console.error("[JB-PRICES] Migration error:", err.message);
   }
 
   console.log("All startup tasks completed");
