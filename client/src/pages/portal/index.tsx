@@ -341,7 +341,10 @@ function PortalDashboard({ onNavigate }: { onNavigate: (page: string) => void })
               <TableBody>
                 {dashboard.recentOrders.map((order: any) => (
                   <TableRow key={order.id} className="cursor-pointer hover-elevate" onClick={() => onNavigate(`order-${order.id}`)} data-testid={`row-order-${order.id}`}>
-                    <TableCell className="font-medium">{order.orderNumber}</TableCell>
+                    <TableCell>
+                      <p className="font-medium">{order.orderNumber}</p>
+                      {order.customerName && <p className="text-xs text-muted-foreground">{order.customerName}</p>}
+                    </TableCell>
                     <TableCell>{order.orderDate ? format(new Date(order.orderDate), "MMM d, yyyy") : "-"}</TableCell>
                     <TableCell><StatusBadge status={order.status} /></TableCell>
                     <TableCell>
@@ -509,7 +512,10 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
               <TableBody>
                 {filtered.map((order: any) => (
                   <TableRow key={order.id} className="cursor-pointer" onClick={() => onNavigate(`order-${order.id}`)} data-testid={`row-order-${order.id}`}>
-                    <TableCell className="font-medium">{order.orderNumber}</TableCell>
+                    <TableCell>
+                      <p className="font-medium">{order.orderNumber}</p>
+                      {order.customerName && <p className="text-xs text-muted-foreground">{order.customerName}</p>}
+                    </TableCell>
                     <TableCell>{order.orderDate ? format(new Date(order.orderDate), "MMM d, yyyy") : "-"}</TableCell>
                     <TableCell><StatusBadge status={order.status} /></TableCell>
                     <TableCell>

@@ -6353,6 +6353,7 @@ Rules:
         tax: r.tax,
         total: r.total,
         customerNotes: r.customer_notes,
+        customerName: r.customer_name,
         shippingMethod: r.shipping_method,
         trackingNumber: r.tracking_number,
         companyName: r.company_name,
@@ -6996,7 +6997,7 @@ Rules:
         FROM invoices WHERE company_id = $1
       `, [companyId]);
       const recentOrders = await pool.query(`
-        SELECT id, order_number, status, order_date, total
+        SELECT id, order_number, status, order_date, total, customer_name, payment_status
         FROM orders WHERE company_id = $1
         ORDER BY order_date DESC LIMIT 5
       `, [companyId]);
@@ -7014,6 +7015,8 @@ Rules:
           status: r.status,
           orderDate: r.order_date,
           total: r.total,
+          customerName: r.customer_name,
+          paymentStatus: r.payment_status,
         })),
       });
     } catch (error) {
