@@ -787,9 +787,14 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
           qty: item.quantity || 1,
         });
       } else {
-        newCart[item.productId] = item.quantity || 1;
-        if (item.filling) newFillings[item.productId] = item.filling;
-        if (item.weight) newWeights[item.productId] = item.weight;
+        const cartKey = (item.filling || item.weight)
+          ? `${item.productId}::${item.filling || ''}::${item.weight || ''}`
+          : item.productId;
+        newCart[cartKey] = item.quantity || 1;
+        if (!item.filling && !item.weight) {
+          if (item.filling) newFillings[item.productId] = item.filling;
+          if (item.weight) newWeights[item.productId] = item.weight;
+        }
       }
     }
     setCart(newCart);
