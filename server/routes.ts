@@ -2254,34 +2254,43 @@ export async function registerRoutes(
       // 2. Build line items with category-based account codes
       // Fetch product categories for all lines that have a productId
       const productIds = lines.map((l: any) => l.productId).filter(Boolean);
-      const categoryMap: Record<string, string> = {};
+      const productInfoMap: Record<string, { category: string; name: string }> = {};
       if (productIds.length > 0) {
         const catRes = await pool.query(
           `SELECT id, category, name FROM products WHERE id = ANY($1)`,
           [productIds]
         );
         for (const row of catRes.rows) {
-          categoryMap[row.id] = row.category?.toUpperCase() || "";
+          productInfoMap[row.id] = {
+            category: row.category?.toUpperCase() || "",
+            name: row.name?.toUpperCase() || "",
+          };
         }
       }
 
-      const getXeroAccountCode = (category: string, description: string): string => {
+      const getXeroAccountCode = (category: string, productName: string, description: string): string => {
         const cat = (category || "").toUpperCase();
+        const name = (productName || "").toUpperCase();
         const desc = (description || "").toUpperCase();
-        const combined = `${cat} ${desc}`;
-        // Check in priority order — specific first, broad last
+        const combined = `${cat} ${name} ${desc}`;
+        // Specific product name matches first
+        if (name.includes("FREIGHT") || desc.includes("FREIGHT")) return "44000";
+        if (name.includes("DROP SHIP") || desc.includes("DROP SHIP")) return "41111";
+        if (name.includes("SHOPIFY FEE") || name.includes("SHOPIFY FEES") || desc.includes("SHOPIFY FEE")) return "51111";
+        // Category-based matches in priority order
         if (cat.includes("INSERT")) return "41180";
         if (cat.includes("PILLOW")) return "41120";
         if (cat.includes("MATTRESS TOPPER") || cat.includes("MATTRESS_TOPPER")) return "41194";
         if (cat.includes("QUILT CASE") || cat.includes("CASSETTE") || cat.includes("CHANNELLED")) return "41130";
         if (cat.includes("JACKET") || cat.includes("MEN JACKET") || cat.includes("WOMAN JACKET")) return "41195";
         if (cat.includes("JAPARA")) return "41185";
-        // Bulk filling must come before generic FILL check
         if (cat.includes("BULK") || cat.includes("LOOSE FILL")) return "41140";
-        // Quilts/blankets — broad match: QUILT, BLANKET, FILLED, FILL (Hungarian etc.), STRIP, WINTER
         if (cat.includes("QUILT") || cat.includes("BLANKET") || cat.includes("FILL") ||
             cat.includes("STRIP") || cat.includes("DOWN") || cat.includes("WINTER")) return "41110";
-        // Fall back to description-based matching
+        // Fall back to combined text matching
+        if (combined.includes("FREIGHT")) return "44000";
+        if (combined.includes("DROP SHIP")) return "41111";
+        if (combined.includes("SHOPIFY")) return "51111";
         if (combined.includes("INSERT")) return "41180";
         if (combined.includes("PILLOW")) return "41120";
         if (combined.includes("MATTRESS TOPPER")) return "41194";
@@ -2294,13 +2303,13 @@ export async function registerRoutes(
       };
 
       const xeroLineItems = lines.map((line: any) => {
-        const category = categoryMap[line.productId] || "";
+        const info = productInfoMap[line.productId] || { category: "", name: "" };
         const description = line.descriptionOverride || "";
         return {
-          Description: description || "Item",
+          Description: description || info.name || "Item",
           Quantity: parseFloat(line.quantity) || 1,
           UnitAmount: parseFloat(line.unitPrice) || 0,
-          AccountCode: getXeroAccountCode(category, description),
+          AccountCode: getXeroAccountCode(info.category, info.name, description),
         };
       });
 
