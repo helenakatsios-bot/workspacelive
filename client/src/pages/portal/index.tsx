@@ -30,6 +30,9 @@ import {
   Paperclip,
   Trash2,
   Pencil,
+  Mail,
+  Phone,
+  MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -595,12 +598,48 @@ function PortalOrderDetail({ orderId, onBack }: { orderId: string; onBack: () =>
                 <p className="text-sm">{order.orderDate ? format(new Date(order.orderDate), "MMM d, yyyy") : "-"}</p>
               </div>
             </div>
-            {order.shippingMethod && (
+            {order.customerName && (
+              <div className="flex items-start gap-2">
+                <User className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Contact Name</p>
+                  <p className="text-sm">{order.customerName}</p>
+                </div>
+              </div>
+            )}
+            {order.customerEmail && (
+              <div className="flex items-start gap-2">
+                <Mail className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Email</p>
+                  <p className="text-sm">{order.customerEmail}</p>
+                </div>
+              </div>
+            )}
+            {order.customerPhone && (
+              <div className="flex items-start gap-2">
+                <Phone className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Phone</p>
+                  <p className="text-sm">{order.customerPhone}</p>
+                </div>
+              </div>
+            )}
+            {order.customerAddress && (
+              <div className="flex items-start gap-2">
+                <MapPin className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Delivery Address</p>
+                  <p className="text-sm whitespace-pre-line">{order.customerAddress}</p>
+                </div>
+              </div>
+            )}
+            {(order.shippingMethod || order.deliveryMethod) && (
               <div className="flex items-start gap-2">
                 <Truck className="w-4 h-4 mt-0.5 text-muted-foreground" />
                 <div>
-                  <p className="text-xs text-muted-foreground">Shipping</p>
-                  <p className="text-sm">{order.shippingMethod}</p>
+                  <p className="text-xs text-muted-foreground">Delivery Method</p>
+                  <p className="text-sm">{order.shippingMethod || order.deliveryMethod}</p>
                 </div>
               </div>
             )}
@@ -610,6 +649,15 @@ function PortalOrderDetail({ orderId, onBack }: { orderId: string; onBack: () =>
                 <div>
                   <p className="text-xs text-muted-foreground">Tracking</p>
                   <p className="text-sm font-medium">{order.trackingNumber}</p>
+                </div>
+              </div>
+            )}
+            {order.customerNotes && (
+              <div className="flex items-start gap-2">
+                <FileText className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Notes / Instructions</p>
+                  <p className="text-sm whitespace-pre-line">{order.customerNotes}</p>
                 </div>
               </div>
             )}
