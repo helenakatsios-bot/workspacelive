@@ -62,6 +62,7 @@ export default function CompaniesPage() {
   const [bulkDeleteResults, setBulkDeleteResults] = useState<{ deleted: string[]; skipped: { id: string; name: string; reason: string }[] } | null>(null);
   const [assignPriceListOpen, setAssignPriceListOpen] = useState(false);
   const [selectedPriceListId, setSelectedPriceListId] = useState<string>("");
+  const [priceListFilter, setPriceListFilter] = useState<string>("all");
   const { toast } = useToast();
   const { isAdmin } = useAuth();
 
@@ -196,7 +197,8 @@ export default function CompaniesPage() {
         company.abn?.toLowerCase().includes(search.toLowerCase());
       const matchesCredit = creditFilter === "all" || company.creditStatus === creditFilter;
       const matchesGrade = gradeFilter === "all" || company.clientGrade === gradeFilter;
-      return matchesSearch && matchesCredit && matchesGrade;
+      const matchesPriceList = priceListFilter === "all" || (company as any).priceListId === priceListFilter;
+      return matchesSearch && matchesCredit && matchesGrade && matchesPriceList;
     });
 
     result.sort((a, b) => {
@@ -221,7 +223,7 @@ export default function CompaniesPage() {
     });
 
     return result;
-  }, [companies, search, creditFilter, gradeFilter, sortField, sortDir]);
+  }, [companies, search, creditFilter, gradeFilter, priceListFilter, sortField, sortDir]);
 
   const hasRelatedRecords = relatedCounts && (relatedCounts.contacts + relatedCounts.deals + relatedCounts.orders + relatedCounts.quotes + relatedCounts.invoices) > 0;
 
@@ -285,6 +287,42 @@ export default function CompaniesPage() {
           </Button>
         )}
       </PageHeader>
+
+      {/* Price list filter pills */}
+      {priceLists && priceLists.length > 0 && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-sm text-muted-foreground font-medium shrink-0">Filter by price list:</span>
+          <button
+            onClick={() => setPriceListFilter("all")}
+            data-testid="filter-pricelist-all"
+            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
+              priceListFilter === "all"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-background text-muted-foreground border-border hover:border-primary hover:text-foreground"
+            }`}
+          >
+            All ({companies?.length ?? 0})
+          </button>
+          {priceLists.map((pl) => {
+            const count = companies?.filter((c: any) => c.priceListId === pl.id).length ?? 0;
+            if (count === 0) return null;
+            return (
+              <button
+                key={pl.id}
+                onClick={() => setPriceListFilter(priceListFilter === pl.id ? "all" : pl.id)}
+                data-testid={`filter-pricelist-${pl.name.toLowerCase().replace(/\s+/g, "-")}`}
+                className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
+                  priceListFilter === pl.id
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background text-muted-foreground border-border hover:border-primary hover:text-foreground"
+                }`}
+              >
+                {pl.name} ({count})
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {isAdmin && (
         <div className="flex items-center gap-3 flex-wrap">
