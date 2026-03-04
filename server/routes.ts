@@ -5555,10 +5555,10 @@ Rules:
   // Called by the Milo/Purax app when an order has been completed
   app.post("/api/webhooks/milo/order-complete", async (req, res) => {
     try {
-      // Authenticate using the Purax API key
+      // Authenticate using CRM_API_KEY (the shared secret Millie uses to call us)
       const providedKey = req.headers["x-api-key"] || req.headers["authorization"]?.toString().replace("Bearer ", "");
-      const puraxApiKey = process.env.PURAX_API_KEY;
-      if (puraxApiKey && providedKey !== puraxApiKey) {
+      const expectedKey = process.env.CRM_API_KEY;
+      if (expectedKey && providedKey !== expectedKey) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
