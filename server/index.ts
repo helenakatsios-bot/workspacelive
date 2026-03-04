@@ -974,16 +974,8 @@ async function runStartupTasks() {
         const csvLines = csvText.split("\n").filter(l => l.trim());
         const csvRowCount = csvLines.length - 1; // minus header
 
-        // Check if already imported this exact CSV version (match by row count)
-        const existingCount = await pool.query(
-          `SELECT COUNT(*) FROM price_list_prices WHERE price_list_id = $1`,
-          [jbPriceListId]
-        );
-        const currentCount = parseInt(existingCount.rows[0].count);
-        if (currentCount === csvRowCount) {
-          console.log(`[JB-PRICES] Already up to date (${currentCount} prices) — skipping`);
-        } else {
-          console.log(`[JB-PRICES] Reimporting JB price list (DB has ${currentCount}, CSV has ${csvRowCount} rows)...`);
+        console.log(`[JB-PRICES] Reimporting JB price list from CSV (${csvRowCount} rows)...`);
+        {
 
           // Clear existing prices
           await pool.query(`DELETE FROM price_list_prices WHERE price_list_id = $1`, [jbPriceListId]);
