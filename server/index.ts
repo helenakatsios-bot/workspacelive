@@ -987,6 +987,8 @@ async function runStartupTasks() {
           // Parse headers
           const headers = csvLines[0].split(",").map(h => h.replace(/"/g, "").trim().toLowerCase());
           const nameIdx = headers.findIndex(h => h === "product name" || h === "product" || h === "name");
+          const categoryIdx = headers.findIndex(h => h === "category");
+          const skuIdx = headers.findIndex(h => h === "sku");
           const fillingIdx = headers.findIndex(h => h === "filling");
           const weightIdx = headers.findIndex(h => h === "weight");
           const priceIdx = headers.findIndex(h => h.includes("price") && !h.includes("product"));
@@ -1001,17 +1003,21 @@ async function runStartupTasks() {
           };
 
           // Load all products for exact name matching (take first match per name)
-          const allProds = await pool.query("SELECT id, name FROM products WHERE active = true ORDER BY id");
+          const allProds = await pool.query("SELECT id, name, sku FROM products ORDER BY id");
           const productByName = new Map<string, string>();
+          const productBySku = new Map<string, string>();
           for (const p of allProds.rows) {
             const key = p.name.toUpperCase().trim();
             if (!productByName.has(key)) productByName.set(key, p.id);
+            if (p.sku) productBySku.set(p.sku.toUpperCase().trim(), p.id);
           }
 
-          let imported = 0, skipped = 0;
+          let imported = 0, created = 0, skipped = 0;
           for (let i = 1; i < csvLines.length; i++) {
             const parts = csvLines[i].split(",").map((p: string) => p.replace(/"/g, "").trim());
             const productName = nameIdx >= 0 ? (parts[nameIdx] || "") : "";
+            const csvCategory = categoryIdx >= 0 ? (parts[categoryIdx] || "INSERTS").toUpperCase().trim() : "INSERTS";
+            const csvSku = skuIdx >= 0 ? (parts[skuIdx] || "") : "";
             const filling = fillingIdx >= 0 ? (parts[fillingIdx] || null) : null;
             const weight = weightIdx >= 0 ? (parts[weightIdx] || null) : null;
             const priceRaw = priceIdx >= 0 ? parts[priceIdx].replace(/[^0-9.]/g, "") : "";
@@ -1019,10 +1025,33 @@ async function runStartupTasks() {
 
             if (!productName || isNaN(price) || price <= 0) { skipped++; continue; }
 
-            // Try exact name, then JB name map fallback
+            // Try exact name, then JB name map fallback, then by SKU
             const upperName = productName.toUpperCase().trim();
             const mappedName = (JB_NAME_MAP[upperName] || upperName).toUpperCase().trim();
-            const productId = productByName.get(upperName) || productByName.get(mappedName);
+            let productId = productByName.get(upperName) || productByName.get(mappedName) || (csvSku ? productBySku.get(csvSku.toUpperCase()) : undefined);
+
+            // If still not found, create the product so it appears in JB's portal
+            if (!productId) {
+              try {
+                const safeSku = csvSku || `JB-AUTO-${upperName.replace(/[^A-Z0-9]/g, "").slice(0, 20)}`;
+                const newProd = await pool.query(
+                  `INSERT INTO products (id, name, sku, category, active, created_at, updated_at)
+                   VALUES (gen_random_uuid(), $1, $2, $3, true, NOW(), NOW())
+                   ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name, category = EXCLUDED.category RETURNING id`,
+                  [productName, safeSku, csvCategory]
+                );
+                productId = newProd.rows[0]?.id;
+                if (productId) {
+                  productByName.set(upperName, productId);
+                  if (csvSku) productBySku.set(csvSku.toUpperCase(), productId);
+                  created++;
+                  console.log(`[JB-PRICES] Created new product: ${productName} (${csvCategory}, SKU: ${safeSku})`);
+                }
+              } catch (createErr: any) {
+                console.warn(`[JB-PRICES] Could not create product "${productName}": ${createErr.message}`);
+              }
+            }
+
             if (!productId) { skipped++; continue; }
 
             try {
@@ -1036,7 +1065,7 @@ async function runStartupTasks() {
               skipped++;
             }
           }
-          console.log(`[JB-PRICES] Done: imported ${imported}, skipped ${skipped} (no matching product)`);
+          console.log(`[JB-PRICES] Done: imported ${imported}, created ${created} new products, skipped ${skipped}`);
         }
       }
     }
