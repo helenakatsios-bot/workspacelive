@@ -883,7 +883,7 @@ export async function registerRoutes(
       const companyPrices = await storage.getCompanyPrices(req.params.id);
       const priceMap = new Map(companyPrices.map(cp => [cp.productId, cp.unitPrice]));
       const activeProducts = allProducts.filter(p => p.active);
-      const esc = (s: string) => '"' + String(s).replace(/"/g, '""') + '"';
+      const esc = (s: string | null | undefined) => '"' + String(s ?? "").replace(/"/g, '""') + '"';
       let csv = "Product Name,SKU,Category,Default Price,Customer Price\n";
       for (const p of activeProducts) {
         const customPrice = priceMap.get(p.id) || "";
@@ -905,20 +905,22 @@ export async function registerRoutes(
         return res.status(400).json({ message: "prices array is required" });
       }
       const allProducts = await storage.getAllProducts();
-      const skuMap = new Map(allProducts.map(p => [p.sku.toLowerCase(), p.id]));
+      const skuMap = new Map(allProducts.filter(p => p.sku).map(p => [p.sku!.toLowerCase(), p.id]));
+      const nameMap = new Map(allProducts.map(p => [p.name.toLowerCase().trim(), p.id]));
       let imported = 0;
       let skipped = 0;
       const errors: string[] = [];
       for (const item of prices) {
         const sku = (item.sku || "").trim().toLowerCase();
+        const name = (item.name || "").trim().toLowerCase();
         const price = parseFloat(item.price);
-        if (!sku || isNaN(price) || price <= 0) {
+        if (isNaN(price) || price <= 0) {
           skipped++;
           continue;
         }
-        const productId = skuMap.get(sku);
+        const productId = (sku ? skuMap.get(sku) : undefined) || (name ? nameMap.get(name) : undefined);
         if (!productId) {
-          errors.push(`SKU not found: ${item.sku}`);
+          if (sku || name) errors.push(`Product not found: ${item.sku || item.name}`);
           skipped++;
           continue;
         }

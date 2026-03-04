@@ -359,17 +359,15 @@ export default function CompanyDetailPage() {
         toast({ title: "Empty file", description: "The CSV file has no data rows", variant: "destructive" });
         return;
       }
-      const header = lines[0].toLowerCase();
-      const skuCol = header.split(",").findIndex(h => h.replace(/"/g, "").trim() === "sku");
-      const priceCol = header.split(",").findIndex(h => {
-        const val = h.replace(/"/g, "").trim();
-        return val === "customer price" || val === "customerprice" || val === "price";
-      });
-      if (skuCol === -1 || priceCol === -1) {
-        toast({ title: "Invalid CSV format", description: "CSV must have 'SKU' and 'Customer Price' columns", variant: "destructive" });
+      const headerCols = lines[0].split(",").map(h => h.replace(/"/g, "").trim().toLowerCase());
+      const skuCol = headerCols.findIndex(h => h === "sku");
+      const nameCol = headerCols.findIndex(h => h === "product name" || h === "productname" || h === "name");
+      const priceCol = headerCols.findIndex(h => h === "customer price" || h === "customerprice" || h === "price");
+      if (priceCol === -1 || (skuCol === -1 && nameCol === -1)) {
+        toast({ title: "Invalid CSV format", description: "CSV must have a 'Customer Price' column and either 'SKU' or 'Product Name'", variant: "destructive" });
         return;
       }
-      const prices: { sku: string; price: string }[] = [];
+      const prices: { sku: string; name: string; price: string }[] = [];
       for (let i = 1; i < lines.length; i++) {
         const fields: string[] = [];
         let current = "";
@@ -380,14 +378,15 @@ export default function CompanyDetailPage() {
           else current += char;
         }
         fields.push(current.trim());
-        const sku = fields[skuCol]?.replace(/"/g, "").trim();
+        const sku = skuCol >= 0 ? (fields[skuCol]?.replace(/"/g, "").trim() || "") : "";
+        const name = nameCol >= 0 ? (fields[nameCol]?.replace(/"/g, "").trim() || "") : "";
         const price = fields[priceCol]?.replace(/"/g, "").replace(/\$/g, "").trim();
-        if (sku && price && parseFloat(price) > 0) {
-          prices.push({ sku, price });
+        if ((sku || name) && price && parseFloat(price) > 0) {
+          prices.push({ sku, name, price });
         }
       }
       if (prices.length === 0) {
-        toast({ title: "No valid prices", description: "No rows with valid SKU and price found", variant: "destructive" });
+        toast({ title: "No valid prices", description: "No rows with valid SKU or Product Name and price found", variant: "destructive" });
         return;
       }
       const res = await apiRequest("POST", `/api/companies/${params?.id}/prices/bulk`, { prices });
