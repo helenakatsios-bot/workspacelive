@@ -977,17 +977,30 @@ async function runStartupTasks() {
       console.log("[JB-PRICES] Jennifer Button company not found — skipping");
     } else {
       const jbCompanyId = jbResult.rows[0].id;
-      let jbPriceListId = jbResult.rows[0].price_list_id;
+      const jbCurrentPriceListId = jbResult.rows[0].price_list_id;
 
-      // If JB has no price list, create one and assign it
-      if (!jbPriceListId) {
-        console.log("[JB-PRICES] No price list assigned — creating 'Jennifer Button' price list");
+      // Always find or create the dedicated "Jennifer Button" price list by NAME
+      // (never import into Standard or any other price list)
+      let jbPlResult = await pool.query(
+        `SELECT id FROM price_lists WHERE name = 'Jennifer Button' LIMIT 1`
+      );
+      let jbPriceListId: string;
+      if (jbPlResult.rows.length > 0) {
+        jbPriceListId = jbPlResult.rows[0].id;
+      } else {
+        console.log("[JB-PRICES] Creating 'Jennifer Button' price list");
         const newPl = await pool.query(
           `INSERT INTO price_lists (id, name, created_at) VALUES (gen_random_uuid(), 'Jennifer Button', NOW()) RETURNING id`
         );
         jbPriceListId = newPl.rows[0].id;
+      }
+
+      // Only auto-assign the JB price list if the company has NO price list currently
+      if (!jbCurrentPriceListId) {
         await pool.query(`UPDATE companies SET price_list_id = $1, updated_at = NOW() WHERE id = $2`, [jbPriceListId, jbCompanyId]);
-        console.log(`[JB-PRICES] Created price list ${jbPriceListId} and assigned to company ${jbCompanyId}`);
+        console.log(`[JB-PRICES] Auto-assigned 'Jennifer Button' price list to company`);
+      } else {
+        console.log(`[JB-PRICES] Company already has a price list assigned — not overriding`);
       }
 
       const csvPath = path.join(process.cwd(), "server/data/jennifer_button_prices.csv");
