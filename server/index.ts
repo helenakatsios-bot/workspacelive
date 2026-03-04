@@ -778,12 +778,16 @@ async function runStartupTasks() {
     console.error("COMER & KING price list assignment error:", err.message);
   }
 
-  // Add "Custom Inserts" as additional price list to all companies on Interiors or Standard
+  // Ensure "Custom Inserts" price list exists, then assign it to Standard/Interiors companies
   try {
-    const customInsertsResult = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'custom inserts' LIMIT 1`);
+    let customInsertsResult = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'custom inserts' LIMIT 1`);
     if (customInsertsResult.rows.length === 0) {
-      console.log("Custom Inserts price list not found — skipping bulk assignment");
-    } else {
+      console.log("Custom Inserts price list not found — creating it now");
+      await pool.query(`INSERT INTO price_lists (id, name, created_at) VALUES (gen_random_uuid(), 'Custom Inserts', NOW())`);
+      customInsertsResult = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'custom inserts' LIMIT 1`);
+      console.log(`Custom Inserts price list created with id ${customInsertsResult.rows[0]?.id}`);
+    }
+    if (customInsertsResult.rows.length > 0) {
       const customInsertsId = customInsertsResult.rows[0].id;
       // Get all companies whose main price list is Interiors or Standard
       const companiesResult = await pool.query(`
