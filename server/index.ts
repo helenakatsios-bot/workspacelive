@@ -963,13 +963,33 @@ async function runStartupTasks() {
 
   // ===== JENNIFER BUTTON PRICE LIST MIGRATION (always re-imports from CSV) =====
   try {
-    const jbResult = await pool.query(
+    // Find JB company by portal user email OR by company name (whichever works)
+    let jbResult = await pool.query(
       `SELECT c.id, c.price_list_id FROM companies c
-       JOIN portal_users pu ON pu.company_id = c.id
-       WHERE pu.email = 'jennifer@jenniferbutton.com.au' LIMIT 1`
+       LEFT JOIN portal_users pu ON pu.company_id = c.id
+       WHERE pu.email = 'jennifer@jenniferbutton.com.au'
+       OR c.legal_name ILIKE '%jennifer button%'
+       OR c.trading_name ILIKE '%jennifer button%'
+       LIMIT 1`
     );
-    if (jbResult.rows.length > 0 && jbResult.rows[0].price_list_id) {
-      const jbPriceListId = jbResult.rows[0].price_list_id;
+
+    if (jbResult.rows.length === 0) {
+      console.log("[JB-PRICES] Jennifer Button company not found — skipping");
+    } else {
+      const jbCompanyId = jbResult.rows[0].id;
+      let jbPriceListId = jbResult.rows[0].price_list_id;
+
+      // If JB has no price list, create one and assign it
+      if (!jbPriceListId) {
+        console.log("[JB-PRICES] No price list assigned — creating 'Jennifer Button' price list");
+        const newPl = await pool.query(
+          `INSERT INTO price_lists (id, name, created_at) VALUES (gen_random_uuid(), 'Jennifer Button', NOW()) RETURNING id`
+        );
+        jbPriceListId = newPl.rows[0].id;
+        await pool.query(`UPDATE companies SET price_list_id = $1, updated_at = NOW() WHERE id = $2`, [jbPriceListId, jbCompanyId]);
+        console.log(`[JB-PRICES] Created price list ${jbPriceListId} and assigned to company ${jbCompanyId}`);
+      }
+
       const csvPath = path.join(process.cwd(), "server/data/jennifer_button_prices.csv");
       if (!fs.existsSync(csvPath)) {
         console.log("[JB-PRICES] CSV file not found, skipping");
@@ -1035,8 +1055,8 @@ async function runStartupTasks() {
               try {
                 const safeSku = csvSku || `JB-AUTO-${upperName.replace(/[^A-Z0-9]/g, "").slice(0, 20)}`;
                 const newProd = await pool.query(
-                  `INSERT INTO products (id, name, sku, category, active, created_at, updated_at)
-                   VALUES (gen_random_uuid(), $1, $2, $3, true, NOW(), NOW())
+                  `INSERT INTO products (id, name, sku, category, unit_price, active, created_at)
+                   VALUES (gen_random_uuid(), $1, $2, $3, 0, true, NOW())
                    ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name, category = EXCLUDED.category RETURNING id`,
                   [productName, safeSku, csvCategory]
                 );
