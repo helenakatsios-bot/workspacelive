@@ -391,12 +391,20 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
   });
 
   const [statusFilter, setStatusFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const filtered = useMemo(() => {
     if (!orders) return [];
-    if (statusFilter === "all") return orders;
-    return orders.filter((o) => o.status === statusFilter);
-  }, [orders, statusFilter]);
+    let result = statusFilter === "all" ? orders : orders.filter((o) => o.status === statusFilter);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((o) =>
+        o.orderNumber?.toString().toLowerCase().includes(q) ||
+        o.customerName?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [orders, statusFilter, searchQuery]);
 
   const pendingRequests = useMemo(() => {
     if (!orderRequests) return [];
@@ -485,6 +493,17 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
           </CardContent>
         </Card>
       )}
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        <Input
+          placeholder="Search by order number or name..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+          data-testid="input-order-search"
+        />
+      </div>
 
       <div className="flex gap-2 flex-wrap">
         {["all", "new", "confirmed", "in_production", "ready", "dispatched", "completed"].map((s) => (
