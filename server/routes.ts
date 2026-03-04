@@ -2522,20 +2522,23 @@ export async function registerRoutes(
       }
 
       // Fetch attachments to include with the sync
-      // First check direct order attachments, then also check the source portal order request (in case
-      // the attachment was uploaded after conversion, so it wasn't copied over during convert)
+      // Always include BOTH direct order attachments AND any attachments from the source portal
+      // order request — so customer-uploaded files are never missed even if a CRM user also
+      // added attachments directly to the order.
       let orderAttachments = await storage.getAttachmentsByEntity("order", order.id);
-      if (orderAttachments.length === 0) {
-        const srcRequest = await pool.query(
-          `SELECT id FROM customer_order_requests WHERE converted_order_id = $1 LIMIT 1`,
-          [order.id]
-        );
-        if (srcRequest.rows.length > 0) {
-          const reqId = srcRequest.rows[0].id;
-          const reqAttachments = await storage.getAttachmentsByEntity("order_request", reqId);
-          if (reqAttachments.length > 0) {
-            console.log(`[PURAX-SYNC] Order has no attachments, but source order_request ${reqId} has ${reqAttachments.length} — using those`);
-            orderAttachments = reqAttachments;
+      const srcRequest = await pool.query(
+        `SELECT id FROM customer_order_requests WHERE converted_order_id = $1 LIMIT 1`,
+        [order.id]
+      );
+      if (srcRequest.rows.length > 0) {
+        const reqId = srcRequest.rows[0].id;
+        const reqAttachments = await storage.getAttachmentsByEntity("order_request", reqId);
+        if (reqAttachments.length > 0) {
+          const existingIds = new Set(orderAttachments.map((a: any) => a.id));
+          const newAttachments = reqAttachments.filter((a: any) => !existingIds.has(a.id));
+          if (newAttachments.length > 0) {
+            console.log(`[PURAX-SYNC] Adding ${newAttachments.length} portal attachment(s) from order_request ${reqId} to order's ${orderAttachments.length} attachment(s)`);
+            orderAttachments = [...orderAttachments, ...newAttachments];
           }
         }
       }
