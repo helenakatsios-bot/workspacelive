@@ -2275,11 +2275,15 @@ export async function registerRoutes(
         const name = (productName || "").toUpperCase();
         const desc = (description || "").toUpperCase();
         const combined = `${cat} ${name} ${desc}`;
-        // Specific product name matches first
-        if (name.includes("FREIGHT") || desc.includes("FREIGHT")) return "44000";
-        if (name.includes("DROP SHIP") || desc.includes("DROP SHIP")) return "41111";
-        if (name.includes("SHOPIFY FEE") || name.includes("SHOPIFY FEES") || desc.includes("SHOPIFY FEE")) return "51111";
-        // Category-based matches in priority order
+        // Priority 1: Fee/special line item checks using combined — these ALWAYS override category.
+        // Using combined so the match works regardless of which field holds the value.
+        if (combined.includes("FREIGHT")) return "44000";
+        if (combined.includes("DROP SHIP")) return "41111";
+        if (combined.includes("SHOPIFY FEE") || combined.includes("SHOPIFY FEES")) return "51111";
+        if (combined.includes("SHOPIFY")) return "51111";
+        // Bare "fee" line (Shopify platform/transaction fees come through as just "fee")
+        if (desc === "FEE" || name === "FEE") return "51111";
+        // Priority 2: Category-based matches
         if (cat.includes("INSERT")) return "41180";
         if (cat.includes("PILLOW")) return "41120";
         if (cat.includes("MATTRESS TOPPER") || cat.includes("MATTRESS_TOPPER")) return "41194";
@@ -2289,10 +2293,7 @@ export async function registerRoutes(
         if (cat.includes("BULK") || cat.includes("LOOSE FILL")) return "41140";
         if (cat.includes("QUILT") || cat.includes("BLANKET") || cat.includes("FILL") ||
             cat.includes("STRIP") || cat.includes("DOWN") || cat.includes("WINTER")) return "41110";
-        // Fall back to combined text matching
-        if (combined.includes("FREIGHT")) return "44000";
-        if (combined.includes("DROP SHIP")) return "41111";
-        if (combined.includes("SHOPIFY")) return "51111";
+        // Priority 3: Combined text fallback
         if (combined.includes("INSERT")) return "41180";
         if (combined.includes("PILLOW")) return "41120";
         if (combined.includes("MATTRESS TOPPER")) return "41194";
