@@ -2251,13 +2251,58 @@ export async function registerRoutes(
       }
       if (!xeroContactId) return res.status(500).json({ message: "Could not create or find Xero contact." });
 
-      // 2. Build line items
-      const xeroLineItems = lines.map((line: any) => ({
-        Description: line.descriptionOverride || line.productName || "Item",
-        Quantity: parseFloat(line.quantity) || 1,
-        UnitAmount: parseFloat(line.unitPrice) || 0,
-        AccountCode: "200",
-      }));
+      // 2. Build line items with category-based account codes
+      // Fetch product categories for all lines that have a productId
+      const productIds = lines.map((l: any) => l.productId).filter(Boolean);
+      const categoryMap: Record<string, string> = {};
+      if (productIds.length > 0) {
+        const catRes = await pool.query(
+          `SELECT id, category, name FROM products WHERE id = ANY($1)`,
+          [productIds]
+        );
+        for (const row of catRes.rows) {
+          categoryMap[row.id] = row.category?.toUpperCase() || "";
+        }
+      }
+
+      const getXeroAccountCode = (category: string, description: string): string => {
+        const cat = (category || "").toUpperCase();
+        const desc = (description || "").toUpperCase();
+        const combined = `${cat} ${desc}`;
+        // Check in priority order — specific first, broad last
+        if (cat.includes("INSERT")) return "41180";
+        if (cat.includes("PILLOW")) return "41120";
+        if (cat.includes("MATTRESS TOPPER") || cat.includes("MATTRESS_TOPPER")) return "41194";
+        if (cat.includes("QUILT CASE") || cat.includes("CASSETTE") || cat.includes("CHANNELLED")) return "41130";
+        if (cat.includes("JACKET") || cat.includes("MEN JACKET") || cat.includes("WOMAN JACKET")) return "41195";
+        if (cat.includes("JAPARA")) return "41185";
+        // Bulk filling must come before generic FILL check
+        if (cat.includes("BULK") || cat.includes("LOOSE FILL")) return "41140";
+        // Quilts/blankets — broad match: QUILT, BLANKET, FILLED, FILL (Hungarian etc.), STRIP, WINTER
+        if (cat.includes("QUILT") || cat.includes("BLANKET") || cat.includes("FILL") ||
+            cat.includes("STRIP") || cat.includes("DOWN") || cat.includes("WINTER")) return "41110";
+        // Fall back to description-based matching
+        if (combined.includes("INSERT")) return "41180";
+        if (combined.includes("PILLOW")) return "41120";
+        if (combined.includes("MATTRESS TOPPER")) return "41194";
+        if (combined.includes("QUILT CASE") || combined.includes("CASSETTE") || combined.includes("CHANNELLED")) return "41130";
+        if (combined.includes("JACKET")) return "41195";
+        if (combined.includes("JAPARA")) return "41185";
+        if (combined.includes("BULK") || combined.includes("LOOSE FILL")) return "41140";
+        if (combined.includes("QUILT") || combined.includes("BLANKET") || combined.includes("FILL")) return "41110";
+        return "200"; // default fallback — review in Xero
+      };
+
+      const xeroLineItems = lines.map((line: any) => {
+        const category = categoryMap[line.productId] || "";
+        const description = line.descriptionOverride || "";
+        return {
+          Description: description || "Item",
+          Quantity: parseFloat(line.quantity) || 1,
+          UnitAmount: parseFloat(line.unitPrice) || 0,
+          AccountCode: getXeroAccountCode(category, description),
+        };
+      });
 
       // 3. Due date based on payment terms
       const issueDate = new Date();
