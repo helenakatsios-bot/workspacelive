@@ -892,24 +892,32 @@ async function runStartupTasks() {
     const hlcId = hlcResult.rows[0]?.id;
     if (hlcId) {
       const newPillows = [
-        { sku: "HLC31", name: "STANDARD HUNGARIAN GOOSE PILLOW STRIP", price: 112.00 },
-        { sku: "HLC32", name: "QUEEN HUNGARIAN GOOSE PILLOW", price: 117.00 },
-        { sku: "HLC33", name: "KING HUNGARIAN GOOSE PILLOW", price: 125.00 },
+        { sku: "HLC-HUNG-STD", name: "STANDARD HUNGARIAN GOOSE PILLOW STRIP", price: 112.00 },
+        { sku: "HLC-HUNG-QN",  name: "QUEEN HUNGARIAN GOOSE PILLOW",           price: 117.00 },
+        { sku: "HLC-HUNG-KG",  name: "KING HUNGARIAN GOOSE PILLOW",            price: 125.00 },
       ];
       for (const pillow of newPillows) {
-        // Create product if not exists
-        let pidRes = await pool.query(`SELECT id FROM products WHERE sku = $1`, [pillow.sku]);
+        // Find by name first (most reliable), then SKU
+        let pidRes = await pool.query(
+          `SELECT id FROM products WHERE UPPER(name) = UPPER($1) LIMIT 1`,
+          [pillow.name]
+        );
         let pid: string;
         if (pidRes.rows.length === 0) {
+          // Generate a safe SKU — use ours but fall back to a random suffix if it conflicts
+          let sku = pillow.sku;
+          const skuCheck = await pool.query(`SELECT 1 FROM products WHERE sku = $1`, [sku]);
+          if (skuCheck.rows.length > 0) sku = `${sku}-${Date.now()}`;
           const ins = await pool.query(
             `INSERT INTO products (id, sku, name, category, unit_price, active)
              VALUES (gen_random_uuid(), $1, $2, 'PILLOW', $3, true) RETURNING id`,
-            [pillow.sku, pillow.name, pillow.price]
+            [sku, pillow.name, pillow.price]
           );
           pid = ins.rows[0].id;
-          console.log(`Created product: ${pillow.name}`);
+          console.log(`[HLC-PILLOWS] Created product: ${pillow.name} (SKU: ${sku})`);
         } else {
           pid = pidRes.rows[0].id;
+          console.log(`[HLC-PILLOWS] Product already exists: ${pillow.name}`);
         }
         // Add to Hotel Luxury Collection if not already there
         const exists = await pool.query(
@@ -922,11 +930,13 @@ async function runStartupTasks() {
              VALUES (gen_random_uuid(), $1, $2, $3)`,
             [hlcId, pid, pillow.price]
           );
-          console.log(`Added ${pillow.name} ($${pillow.price}) to Hotel Luxury Collection`);
+          console.log(`[HLC-PILLOWS] Added "${pillow.name}" $${pillow.price} to Hotel Luxury Collection`);
+        } else {
+          console.log(`[HLC-PILLOWS] "${pillow.name}" already in Hotel Luxury Collection`);
         }
       }
     } else {
-      console.warn("Hotel Luxury Collection price list not found — skipping pillow migration");
+      console.error("[HLC-PILLOWS] Hotel Luxury Collection price list NOT FOUND in DB");
     }
   } catch (err: any) {
     console.error("Hungarian Goose Pillow migration error:", err.message);
