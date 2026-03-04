@@ -6557,14 +6557,16 @@ Rules:
           if (row.filling || row.weight) {
             if (!variantMap.has(row.product_id)) variantMap.set(row.product_id, []);
             const existing = variantMap.get(row.product_id)!;
-            const alreadyHas = existing.some(v => v.filling === (row.filling || "") && v.weight === row.weight);
-            if (!alreadyHas) {
+            const existingIdx = existing.findIndex(v => v.filling === (row.filling || "") && v.weight === row.weight);
+            if (existingIdx >= 0) {
+              // Additional price list overrides the main list price for matching variants
+              existing[existingIdx].unitPrice = row.unit_price;
+            } else {
               existing.push({ filling: row.filling || "", weight: row.weight, unitPrice: row.unit_price });
             }
           } else {
-            if (!productMap.get(row.product_id)!.unitPrice || productMap.get(row.product_id)!.unitPrice === "0") {
-              productMap.get(row.product_id)!.unitPrice = row.unit_price;
-            }
+            // Additional price list overrides the main list flat price
+            productMap.get(row.product_id)!.unitPrice = row.unit_price;
           }
         }
       }
