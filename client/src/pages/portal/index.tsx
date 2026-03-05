@@ -17,7 +17,6 @@ import {
   Calendar,
   Truck,
   DollarSign,
-  Clock,
   X,
   Lock,
   Eye,
@@ -147,7 +146,6 @@ function PortalLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showStaffLogin, setShowStaffLogin] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,50 +163,12 @@ function PortalLoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
       <div className="w-full max-w-md space-y-4">
-        <Card className="w-full border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30" data-testid="card-maintenance-notice">
-          <CardContent className="pt-6 pb-6">
-            <div className="flex flex-col items-center text-center space-y-3">
-              <div className="w-14 h-14 rounded-full bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
-                <Clock className="w-7 h-7 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold text-amber-900 dark:text-amber-200">Portal Under Maintenance</h2>
-                <p className="mt-2 text-sm text-amber-800 dark:text-amber-300 leading-relaxed">
-                  Our customer portal is currently unavailable while we carry out maintenance. We apologise for any inconvenience.
-                </p>
-              </div>
-              <div className="w-full border-t border-amber-200 dark:border-amber-800 pt-3">
-                <p className="text-sm font-medium text-amber-900 dark:text-amber-200">To place an order, please email:</p>
-                <a
-                  href="mailto:helena@purax.com.au"
-                  className="inline-flex items-center gap-2 mt-1 text-base font-semibold text-amber-700 dark:text-amber-300 hover:underline"
-                  data-testid="link-maintenance-email"
-                >
-                  <Mail className="w-4 h-4" />
-                  helena@purax.com.au
-                </a>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {!showStaffLogin ? (
-          <div className="text-center">
-            <button
-              onClick={() => setShowStaffLogin(true)}
-              className="text-xs text-muted-foreground hover:text-foreground underline"
-              data-testid="button-show-staff-login"
-            >
-              Staff login
-            </button>
-          </div>
-        ) : (
           <Card className="w-full">
             <CardHeader className="text-center space-y-2 pb-3">
               <div className="flex items-center justify-center gap-2 mb-1">
                 <Building2 className="w-6 h-6 text-primary" />
               </div>
-              <CardTitle className="text-lg">Staff Login</CardTitle>
+              <CardTitle className="text-lg">Customer Portal</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -260,7 +220,6 @@ function PortalLoginPage() {
               </form>
             </CardContent>
           </Card>
-        )}
       </div>
     </div>
   );
