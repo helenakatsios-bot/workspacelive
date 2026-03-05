@@ -133,21 +133,24 @@ async function runStartupTasks() {
 
   // One-time cleanup: remove old pre-imported price lists that are now superseded
   try {
-    const oldPriceLists = [
+    // Use ILIKE + TRIM to handle case/whitespace differences in any environment
+    const oldPatterns = [
       "EXTRA FIRM FILL AS FIRM PRICE",
-      "EXTRA FIRM FILL AS FIRM PRICE ",
       "HOTEL LUXURY HUNGARIAN PILLOW",
       "JENNIFER BUTTON",
       "L&M",
       "eco down under",
     ];
-    for (const name of oldPriceLists) {
-      const found = await pool.query("SELECT id FROM price_lists WHERE name = $1", [name]);
+    for (const pattern of oldPatterns) {
+      const found = await pool.query(
+        "SELECT id, name FROM price_lists WHERE TRIM(LOWER(name)) = TRIM(LOWER($1))",
+        [pattern]
+      );
       for (const row of found.rows) {
         await pool.query("UPDATE companies SET price_list_id = NULL WHERE price_list_id = $1", [row.id]);
         await pool.query("DELETE FROM price_list_prices WHERE price_list_id = $1", [row.id]);
         await pool.query("DELETE FROM price_lists WHERE id = $1", [row.id]);
-        console.log(`Removed old price list: "${name}"`);
+        console.log(`Removed old price list: "${row.name}"`);
       }
     }
   } catch (error) {
