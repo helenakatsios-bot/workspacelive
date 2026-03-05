@@ -1106,6 +1106,69 @@ async function runStartupTasks() {
     console.error("[JB-PRICES] Migration error:", err.message);
   }
 
+  // ============================================================
+  // HUNGARIAN WINTER STRIP QUILT PRICE UPDATE (March 2026)
+  // Update old prices to new prices across all price lists and
+  // company-specific prices for stripped quilt products.
+  // ============================================================
+  try {
+    const stripPriceMap: Array<{sizeKeyword: string; oldPrice: string; newPrice: string}> = [
+      { sizeKeyword: "SINGLE",     oldPrice: "142.20", newPrice: "175.00" },
+      { sizeKeyword: "DOUBLE",     oldPrice: "173.70", newPrice: "215.00" },
+      { sizeKeyword: "QUEEN",      oldPrice: "188.20", newPrice: "255.00" },
+      { sizeKeyword: "KING",       oldPrice: "209.20", newPrice: "300.00" },
+      { sizeKeyword: "SUPER KING", oldPrice: "276.20", newPrice: "380.00" },
+    ];
+    let stripUpdatesTotal = 0;
+    for (const { sizeKeyword, oldPrice, newPrice } of stripPriceMap) {
+      // Update price_list_prices
+      const plpResult = await pool.query(`
+        UPDATE price_list_prices plp
+        SET unit_price = $1, updated_at = NOW()
+        FROM products p
+        WHERE plp.product_id = p.id
+          AND p.name ILIKE $2
+          AND p.name ILIKE '%strip%'
+          AND p.name ILIKE '%quilt%'
+          AND plp.unit_price = $3
+      `, [newPrice, `%${sizeKeyword}%`, oldPrice]);
+      // Update company_prices
+      const cpResult = await pool.query(`
+        UPDATE company_prices cp
+        SET unit_price = $1, updated_at = NOW()
+        FROM products p
+        WHERE cp.product_id = p.id
+          AND p.name ILIKE $2
+          AND p.name ILIKE '%strip%'
+          AND p.name ILIKE '%quilt%'
+          AND cp.unit_price = $3
+      `, [newPrice, `%${sizeKeyword}%`, oldPrice]);
+      // Update company_variant_prices
+      const cvpResult = await pool.query(`
+        UPDATE company_variant_prices cvp
+        SET unit_price = $1, updated_at = NOW()
+        FROM products p
+        WHERE cvp.product_id = p.id
+          AND p.name ILIKE $2
+          AND p.name ILIKE '%strip%'
+          AND p.name ILIKE '%quilt%'
+          AND cvp.unit_price = $3
+      `, [newPrice, `%${sizeKeyword}%`, oldPrice]);
+      const count = (plpResult.rowCount || 0) + (cpResult.rowCount || 0) + (cvpResult.rowCount || 0);
+      if (count > 0) {
+        console.log(`[STRIP-PRICES] ${sizeKeyword}: updated ${count} price records ($${oldPrice} → $${newPrice})`);
+      }
+      stripUpdatesTotal += count;
+    }
+    if (stripUpdatesTotal === 0) {
+      console.log("[STRIP-PRICES] No strip quilt prices needed updating (already updated or not found)");
+    } else {
+      console.log(`[STRIP-PRICES] Done: ${stripUpdatesTotal} price records updated across all lists`);
+    }
+  } catch (err: any) {
+    console.error("[STRIP-PRICES] Error updating strip quilt prices:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 
