@@ -1357,7 +1357,9 @@ async function runStartupTasks() {
         const weightIdx = header.indexOf("weight");
         const priceIdx = header.indexOf("customer_price");
 
-        let imported = 0, updated = 0, created = 0;
+        // Step 1: Parse all rows from CSV
+        type EduRow = { name: string; cat: string; sku: string; filling: string | null; weight: string | null; price: number };
+        const eduRows: EduRow[] = [];
         for (let i = 1; i < lines.length; i++) {
           const parts = lines[i].split(",");
           const name = (parts[nameIdx] || "").trim();
@@ -1368,42 +1370,49 @@ async function runStartupTasks() {
           const rawPrice = (parts[priceIdx] || "").replace(/[^0-9.]/g, "");
           const price = parseFloat(rawPrice);
           if (!name || !sku || isNaN(price) || price <= 0) continue;
+          eduRows.push({ name, cat, sku, filling, weight, price });
+        }
 
-          // Find or create product by SKU; also update category to match CSV
-          let productId: string | null = null;
-          const existing = await pool.query(`SELECT id, category FROM products WHERE UPPER(sku) = $1 LIMIT 1`, [sku]);
+        // Step 2: Ensure all products exist (find by SKU or create)
+        let created = 0;
+        const skuToId = new Map<string, string>();
+        for (const row of eduRows) {
+          const existing = await pool.query(`SELECT id, category FROM products WHERE UPPER(sku) = $1 LIMIT 1`, [row.sku]);
           if (existing.rows.length > 0) {
-            productId = existing.rows[0].id;
-            // Update category and name to match CSV if different
-            if ((existing.rows[0].category || "").toUpperCase() !== cat) {
-              await pool.query(`UPDATE products SET category = $1, name = $2 WHERE id = $3`, [cat, name, productId]);
+            skuToId.set(row.sku, existing.rows[0].id);
+            if ((existing.rows[0].category || "").toUpperCase() !== row.cat) {
+              await pool.query(`UPDATE products SET category = $1, name = $2 WHERE id = $3`, [row.cat, row.name, existing.rows[0].id]);
             }
           } else {
             const newProd = await pool.query(
               `INSERT INTO products (name, sku, category, unit_price, active) VALUES ($1, $2, $3, $4, true) RETURNING id`,
-              [name, sku, cat, price.toFixed(2)]
+              [row.name, row.sku, row.cat, row.price.toFixed(2)]
             );
-            productId = newProd.rows[0].id;
+            skuToId.set(row.sku, newProd.rows[0].id);
             created++;
           }
-
-          // Upsert price_list_prices
-          const existingPrice = await pool.query(
-            `SELECT id FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 AND COALESCE(filling,'') = $3 AND COALESCE(weight,'') = $4 LIMIT 1`,
-            [_eduId2, productId, filling || "", weight || ""]
-          );
-          if (existingPrice.rows.length > 0) {
-            await pool.query(`UPDATE price_list_prices SET unit_price = $1, updated_at = NOW() WHERE id = $2`, [price.toFixed(2), existingPrice.rows[0].id]);
-            updated++;
-          } else {
-            await pool.query(
-              `INSERT INTO price_list_prices (price_list_id, product_id, filling, weight, unit_price) VALUES ($1, $2, $3, $4, $5)`,
-              [_eduId2, productId, filling, weight, price.toFixed(2)]
-            );
-            imported++;
-          }
         }
-        console.log(`[EDU-IMPORT] Done: ${imported} inserted, ${updated} updated, ${created} new products created`);
+
+        // Step 3: Wipe all existing ECO-SKU entries from this price list then re-insert
+        const ecoProductIds = [...skuToId.values()];
+        if (ecoProductIds.length > 0) {
+          await pool.query(
+            `DELETE FROM price_list_prices WHERE price_list_id = $1 AND product_id = ANY($2::uuid[])`,
+            [_eduId2, ecoProductIds]
+          );
+        }
+
+        let imported = 0;
+        for (const row of eduRows) {
+          const productId = skuToId.get(row.sku);
+          if (!productId) continue;
+          await pool.query(
+            `INSERT INTO price_list_prices (price_list_id, product_id, filling, weight, unit_price) VALUES ($1, $2, $3, $4, $5)`,
+            [_eduId2, productId, row.filling, row.weight, row.price.toFixed(2)]
+          );
+          imported++;
+        }
+        console.log(`[EDU-IMPORT] Done: ${imported} inserted (clean reload), ${created} new products created`);
       }
     }
   } catch (err: any) {
