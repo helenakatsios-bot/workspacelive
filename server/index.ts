@@ -1266,6 +1266,28 @@ async function runStartupTasks() {
   }
 
   // ============================================================
+  // ECO DOWN UNDER — remove BLANKETS and JACKETS entries
+  // ============================================================
+  try {
+    const eduClean = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE '%eco%down%under%' ORDER BY created_at DESC LIMIT 1`);
+    if (eduClean.rows.length > 0) {
+      const eduCleanId = eduClean.rows[0].id;
+      const del = await pool.query(`
+        DELETE FROM price_list_prices
+        WHERE price_list_id = $1
+          AND product_id IN (
+            SELECT id FROM products WHERE UPPER(category) IN ('BLANKETS','JACKETS','MISC')
+          )
+      `, [eduCleanId]);
+      if (del.rowCount && del.rowCount > 0) {
+        console.log(`[EDU-CLEANUP] Removed ${del.rowCount} BLANKETS/JACKETS/MISC entries from ECO DOWN UNDER price list`);
+      }
+    }
+  } catch (err: any) {
+    console.error("[EDU-CLEANUP] Error:", err.message);
+  }
+
+  // ============================================================
   // PIPED PILLOWS → PILLOW category merge
   // Rename any products with category "PIPED PILLOWS" to "PILLOW"
   // ============================================================
