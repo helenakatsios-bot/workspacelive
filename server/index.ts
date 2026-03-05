@@ -1173,6 +1173,31 @@ async function runStartupTasks() {
   }
 
   // ============================================================
+  // ECO DOWN UNDER PRICE LIST CLEANUP (March 2026)
+  // Remove BLANKETS, JACKETS, MISC from the "ECO DOWN UNDER PRICES" price list.
+  // ============================================================
+  try {
+    const eduList = await pool.query(`SELECT id FROM price_lists WHERE UPPER(name) = 'ECO DOWN UNDER PRICES' LIMIT 1`);
+    if (eduList.rows.length > 0) {
+      const eduId = eduList.rows[0].id;
+      const delResult = await pool.query(`
+        DELETE FROM price_list_prices plp
+        USING products p
+        WHERE plp.product_id = p.id
+          AND plp.price_list_id = $1
+          AND UPPER(p.category) IN ('BLANKETS', 'JACKETS', 'MISC')
+      `, [eduId]);
+      if ((delResult.rowCount || 0) > 0) {
+        console.log(`[EDU-CLEANUP] Removed ${delResult.rowCount} BLANKETS/JACKETS/MISC entries from ECO DOWN UNDER PRICES price list`);
+      } else {
+        console.log("[EDU-CLEANUP] ECO DOWN UNDER PRICES already clean");
+      }
+    }
+  } catch (err: any) {
+    console.error("[EDU-CLEANUP] Error:", err.message);
+  }
+
+  // ============================================================
   // CUSTOM INSERTS PRICE LIST CLEANUP (March 2026)
   // Remove BLANKETS, JACKETS, MISC from the "CUSTOM INSERTS" price list.
   // These categories were imported in error and should not be there.
