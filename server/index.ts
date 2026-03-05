@@ -1298,11 +1298,15 @@ async function runStartupTasks() {
           const price = parseFloat(rawPrice);
           if (!name || !sku || isNaN(price) || price <= 0) continue;
 
-          // Find or create product by SKU
+          // Find or create product by SKU; also update category to match CSV
           let productId: string | null = null;
-          const existing = await pool.query(`SELECT id FROM products WHERE UPPER(sku) = $1 LIMIT 1`, [sku]);
+          const existing = await pool.query(`SELECT id, category FROM products WHERE UPPER(sku) = $1 LIMIT 1`, [sku]);
           if (existing.rows.length > 0) {
             productId = existing.rows[0].id;
+            // Update category and name to match CSV if different
+            if ((existing.rows[0].category || "").toUpperCase() !== cat) {
+              await pool.query(`UPDATE products SET category = $1, name = $2 WHERE id = $3`, [cat, name, productId]);
+            }
           } else {
             const newProd = await pool.query(
               `INSERT INTO products (name, sku, category, unit_price, active) VALUES ($1, $2, $3, $4, true) RETURNING id`,
