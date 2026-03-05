@@ -2893,7 +2893,11 @@ export async function registerRoutes(
         originalEmailHtml: originalEmailHtml || null,
         attachments: attachmentsPayload,
         isUrgent: false,
-        callbackUrl: `${crmBaseUrl}/api/webhooks/milo/order-complete`,
+        callbackUrl: (() => {
+          const crmKey = process.env.CRM_API_KEY;
+          const base = `${crmBaseUrl}/api/webhooks/milo/order-complete`;
+          return crmKey ? `${base}?key=${encodeURIComponent(crmKey)}` : base;
+        })(),
       };
 
       const headers: Record<string, string> = {
@@ -5559,8 +5563,11 @@ Rules:
   // Called by the Milo/Purax app when an order has been completed
   app.post("/api/webhooks/milo/order-complete", async (req, res) => {
     try {
-      // Authenticate using CRM_API_KEY (the shared secret Millie uses to call us)
-      const providedKey = req.headers["x-api-key"] || req.headers["authorization"]?.toString().replace("Bearer ", "");
+      // Authenticate using CRM_API_KEY — accept from header OR query param so Milo
+      // can call the URL directly without needing custom header configuration.
+      const providedKey = req.headers["x-api-key"]
+        || req.headers["authorization"]?.toString().replace("Bearer ", "")
+        || (req.query.key as string | undefined);
       const expectedKey = process.env.CRM_API_KEY;
       if (expectedKey && providedKey !== expectedKey) {
         return res.status(401).json({ message: "Unauthorized" });
