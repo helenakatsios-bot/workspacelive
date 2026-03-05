@@ -959,7 +959,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
     'CASES',
   ];
 
-  const HIDDEN_PORTAL_CATEGORIES = ['MISC', 'INSERTS', 'CUSTOM INSERTS'];
+  const HIDDEN_PORTAL_CATEGORIES = ['MISC'];
 
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
