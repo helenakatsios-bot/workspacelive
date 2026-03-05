@@ -309,6 +309,22 @@ async function runStartupTasks() {
     console.error("[PRICE-WIPE] Error:", err.message);
   }
 
+  // ONE-TIME PRODUCT WIPE (March 2026) — clears all products so admin can re-upload a clean catalog
+  try {
+    const prodWipeFlag = await pool.query(`SELECT value FROM crm_settings WHERE key = 'products_wiped_2026_03_05' LIMIT 1`);
+    if (prodWipeFlag.rows.length === 0) {
+      // NULL out product references in order_lines and quote_lines (no ON DELETE CASCADE)
+      await pool.query(`UPDATE order_lines SET product_id = NULL WHERE product_id IS NOT NULL`);
+      await pool.query(`UPDATE quote_lines SET product_id = NULL WHERE product_id IS NOT NULL`);
+      // Delete all products (cascades to price_list_prices, company_prices, variant_prices)
+      const prodResult = await pool.query(`DELETE FROM products`);
+      await pool.query(`INSERT INTO crm_settings (key, value) VALUES ('products_wiped_2026_03_05', 'true') ON CONFLICT (key) DO NOTHING`);
+      console.log(`[PRODUCT-WIPE] Wiped ${prodResult.rowCount} products. Products table is now empty for manual re-upload.`);
+    }
+  } catch (err: any) {
+    console.error("[PRODUCT-WIPE] Error:", err.message);
+  }
+
   // CSV auto-imports removed — prices are managed manually via admin UI
   const otherImports: { name: string; fn: () => Promise<void> }[] = [];
   for (const { name, fn } of otherImports) {
@@ -390,95 +406,7 @@ async function runStartupTasks() {
     if (quiltNameFix.rowCount && quiltNameFix.rowCount > 0) {
       console.log(`Updated ${quiltNameFix.rowCount} product names from HUNGARIAN STRIPPED QUILT to HUNGARIAN`);
     }
-
-    // Ensure HUNGARIAN LIGHT FILL products exist (10 quilts)
-    const hungarianLiteSkus = [
-      { sku: 'HUNGARIAN LITE - 01', name: 'SINGLE - 80% HUNGARIAN G/DOWN ALL SEASONS CASS. 510GRMS', price: '121.00' },
-      { sku: 'HUNGARIAN LITE - 02', name: 'DOUBLE - 80% HUNGARIAN G/DOWN ALL SEASONS CASS. 610GRMS', price: '142.00' },
-      { sku: 'HUNGARIAN LITE - 03', name: 'QUEEN - 80% HUNGARIAN G/DOWN ALL SEASONS CASS. 720GRM', price: '170.00' },
-      { sku: 'HUNGARIAN LITE - 04', name: 'KING - 80% HUNGARIAN G/DOWN ALL SEASONS CASS. 820GRMS', price: '186.00' },
-      { sku: 'HUNGARIAN LITE - 05', name: 'SUPER KING - 80% HUNGARIAN G/DOWN ALL SEAS. CASS. 1050GRMS', price: '273.00' },
-      { sku: 'HUNGARIAN LITE - 06', name: 'SINGLE - 80% HUNGARIAN G/DOWN WARM CASSETTE 600GRMS', price: '159.00' },
-      { sku: 'HUNGARIAN LITE - 07', name: 'DOUBLE - 80% HUNGARIAN G/DOWN WARM CASSETTE 750GRMS', price: '183.00' },
-      { sku: 'HUNGARIAN LITE - 08', name: 'QUEEN - 80% HUNGARIAN G/DOWN WARM CASSETTE 850GRM', price: '216.50' },
-      { sku: 'HUNGARIAN LITE - 09', name: 'KING - 80% HUNGARIAN G/DOWN WARM CASSETTE 950GRMS', price: '232.00' },
-      { sku: 'HUNGARIAN LITE - 10', name: 'SUPER KING - 80% HUNGARIAN G/DOWN WARM CASSETTE 1300GRMS', price: '314.00' },
-    ];
-    const standardPL = await pool.query("SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1");
-    if (standardPL.rows.length > 0) {
-      const standardPLId = standardPL.rows[0].id;
-      for (const item of hungarianLiteSkus) {
-        const existsProd = await pool.query("SELECT id FROM products WHERE sku = $1", [item.sku]);
-        let productId: string;
-        if (existsProd.rows.length === 0) {
-          const ins = await pool.query(
-            "INSERT INTO products (id, sku, name, category, unit_price, active) VALUES (gen_random_uuid(), $1, $2, 'HUNGARIAN LIGHT FILL', $3, true) RETURNING id",
-            [item.sku, item.name, item.price]
-          );
-          productId = ins.rows[0].id;
-          console.log(`Created HUNGARIAN LIGHT FILL product: ${item.sku}`);
-        } else {
-          productId = existsProd.rows[0].id;
-          await pool.query("UPDATE products SET category = 'HUNGARIAN LIGHT FILL', active = true WHERE id = $1", [productId]);
-        }
-        // Fix any existing entries that wrongly have filling set
-        await pool.query(
-          "UPDATE price_list_prices SET filling = NULL WHERE price_list_id = $1 AND product_id = $2 AND filling IS NOT NULL",
-          [standardPLId, productId]
-        );
-        const existsPrice = await pool.query(
-          "SELECT 1 FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 LIMIT 1",
-          [standardPLId, productId]
-        );
-        if (existsPrice.rows.length === 0) {
-          await pool.query(
-            "INSERT INTO price_list_prices (id, price_list_id, product_id, filling, weight, unit_price) VALUES (gen_random_uuid(), $1, $2, NULL, NULL, $3)",
-            [standardPLId, productId, item.price]
-          );
-          console.log(`Added Standard price for ${item.sku}: $${item.price}`);
-        }
-      }
-    }
-
-    // Ensure FREIGHT, DROP SHIP FEE, SHOPIFY FEE exist in MISC category
-    const miscProducts = ['FREIGHT', 'DROP SHIP FEE', 'SHOPIFY FEE'];
-    for (const name of miscProducts) {
-      const exists = await pool.query("SELECT id FROM products WHERE name = $1", [name]);
-      if (exists.rows.length === 0) {
-        await pool.query(
-          "INSERT INTO products (id, sku, name, category, unit_price, active) VALUES (gen_random_uuid(), $1, $2, 'MISC', '0.00', true)",
-          [name.toLowerCase().replace(/\s+/g, '_'), name]
-        );
-        console.log(`Created MISC product: ${name}`);
-      } else {
-        await pool.query("UPDATE products SET category = 'MISC' WHERE name = $1 AND category != 'MISC'", [name]);
-      }
-    }
-
-    // Ensure JACKETS products exist for all price lists
-    const jacketNames = [
-      'EXTRA LARGE - MEN JACKET', 'LARGE - MEN JACKET', 'MEDIUM - MEN JACKET', 'SMALL - MEN JACKET',
-      'EXTRA LARGE - WOMAN JACKET', 'LARGE - WOMAN JACKET', 'MEDIUM - WOMAN JACKET', 'SMALL - WOMAN JACKET'
-    ];
-    const jacketCheck = await pool.query("SELECT COUNT(*) as cnt FROM products WHERE category = 'JACKETS'");
-    if (parseInt(jacketCheck.rows[0].cnt) < 8) {
-      // Ensure at least the base PFH jacket products exist
-      for (let i = 0; i < jacketNames.length; i++) {
-        const sku = `PFH${438 + i}`;
-        const existsJ = await pool.query("SELECT id FROM products WHERE sku = $1", [sku]);
-        if (existsJ.rows.length === 0) {
-          await pool.query(
-            "INSERT INTO products (id, sku, name, category, unit_price, active) VALUES (gen_random_uuid(), $1, $2, 'JACKETS', '0.00', true) ON CONFLICT (sku) DO NOTHING",
-            [sku, jacketNames[i]]
-          );
-        } else {
-          await pool.query("UPDATE products SET category = 'JACKETS' WHERE sku = $1", [sku]);
-        }
-      }
-      console.log("Ensured JACKETS category products exist");
-    }
-
-    // MISC/JACKETS/BLANKETS auto-insert removed — managed via manual price upload
+    // Product auto-creation removed — managed via manual price upload
     // Normalize dimension-based product names to proper size names
     const nameUpdates: [string, string][] = [
       // PIPED PILLOWS: dimension → size
@@ -541,33 +469,6 @@ async function runStartupTasks() {
         [['CASES'], interiorsId]
       );
     }
-
-    const pillowProducts = [
-      { sku: 'PFH-STDPILLOW', name: 'STANDARD PILLOW', category: 'MICROSOFT', defaultPrice: '15.00' },
-      { sku: 'PFH-QNPILLOW', name: 'QUEEN PILLOW', category: 'MICROSOFT', defaultPrice: '22.00' },
-      { sku: 'PFH-KGPILLOW', name: 'KING PILLOW', category: 'MICROSOFT', defaultPrice: '29.00' },
-    ];
-    const interiorsPrices: Record<string, string> = { 'PFH-STDPILLOW': '18.00', 'PFH-QNPILLOW': '27.00', 'PFH-KGPILLOW': '31.00' };
-    const standardPrices: Record<string, string> = { 'PFH-STDPILLOW': '15.00', 'PFH-QNPILLOW': '22.00', 'PFH-KGPILLOW': '29.00' };
-    const standardResult = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
-    const standardId = standardResult.rows[0]?.id;
-
-    for (const pp of pillowProducts) {
-      const existing = await pool.query(`SELECT id FROM products WHERE sku = $1 LIMIT 1`, [pp.sku]);
-      let productId: string;
-      if (existing.rows.length === 0) {
-        const ins = await pool.query(
-          `INSERT INTO products (id, sku, name, category, active, unit_price) VALUES (gen_random_uuid(), $1, $2, $3, true, $4) RETURNING id`,
-          [pp.sku, pp.name, pp.category, pp.defaultPrice]
-        );
-        productId = ins.rows[0].id;
-      } else {
-        productId = existing.rows[0].id;
-        await pool.query(`UPDATE products SET category = $1 WHERE id = $2`, [pp.category, productId]);
-      }
-      // Price inserts removed — managed via manual upload
-    }
-    console.log("Pillow products ensured");
   } catch (error) {
     console.error("Portal categories column error:", error);
   }
@@ -795,123 +696,6 @@ async function runStartupTasks() {
     if (r2.rowCount && r2.rowCount > 0) console.log(`Renamed CUST INSERTS → CUSTOM INSERTS: ${r2.rowCount} products`);
   } catch (err: any) {
     console.error("CUST INSERTS rename error:", err.message);
-  }
-
-  // Add '35x55 100% duck feather' to all CUSTOM INSERTS price lists
-  try {
-    const productName = "35x55 100% duck feather";
-    const productSku = "CI-35X55-DF";
-    const productPrice = 14.50;
-
-    // Ensure product exists
-    let existingProduct = await pool.query(
-      `SELECT id FROM products WHERE UPPER(name) = UPPER($1) LIMIT 1`,
-      [productName]
-    );
-    let productId: string;
-    if (existingProduct.rows.length === 0) {
-      const ins = await pool.query(
-        `INSERT INTO products (id, sku, name, category, unit_price, active)
-         VALUES (gen_random_uuid(), $1, $2, 'CUSTOM INSERTS', $3, true)
-         ON CONFLICT (sku) DO NOTHING
-         RETURNING id`,
-        [productSku, productName, productPrice]
-      );
-      if (ins.rows.length > 0) {
-        productId = ins.rows[0].id;
-        console.log(`Created product: ${productName} (${productId})`);
-      } else {
-        // SKU conflict — fetch existing
-        const ex = await pool.query(`SELECT id FROM products WHERE sku = $1`, [productSku]);
-        productId = ex.rows[0]?.id;
-      }
-    } else {
-      productId = existingProduct.rows[0].id;
-    }
-
-    if (productId!) {
-      // Add to every price list that has any CUSTOM INSERTS product
-      const priceLists = await pool.query(
-        `SELECT DISTINCT plp.price_list_id FROM price_list_prices plp
-         JOIN products p ON p.id = plp.product_id
-         WHERE UPPER(p.category) = 'CUSTOM INSERTS'`
-      );
-      let added = 0;
-      for (const row of priceLists.rows) {
-        const plId = row.price_list_id;
-        const exists = await pool.query(
-          `SELECT 1 FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 LIMIT 1`,
-          [plId, productId]
-        );
-        if (exists.rows.length === 0) {
-          await pool.query(
-            `INSERT INTO price_list_prices (id, price_list_id, product_id, unit_price)
-             VALUES (gen_random_uuid(), $1, $2, $3)`,
-            [plId, productId, productPrice]
-          );
-          added++;
-        }
-      }
-      if (added > 0) console.log(`Added ${productName} to ${added} price list(s)`);
-    }
-  } catch (err: any) {
-    console.error("35x55 product migration error:", err.message);
-  }
-
-  // Add 3 Hungarian Goose Pillow products to Hotel Luxury Collection price list
-  try {
-    const hlcResult = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) LIKE '%hotel luxury%' LIMIT 1`);
-    const hlcId = hlcResult.rows[0]?.id;
-    if (hlcId) {
-      const newPillows = [
-        { sku: "HLC-HUNG-STD", name: "STANDARD HUNGARIAN GOOSE PILLOW STRIP", price: 112.00 },
-        { sku: "HLC-HUNG-QN",  name: "QUEEN HUNGARIAN GOOSE PILLOW",           price: 117.00 },
-        { sku: "HLC-HUNG-KG",  name: "KING HUNGARIAN GOOSE PILLOW",            price: 125.00 },
-      ];
-      for (const pillow of newPillows) {
-        // Find by name first (most reliable), then SKU
-        let pidRes = await pool.query(
-          `SELECT id FROM products WHERE UPPER(name) = UPPER($1) LIMIT 1`,
-          [pillow.name]
-        );
-        let pid: string;
-        if (pidRes.rows.length === 0) {
-          // Generate a safe SKU — use ours but fall back to a random suffix if it conflicts
-          let sku = pillow.sku;
-          const skuCheck = await pool.query(`SELECT 1 FROM products WHERE sku = $1`, [sku]);
-          if (skuCheck.rows.length > 0) sku = `${sku}-${Date.now()}`;
-          const ins = await pool.query(
-            `INSERT INTO products (id, sku, name, category, unit_price, active)
-             VALUES (gen_random_uuid(), $1, $2, 'PILLOW', $3, true) RETURNING id`,
-            [sku, pillow.name, pillow.price]
-          );
-          pid = ins.rows[0].id;
-          console.log(`[HLC-PILLOWS] Created product: ${pillow.name} (SKU: ${sku})`);
-        } else {
-          pid = pidRes.rows[0].id;
-          console.log(`[HLC-PILLOWS] Product already exists: ${pillow.name}`);
-        }
-        // Add to Hotel Luxury Collection if not already there
-        const exists = await pool.query(
-          `SELECT 1 FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 LIMIT 1`,
-          [hlcId, pid]
-        );
-        if (exists.rows.length === 0) {
-          await pool.query(
-            `INSERT INTO price_list_prices (id, price_list_id, product_id, unit_price)
-             VALUES (gen_random_uuid(), $1, $2, $3)`,
-            [hlcId, pid, pillow.price]
-          );
-          console.log(`[HLC-PILLOWS] Added "${pillow.name}" $${pillow.price} to Hotel Luxury Collection`);
-        } else {
-          console.log(`[HLC-PILLOWS] "${pillow.name}" already in Hotel Luxury Collection`);
-        }
-      }
-    } else {
-      console.error("[HLC-PILLOWS] Hotel Luxury Collection price list NOT FOUND in DB");
-    }
-  } catch (err: any) {
-    console.error("Hungarian Goose Pillow migration error:", err.message);
   }
 
   // Add Xero invoice columns to orders table if not present
