@@ -1266,6 +1266,21 @@ async function runStartupTasks() {
   }
 
   // ============================================================
+  // PIPED PILLOWS → PILLOW category merge
+  // Rename any products with category "PIPED PILLOWS" to "PILLOW"
+  // ============================================================
+  try {
+    const pipedRes = await pool.query(
+      `UPDATE products SET category = 'PILLOW' WHERE UPPER(category) = 'PIPED PILLOWS' RETURNING sku`
+    );
+    if (pipedRes.rowCount && pipedRes.rowCount > 0) {
+      console.log(`[PILLOW-MERGE] Renamed ${pipedRes.rowCount} PIPED PILLOWS products to PILLOW`);
+    }
+  } catch (err: any) {
+    console.error("[PILLOW-MERGE] Error:", err.message);
+  }
+
+  // ============================================================
   // ECO DOWN UNDER PRICES — FULL IMPORT (March 2026)
   // Imports all 357 rows from server/data/eco_down_under_prices.csv
   // into the "ECO DOWN UNDER PRICES" price list. Idempotent.
