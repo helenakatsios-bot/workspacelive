@@ -131,13 +131,6 @@ async function runStartupTasks() {
     console.error("Account sync error:", error);
   }
 
-  // Import all 17 price lists from CSV files (idempotent - skips if already imported)
-  try {
-    await importAllPriceLists();
-  } catch (error) {
-    console.error("Price list import error:", error);
-  }
-
   // One-time cleanup: remove old pre-imported price lists that are now superseded
   try {
     const oldPriceLists = [
@@ -159,6 +152,13 @@ async function runStartupTasks() {
     }
   } catch (error) {
     console.error("Old price list cleanup error:", error);
+  }
+
+  // Import all 17 price lists from CSV files (idempotent - skips if already imported)
+  try {
+    await importAllPriceLists();
+  } catch (error) {
+    console.error("Price list import error:", error);
   }
 
   // Product sync disabled - user managing products manually

@@ -295,6 +295,7 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
         const result = await client.query(
           `INSERT INTO products (id, sku, name, category, unit_price, active)
            VALUES (gen_random_uuid(), $1, $2, $3, $4, true)
+           ON CONFLICT (sku) DO UPDATE SET name = products.name
            RETURNING id, name, category, sku`,
           [generatedSku, name, category, basePrice]
         );
