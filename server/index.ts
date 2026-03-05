@@ -1112,15 +1112,21 @@ async function runStartupTasks() {
   // company-specific prices for stripped quilt products.
   // ============================================================
   try {
-    const stripPriceMap: Array<{sizeKeyword: string; oldPrice: string; newPrice: string}> = [
-      { sizeKeyword: "SINGLE",     oldPrice: "142.20", newPrice: "175.00" },
-      { sizeKeyword: "DOUBLE",     oldPrice: "173.70", newPrice: "215.00" },
-      { sizeKeyword: "QUEEN",      oldPrice: "188.20", newPrice: "255.00" },
-      { sizeKeyword: "KING",       oldPrice: "209.20", newPrice: "300.00" },
-      { sizeKeyword: "SUPER KING", oldPrice: "276.20", newPrice: "380.00" },
+    // Match products by exact size prefix + "STRIPPED QUILT" or "HUNGARIAN WINTER STRIP" category.
+    // No old-price guard — we always set to the target price so this is idempotent.
+    const stripPriceMap: Array<{sizeKeyword: string; newPrice: string}> = [
+      { sizeKeyword: "SINGLE",     newPrice: "175.00" },
+      { sizeKeyword: "DOUBLE",     newPrice: "215.00" },
+      { sizeKeyword: "QUEEN",      newPrice: "255.00" },
+      { sizeKeyword: "KING",       newPrice: "300.00" },
+      { sizeKeyword: "SUPER KING", newPrice: "380.00" },
     ];
     let stripUpdatesTotal = 0;
-    for (const { sizeKeyword, oldPrice, newPrice } of stripPriceMap) {
+    for (const { sizeKeyword, newPrice } of stripPriceMap) {
+      // Match products whose names start with the size keyword and whose category
+      // is either STRIPPED QUILT or HUNGARIAN WINTER STRIP.
+      const namePattern = `${sizeKeyword}%`;
+      const catFilter = `(p.category ILIKE '%strip%' OR p.category ILIKE 'HUNGARIAN WINTER STRIP')`;
       // Update price_list_prices
       const plpResult = await pool.query(`
         UPDATE price_list_prices plp
@@ -1128,10 +1134,9 @@ async function runStartupTasks() {
         FROM products p
         WHERE plp.product_id = p.id
           AND p.name ILIKE $2
-          AND p.name ILIKE '%strip%'
-          AND p.name ILIKE '%quilt%'
-          AND plp.unit_price = $3
-      `, [newPrice, `%${sizeKeyword}%`, oldPrice]);
+          AND ${catFilter}
+          AND plp.unit_price != $1
+      `, [newPrice, namePattern]);
       // Update company_prices
       const cpResult = await pool.query(`
         UPDATE company_prices cp
@@ -1139,10 +1144,9 @@ async function runStartupTasks() {
         FROM products p
         WHERE cp.product_id = p.id
           AND p.name ILIKE $2
-          AND p.name ILIKE '%strip%'
-          AND p.name ILIKE '%quilt%'
-          AND cp.unit_price = $3
-      `, [newPrice, `%${sizeKeyword}%`, oldPrice]);
+          AND ${catFilter}
+          AND cp.unit_price != $1
+      `, [newPrice, namePattern]);
       // Update company_variant_prices
       const cvpResult = await pool.query(`
         UPDATE company_variant_prices cvp
@@ -1150,13 +1154,12 @@ async function runStartupTasks() {
         FROM products p
         WHERE cvp.product_id = p.id
           AND p.name ILIKE $2
-          AND p.name ILIKE '%strip%'
-          AND p.name ILIKE '%quilt%'
-          AND cvp.unit_price = $3
-      `, [newPrice, `%${sizeKeyword}%`, oldPrice]);
+          AND ${catFilter}
+          AND cvp.unit_price != $1
+      `, [newPrice, namePattern]);
       const count = (plpResult.rowCount || 0) + (cpResult.rowCount || 0) + (cvpResult.rowCount || 0);
       if (count > 0) {
-        console.log(`[STRIP-PRICES] ${sizeKeyword}: updated ${count} price records ($${oldPrice} → $${newPrice})`);
+        console.log(`[STRIP-PRICES] ${sizeKeyword}: updated ${count} price records → $${newPrice}`);
       }
       stripUpdatesTotal += count;
     }
