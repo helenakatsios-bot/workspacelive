@@ -1265,6 +1265,76 @@ async function runStartupTasks() {
     console.error("[STD-DEDUP] Error:", err.message);
   }
 
+  // ============================================================
+  // ECO DOWN UNDER PRICES — FULL IMPORT (March 2026)
+  // Imports all 357 rows from server/data/eco_down_under_prices.csv
+  // into the "ECO DOWN UNDER PRICES" price list. Idempotent.
+  // ============================================================
+  try {
+    const eduList2 = await pool.query(`SELECT id FROM price_lists WHERE UPPER(name) = 'ECO DOWN UNDER PRICES' LIMIT 1`);
+    if (eduList2.rows.length > 0) {
+      const eduId2 = eduList2.rows[0].id;
+      const csvPath = path.join(__dirname, "data", "eco_down_under_prices.csv");
+      if (fs.existsSync(csvPath)) {
+        const csvText = fs.readFileSync(csvPath, "utf8");
+        const lines = csvText.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+        const header = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/\s+/g, "_"));
+        const nameIdx = header.indexOf("product_name");
+        const catIdx = header.indexOf("category");
+        const skuIdx = header.indexOf("sku");
+        const fillIdx = header.indexOf("filling");
+        const weightIdx = header.indexOf("weight");
+        const priceIdx = header.indexOf("customer_price");
+
+        let imported = 0, updated = 0, created = 0;
+        for (let i = 1; i < lines.length; i++) {
+          const parts = lines[i].split(",");
+          const name = (parts[nameIdx] || "").trim();
+          const cat = (parts[catIdx] || "INSERTS").trim().toUpperCase();
+          const sku = (parts[skuIdx] || "").trim().toUpperCase();
+          const filling = (parts[fillIdx] || "").trim() || null;
+          const weight = (parts[weightIdx] || "").trim() || null;
+          const rawPrice = (parts[priceIdx] || "").replace(/[^0-9.]/g, "");
+          const price = parseFloat(rawPrice);
+          if (!name || !sku || isNaN(price) || price <= 0) continue;
+
+          // Find or create product by SKU
+          let productId: string | null = null;
+          const existing = await pool.query(`SELECT id FROM products WHERE UPPER(sku) = $1 LIMIT 1`, [sku]);
+          if (existing.rows.length > 0) {
+            productId = existing.rows[0].id;
+          } else {
+            const newProd = await pool.query(
+              `INSERT INTO products (name, sku, category, unit_price, active) VALUES ($1, $2, $3, $4, true) RETURNING id`,
+              [name, sku, cat, price.toFixed(2)]
+            );
+            productId = newProd.rows[0].id;
+            created++;
+          }
+
+          // Upsert price_list_prices
+          const existingPrice = await pool.query(
+            `SELECT id FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 AND COALESCE(filling,'') = $3 AND COALESCE(weight,'') = $4 LIMIT 1`,
+            [eduId2, productId, filling || "", weight || ""]
+          );
+          if (existingPrice.rows.length > 0) {
+            await pool.query(`UPDATE price_list_prices SET unit_price = $1, updated_at = NOW() WHERE id = $2`, [price.toFixed(2), existingPrice.rows[0].id]);
+            updated++;
+          } else {
+            await pool.query(
+              `INSERT INTO price_list_prices (price_list_id, product_id, filling, weight, unit_price) VALUES ($1, $2, $3, $4, $5)`,
+              [eduId2, productId, filling, weight, price.toFixed(2)]
+            );
+            imported++;
+          }
+        }
+        console.log(`[EDU-IMPORT] Done: ${imported} inserted, ${updated} updated, ${created} new products created`);
+      }
+    }
+  } catch (err: any) {
+    console.error("[EDU-IMPORT] Error:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 

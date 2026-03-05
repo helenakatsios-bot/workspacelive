@@ -1,0 +1,357 @@
+Product Name	Category	SKU	Filling	Weight	Customer Price	
+30X55CM	INSERTS	ECO600	100% Feather	Normal	$14.50	
+30X55CM	INSERTS	ECO601	100% Feather	Firm Fill	15.1	
+30X55CM	INSERTS	ECO602	100% Feather	Extra Firm Fill	15.7	
+30X55CM	INSERTS	ECO603	Duck Feather - Foam	Normal	$16.00	
+30X55CM	INSERTS	ECO604	Duck Feather - Foam	Firm Fill	$16.60	
+30X55CM	INSERTS	ECO605	Duck Feather - Foam	Extra Firm Fill	$17.20	
+30X55CM	INSERTS	ECO606	Duck Feather - Fibre	Normal	$16.00	
+30X55CM	INSERTS	ECO607	Duck Feather - Fibre	Firm Fill	$16.60	
+30X55CM	INSERTS	ECO608	Duck Feather - Fibre	Extra Firm Fill	$17.20	
+30X55CM	INSERTS	ECO609	100% Polyester	Normal	$16.00	
+30X55CM	INSERTS	ECO610	100% Polyester	Firm Fill	$16.60	
+30X55CM	INSERTS	ECO611	100% Polyester	Extra Firm Fill	$17.20	
+30X55CM	INSERTS	ECO612	30% Down 70% Feather	Normal	$27.50	
+30X55CM	INSERTS	ECO613	30% Down 70% Feather	Firm Fill	$30.10	
+30X55CM	INSERTS	ECO614	30% Down 70% Feather	Extra Firm Fill	$32.70	
+30X55CM	INSERTS	ECO615	50% Down 50% Feather	Normal	$36.80	
+30X55CM	INSERTS	ECO616	50% Down 50% Feather	Firm Fill	$39.40	
+30X55CM	INSERTS	ECO617	50% Down 50% Feather	Extra Firm Fill	$42.00	
+30X55CM	INSERTS	ECO618	80% Down 20% Feather	Normal	$52.50	
+30X55CM	INSERTS	ECO619	80% Down 20% Feather	Firm Fill	$55.10	
+30X55CM	INSERTS	ECO620	80% Down 20% Feather	Extra Firm Fill	$57.70	
+40X40CM	INSERTS	ECO621	100% Feather	Normal	$9.20	
+40X40CM	INSERTS	ECO622	100% Feather	Firm Fill	$9.80	
+40X40CM	INSERTS	ECO623	100% Feather	Extra Firm Fill	$10.40	
+40X40CM	INSERTS	ECO624	Duck Feather - Foam	Normal	$11.00	
+40X40CM	INSERTS	ECO625	Duck Feather - Foam	Firm Fill	$11.60	
+40X40CM	INSERTS	ECO626	Duck Feather - Foam	Extra Firm Fill	$12.20	
+40X40CM	INSERTS	ECO627	Duck Feather - Fibre	Normal	$11.00	
+40X40CM	INSERTS	ECO628	Duck Feather - Fibre	Firm Fill	$11.60	
+40X40CM	INSERTS	ECO629	Duck Feather - Fibre	Extra Firm Fill	$12.20	
+40X40CM	INSERTS	ECO630	100% Polyester	Normal	$11.00	
+40X40CM	INSERTS	ECO631	100% Polyester	Firm Fill	$11.60	
+40X40CM	INSERTS	ECO632	100% Polyester	Extra Firm Fill	$12.20	
+40X40CM	INSERTS	ECO633	30% Down 70% Feather	Normal	$19.00	
+40X40CM	INSERTS	ECO634	30% Down 70% Feather	Firm Fill	$21.60	
+40X40CM	INSERTS	ECO635	30% Down 70% Feather	Extra Firm Fill	$24.20	
+40X40CM	INSERTS	ECO636	50% Down 50% Feather	Normal	$27.00	
+40X40CM	INSERTS	ECO637	50% Down 50% Feather	Firm Fill	$29.60	
+40X40CM	INSERTS	ECO638	50% Down 50% Feather	Extra Firm Fill	$32.20	
+40X40CM	INSERTS	ECO639	80% Down 20% Feather	Normal	$44.00	
+40X40CM	INSERTS	ECO640	80% Down 20% Feather	Firm Fill	$46.60	
+40X40CM	INSERTS	ECO641	80% Down 20% Feather	Extra Firm Fill	$49.20	
+45X45CM	INSERTS	ECO642	100% Feather	Normal	$10.50	
+45X45CM	INSERTS	ECO643	100% Feather	Firm Fill	$11.10	
+45X45CM	INSERTS	ECO644	100% Feather	Extra Firm Fill	$11.70	
+45X45CM	INSERTS	ECO645	Duck Feather - Foam	Normal	$12.00	
+45X45CM	INSERTS	ECO646	Duck Feather - Foam	Firm Fill	$12.60	
+45X45CM	INSERTS	ECO647	Duck Feather - Foam	Extra Firm Fill	$13.20	
+45X45CM	INSERTS	ECO648	Duck Feather - Fibre	Normal	$12.00	
+45X45CM	INSERTS	ECO649	Duck Feather - Fibre	Firm Fill	$12.60	
+45X45CM	INSERTS	ECO650	Duck Feather - Fibre	Extra Firm Fill	$13.20	
+45X45CM	INSERTS	ECO651	100% Polyester	Normal	$12.00	
+45X45CM	INSERTS	ECO652	100% Polyester	Firm Fill	$12.60	
+45X45CM	INSERTS	ECO653	100% Polyester	Extra Firm Fill	$13.20	
+45X45CM	INSERTS	ECO654	30% Down 70% Feather	Normal	$23.50	
+45X45CM	INSERTS	ECO655	30% Down 70% Feather	Firm Fill	$26.10	
+45X45CM	INSERTS	ECO656	30% Down 70% Feather	Extra Firm Fill	$28.70	
+45X45CM	INSERTS	ECO657	50% Down 50% Feather	Normal	$32.80	
+45X45CM	INSERTS	ECO658	50% Down 50% Feather	Firm Fill	$35.40	
+45X45CM	INSERTS	ECO659	50% Down 50% Feather	Extra Firm Fill	$38.00	
+45X45CM	INSERTS	ECO660	80% Down 20% Feather	Normal	$48.50	
+45X45CM	INSERTS	ECO661	80% Down 20% Feather	Firm Fill	$51.10	
+45X45CM	INSERTS	ECO662	80% Down 20% Feather	Extra Firm Fill	$53.70	
+40X80CM	INSERTS	ECO663	100% Feather	Normal	$19.00	
+40X80CM	INSERTS	ECO664	100% Feather	Firm Fill	$19.60	
+40X80CM	INSERTS	ECO665	100% Feather	Extra Firm Fill	$20.20	
+40X80CM	INSERTS	ECO666	Duck Feather - Foam	Normal	$21.25	
+40X80CM	INSERTS	ECO667	Duck Feather - Foam	Firm Fill	$21.85	
+40X80CM	INSERTS	ECO668	Duck Feather - Foam	Extra Firm Fill	$22.45	
+40X80CM	INSERTS	ECO669	Duck Feather - Fibre	Normal	$21.25	
+40X80CM	INSERTS	ECO670	Duck Feather - Fibre	Firm Fill	$21.85	
+40X80CM	INSERTS	ECO671	Duck Feather - Fibre	Extra Firm Fill	$22.45	
+40X80CM	INSERTS	ECO672	100% Polyester	Normal	$21.25	
+40X80CM	INSERTS	ECO673	100% Polyester	Firm Fill	$21.85	
+40X80CM	INSERTS	ECO674	100% Polyester	Extra Firm Fill	$22.45	
+40X80CM	INSERTS	ECO675	30% Down 70% Feather	Normal	$43.00	
+40X80CM	INSERTS	ECO676	30% Down 70% Feather	Firm Fill	$45.60	
+40X80CM	INSERTS	ECO677	30% Down 70% Feather	Extra Firm Fill	$48.20	
+40X80CM	INSERTS	ECO678	50% Down 50% Feather	Normal	$68.40	
+40X80CM	INSERTS	ECO679	50% Down 50% Feather	Firm Fill	$71.00	
+40X80CM	INSERTS	ECO680	50% Down 50% Feather	Extra Firm Fill	$73.60	
+40X80CM	INSERTS	ECO681	80% Down 20% Feather	Normal	$83.00	
+40X80CM	INSERTS	ECO682	80% Down 20% Feather	Firm Fill	$85.60	
+40X80CM	INSERTS	ECO683	80% Down 20% Feather	Extra Firm Fill	$88.20	
+45X70CM	INSERTS	ECO684	100% Feather	Normal	$17.65	
+45X70CM	INSERTS	ECO685	100% Feather	Firm Fill	$18.25	
+45X70CM	INSERTS	ECO686	100% Feather	Extra Firm Fill	$18.85	
+45X70CM	INSERTS	ECO687	Duck Feather - Foam	Normal	$20.00	
+45X70CM	INSERTS	ECO688	Duck Feather - Foam	Firm Fill	$20.60	
+45X70CM	INSERTS	ECO689	Duck Feather - Foam	Extra Firm Fill	$21.20	
+45X70CM	INSERTS	ECO690	Duck Feather - Fibre	Normal	$20.00	
+45X70CM	INSERTS	ECO691	Duck Feather - Fibre	Firm Fill	$20.60	
+45X70CM	INSERTS	ECO692	Duck Feather - Fibre	Extra Firm Fill	$21.20	
+45X70CM	INSERTS	ECO693	100% Polyester	Normal	$20.00	
+45X70CM	INSERTS	ECO694	100% Polyester	Firm Fill	$20.60	
+45X70CM	INSERTS	ECO695	100% Polyester	Extra Firm Fill	$21.20	
+45X70CM	INSERTS	ECO696	30% Down 70% Feather	Normal	$36.70	
+45X70CM	INSERTS	ECO697	30% Down 70% Feather	Firm Fill	$39.30	
+45X70CM	INSERTS	ECO698	30% Down 70% Feather	Extra Firm Fill	$41.90	
+45X70CM	INSERTS	ECO699	50% Down 50% Feather	Normal	$52.15	
+45X70CM	INSERTS	ECO700	50% Down 50% Feather	Firm Fill	$54.75	
+45X70CM	INSERTS	ECO701	50% Down 50% Feather	Extra Firm Fill	$57.35	
+45X70CM	INSERTS	ECO702	80% Down 20% Feather	Normal	$73.00	
+45X70CM	INSERTS	ECO703	80% Down 20% Feather	Firm Fill	$75.60	
+45X70CM	INSERTS	ECO704	80% Down 20% Feather	Extra Firm Fill	$78.20	
+50X110CM	INSERTS	ECO705	100% Feather	Normal	$50.00	
+50X110CM	INSERTS	ECO706	100% Feather	Firm Fill	$50.60	
+50X110CM	INSERTS	ECO707	100% Feather	Extra Firm Fill	$51.80	
+50X110CM	INSERTS	ECO708	Duck Feather - Foam	Normal	$50.00	
+50X110CM	INSERTS	ECO709	Duck Feather - Foam	Firm Fill	$50.60	
+50X110CM	INSERTS	ECO710	Duck Feather - Foam	Extra Firm Fill	$51.20	
+50X110CM	INSERTS	ECO711	Duck Feather - Fibre	Normal	$50.00	
+50X110CM	INSERTS	ECO712	Duck Feather - Fibre	Firm Fill	$50.60	
+50X110CM	INSERTS	ECO713	Duck Feather - Fibre	Extra Firm Fill	$51.20	
+50X110CM	INSERTS	ECO714	100% Polyester	Normal	$46.00	
+50X110CM	INSERTS	ECO715	100% Polyester	Firm Fill	$46.60	
+50X110CM	INSERTS	ECO716	100% Polyester	Extra Firm Fill	$47.20	
+50X110CM	INSERTS	ECO717	30% Down 70% Feather	Normal	$95.00	
+50X110CM	INSERTS	ECO718	30% Down 70% Feather	Firm Fill	$96.00	
+50X110CM	INSERTS	ECO719	30% Down 70% Feather	Extra Firm Fill	96.6	
+50X110CM	INSERTS	ECO720	50% Down 50% Feather	Normal	$113.25	
+50X110CM	INSERTS	ECO721	50% Down 50% Feather	Firm Fill	$114.25	
+50X110CM	INSERTS	ECO722	50% Down 50% Feather	Extra Firm Fill	$114.85	
+50X110CM	INSERTS	ECO723	80% Down 20% Feather	Normal	$136.25	
+50X110CM	INSERTS	ECO724	80% Down 20% Feather	Firm Fill	$137.25	
+50X110CM	INSERTS	ECO725	80% Down 20% Feather	Extra Firm Fill	$137.85	
+50X30CM	INSERTS	ECO726	100% Feather	Normal	$13.20	
+50X30CM	INSERTS	ECO727	100% Feather	Firm Fill	$13.80	
+50X30CM	INSERTS	ECO728	100% Feather	Extra Firm Fill	$14.40	
+50X30CM	INSERTS	ECO729	Duck Feather - Foam	Normal	$15.00	
+50X30CM	INSERTS	ECO730	Duck Feather - Foam	Firm Fill	$15.60	
+50X30CM	INSERTS	ECO731	Duck Feather - Foam	Extra Firm Fill	$16.20	
+50X30CM	INSERTS	ECO732	Duck Feather - Fibre	Normal	$15.00	
+50X30CM	INSERTS	ECO733	Duck Feather - Fibre	Firm Fill	$15.60	
+50X30CM	INSERTS	ECO734	Duck Feather - Fibre	Extra Firm Fill	$16.20	
+50X30CM	INSERTS	ECO735	100% Polyester	Normal	$15.00	
+50X30CM	INSERTS	ECO736	100% Polyester	Firm Fill	$15.60	
+50X30CM	INSERTS	ECO737	100% Polyester	Extra Firm Fill	$16.20	
+50X30CM	INSERTS	ECO738	30% Down 70% Feather	Normal	$23.00	
+50X30CM	INSERTS	ECO739	30% Down 70% Feather	Firm Fill	$25.60	
+50X30CM	INSERTS	ECO740	30% Down 70% Feather	Extra Firm Fill	$28.20	
+50X30CM	INSERTS	ECO741	50% Down 50% Feather	Normal	$31.00	
+50X30CM	INSERTS	ECO742	50% Down 50% Feather	Firm Fill	$33.60	
+50X30CM	INSERTS	ECO743	50% Down 50% Feather	Extra Firm Fill	$36.20	
+50X30CM	INSERTS	ECO744	80% Down 20% Feather	Normal	$48.00	
+50X30CM	INSERTS	ECO745	80% Down 20% Feather	Firm Fill	$50.60	
+50X30CM	INSERTS	ECO746	80% Down 20% Feather	Extra Firm Fill	$53.20	
+50X50CM	INSERTS	ECO747	100% Feather	Normal	$11.50	
+50X50CM	INSERTS	ECO748	100% Feather	Firm Fill	$12.10	
+50X50CM	INSERTS	ECO749	100% Feather	Extra Firm Fill	$12.70	
+50X50CM	INSERTS	ECO750	Duck Feather - Foam	Normal	$13.50	
+50X50CM	INSERTS	ECO751	Duck Feather - Foam	Firm Fill	$14.10	
+50X50CM	INSERTS	ECO752	Duck Feather - Foam	Extra Firm Fill	$14.70	
+50X50CM	INSERTS	ECO753	Duck Feather - Fibre	Normal	$13.50	
+50X50CM	INSERTS	ECO754	Duck Feather - Fibre	Firm Fill	$14.10	
+50X50CM	INSERTS	ECO755	Duck Feather - Fibre	Extra Firm Fill	$14.70	
+50X50CM	INSERTS	ECO756	100% Polyester	Normal	$13.50	
+50X50CM	INSERTS	ECO757	100% Polyester	Firm Fill	$14.10	
+50X50CM	INSERTS	ECO758	100% Polyester	Extra Firm Fill	$14.70	
+50X50CM	INSERTS	ECO759	30% Down 70% Feather	Normal	$26.50	
+50X50CM	INSERTS	ECO760	30% Down 70% Feather	Firm Fill	$29.10	
+50X50CM	INSERTS	ECO761	30% Down 70% Feather	Extra Firm Fill	$31.70	
+50X50CM	INSERTS	ECO762	50% Down 50% Feather	Normal	$45.00	
+50X50CM	INSERTS	ECO763	50% Down 50% Feather	Firm Fill	$47.60	
+50X50CM	INSERTS	ECO764	50% Down 50% Feather	Extra Firm Fill	$50.20	
+50X50CM	INSERTS	ECO765	80% Down 20% Feather	Normal	$56.00	
+50X50CM	INSERTS	ECO766	80% Down 20% Feather	Firm Fill	$58.60	
+50X50CM	INSERTS	ECO767	80% Down 20% Feather	Extra Firm Fill	$61.20	
+50X80CM	INSERTS	ECO768	100% Feather	Normal	$26.00	
+50X80CM	INSERTS	ECO769	100% Feather	Firm Fill	$28.60	
+50X80CM	INSERTS	ECO770	100% Feather	Extra Firm Fill	$31.20	
+50X80CM	INSERTS	ECO771	Duck Feather - Foam	Normal	$32.75	
+50X80CM	INSERTS	ECO772	Duck Feather - Foam	Firm Fill	$26.60	
+50X80CM	INSERTS	ECO773	Duck Feather - Foam	Extra Firm Fill	$27.20	
+50X80CM	INSERTS	ECO774	Duck Feather - Fibre	Normal	$32.75	
+50X80CM	INSERTS	ECO775	Duck Feather - Fibre	Firm Fill	$33.35	
+50X80CM	INSERTS	ECO776	Duck Feather - Fibre	Extra Firm Fill	$33.95	
+50X80CM	INSERTS	ECO777	100% Polyester	Normal	$32.75	
+50X80CM	INSERTS	ECO778	100% Polyester	Firm Fill	$33.35	
+50X80CM	INSERTS	ECO779	100% Polyester	Extra Firm Fill	$33.95	
+50X80CM	INSERTS	ECO780	30% Down 70% Feather	Normal	$58.60	
+50X80CM	INSERTS	ECO781	30% Down 70% Feather	Firm Fill	$61.20	
+50X80CM	INSERTS	ECO782	30% Down 70% Feather	Extra Firm Fill	$63.80	
+50X80CM	INSERTS	ECO783	50% Down 50% Feather	Normal	$80.50	
+50X80CM	INSERTS	ECO784	50% Down 50% Feather	Firm Fill	$83.10	
+50X80CM	INSERTS	ECO785	50% Down 50% Feather	Extra Firm Fill	$85.70	
+50X80CM	INSERTS	ECO786	80% Down 20% Feather	Normal	$95.00	
+50X80CM	INSERTS	ECO787	80% Down 20% Feather	Firm Fill	$97.60	
+50X80CM	INSERTS	ECO788	80% Down 20% Feather	Extra Firm Fill	$100.20	
+50X90CM	INSERTS	ECO789	100% Feather	Normal	$29.30	
+50X90CM	INSERTS	ECO790	100% Feather	Firm Fill	$31.90	
+50X90CM	INSERTS	ECO791	100% Feather	Extra Firm Fill	$34.50	
+50X90CM	INSERTS	ECO792	Duck Feather - Foam	Normal	$38.50	
+50X90CM	INSERTS	ECO793	Duck Feather - Foam	Firm Fill	$41.10	
+50X90CM	INSERTS	ECO794	Duck Feather - Foam	Extra Firm Fill	$43.70	
+50X90CM	INSERTS	ECO795	Duck Feather - Fibre	Normal	$38.50	
+50X90CM	INSERTS	ECO796	Duck Feather - Fibre	Firm Fill	$29.90	
+50X90CM	INSERTS	ECO797	Duck Feather - Fibre	Extra Firm Fill	$30.50	
+50X90CM	INSERTS	ECO798	100% Polyester	Normal	$38.50	
+50X90CM	INSERTS	ECO799	100% Polyester	Firm Fill	$29.90	
+50X90CM	INSERTS	ECO800	100% Polyester	Extra Firm Fill	$30.50	
+50X90CM	INSERTS	ECO801	30% Down 70% Feather	Normal	$71.00	
+50X90CM	INSERTS	ECO802	30% Down 70% Feather	Firm Fill	$73.60	
+50X90CM	INSERTS	ECO803	30% Down 70% Feather	Extra Firm Fill	$76.20	
+50X90CM	INSERTS	ECO804	50% Down 50% Feather	Normal	$92.55	
+50X90CM	INSERTS	ECO805	50% Down 50% Feather	Firm Fill	$95.15	
+50X90CM	INSERTS	ECO806	50% Down 50% Feather	Extra Firm Fill	$97.75	
+50X90CM	INSERTS	ECO807	80% Down 20% Feather	Normal	$107.00	
+50X90CM	INSERTS	ECO808	80% Down 20% Feather	Firm Fill	$109.60	
+50X90CM	INSERTS	ECO809	80% Down 20% Feather	Extra Firm Fill	$112.20	
+55X55CM	INSERTS	ECO810	100% Feather	Normal	$12.00	
+55X55CM	INSERTS	ECO811	100% Feather	Firm Fill	$12.60	
+55X55CM	INSERTS	ECO812	100% Feather	Extra Firm Fill	$13.20	
+55X55CM	INSERTS	ECO813	Duck Feather - Foam	Normal	$15.00	
+55X55CM	INSERTS	ECO814	Duck Feather - Foam	Firm Fill	$15.60	
+55X55CM	INSERTS	ECO815	Duck Feather - Foam	Extra Firm Fill	$16.20	
+55X55CM	INSERTS	ECO816	Duck Feather - Fibre	Normal	$15.00	
+55X55CM	INSERTS	ECO817	Duck Feather - Fibre	Firm Fill	$15.60	
+55X55CM	INSERTS	ECO818	Duck Feather - Fibre	Extra Firm Fill	$16.20	
+55X55CM	INSERTS	ECO819	100% Polyester	Normal	$15.00	
+55X55CM	INSERTS	ECO820	100% Polyester	Firm Fill	$15.60	
+55X55CM	INSERTS	ECO821	100% Polyester	Extra Firm Fill	$16.20	
+55X55CM	INSERTS	ECO822	30% Down 70% Feather	Normal	$30.25	
+55X55CM	INSERTS	ECO823	30% Down 70% Feather	Firm Fill	$32.85	
+55X55CM	INSERTS	ECO824	30% Down 70% Feather	Extra Firm Fill	$35.45	
+55X55CM	INSERTS	ECO825	50% Down 50% Feather	Normal	$45.10	
+55X55CM	INSERTS	ECO826	50% Down 50% Feather	Firm Fill	$47.70	
+55X55CM	INSERTS	ECO827	50% Down 50% Feather	Extra Firm Fill	$50.30	
+55X55CM	INSERTS	ECO828	80% Down 20% Feather	Normal	$65.00	
+55X55CM	INSERTS	ECO829	80% Down 20% Feather	Firm Fill	$67.60	
+55X55CM	INSERTS	ECO830	80% Down 20% Feather	Extra Firm Fill	$70.20	
+60X40CM	INSERTS	ECO831	100% Feather	Normal	$15.50	
+60X40CM	INSERTS	ECO832	100% Feather	Firm Fill	$16.10	
+60X40CM	INSERTS	ECO833	100% Feather	Extra Firm Fill	$16.70	
+60X40CM	INSERTS	ECO834	Duck Feather - Foam	Normal	$17.50	
+60X40CM	INSERTS	ECO835	Duck Feather - Foam	Firm Fill	$18.10	
+60X40CM	INSERTS	ECO836	Duck Feather - Foam	Extra Firm Fill	$18.70	
+60X40CM	INSERTS	ECO837	Duck Feather - Fibre	Normal	$17.50	
+60X40CM	INSERTS	ECO838	Duck Feather - Fibre	Firm Fill	$18.10	
+60X40CM	INSERTS	ECO839	Duck Feather - Fibre	Extra Firm Fill	$18.70	
+60X40CM	INSERTS	ECO840	100% Polyester	Normal	$17.50	
+60X40CM	INSERTS	ECO841	100% Polyester	Firm Fill	$18.10	
+60X40CM	INSERTS	ECO842	100% Polyester	Extra Firm Fill	$18.70	
+60X40CM	INSERTS	ECO843	30% Down 70% Feather	Normal	$30.50	
+60X40CM	INSERTS	ECO844	30% Down 70% Feather	Firm Fill	$33.10	
+60X40CM	INSERTS	ECO845	30% Down 70% Feather	Extra Firm Fill	$35.70	
+60X40CM	INSERTS	ECO846	50% Down 50% Feather	Normal	$49.00	
+60X40CM	INSERTS	ECO847	50% Down 50% Feather	Firm Fill	$51.60	
+60X40CM	INSERTS	ECO848	50% Down 50% Feather	Extra Firm Fill	$54.20	
+60X40CM	INSERTS	ECO849	80% Down 20% Feather	Normal	$60.00	
+60X40CM	INSERTS	ECO850	80% Down 20% Feather	Firm Fill	$62.60	
+60X40CM	INSERTS	ECO851	80% Down 20% Feather	Extra Firm Fill	$65.20	
+60X60CM	INSERTS	ECO852	100% Feather	Normal	$15.00	
+60X60CM	INSERTS	ECO853	100% Feather	Firm Fill	$15.60	
+60X60CM	INSERTS	ECO854	100% Feather	Extra Firm Fill	$16.20	
+60X60CM	INSERTS	ECO855	Duck Feather - Foam	Normal	$17.25	
+60X60CM	INSERTS	ECO856	Duck Feather - Foam	Firm Fill	$17.85	
+60X60CM	INSERTS	ECO857	Duck Feather - Foam	Extra Firm Fill	$18.45	
+60X60CM	INSERTS	ECO858	Duck Feather - Fibre	Normal	$17.25	
+60X60CM	INSERTS	ECO859	Duck Feather - Fibre	Firm Fill	$17.85	
+60X60CM	INSERTS	ECO860	Duck Feather - Fibre	Extra Firm Fill	$18.45	
+60X60CM	INSERTS	ECO861	100% Polyester	Normal	$17.25	
+60X60CM	INSERTS	ECO862	100% Polyester	Firm Fill	$17.85	
+60X60CM	INSERTS	ECO863	100% Polyester	Extra Firm Fill	$18.45	
+60X60CM	INSERTS	ECO864	30% Down 70% Feather	Normal	$39.00	
+60X60CM	INSERTS	ECO865	30% Down 70% Feather	Firm Fill	$41.60	
+60X60CM	INSERTS	ECO866	30% Down 70% Feather	Extra Firm Fill	$44.20	
+60X60CM	INSERTS	ECO867	50% Down 50% Feather	Normal	$64.40	
+60X60CM	INSERTS	ECO868	50% Down 50% Feather	Firm Fill	$67.00	
+60X60CM	INSERTS	ECO869	50% Down 50% Feather	Extra Firm Fill	$69.60	
+60X60CM	INSERTS	ECO870	80% Down 20% Feather	Normal	$79.00	
+60X60CM	INSERTS	ECO871	80% Down 20% Feather	Firm Fill	$81.60	
+60X60CM	INSERTS	ECO872	80% Down 20% Feather	Extra Firm Fill	$84.20	
+65X40CM	INSERTS	ECO873	100% Feather	Normal	$16.50	
+65X40CM	INSERTS	ECO874	100% Feather	Firm Fill	$17.10	
+65X40CM	INSERTS	ECO875	100% Feather	Extra Firm Fill	$17.70	
+65X40CM	INSERTS	ECO876	Duck Feather - Foam	Normal	$18.50	
+65X40CM	INSERTS	ECO877	Duck Feather - Foam	Firm Fill	$19.10	
+65X40CM	INSERTS	ECO878	Duck Feather - Foam	Extra Firm Fill	$19.70	
+65X40CM	INSERTS	ECO879	Duck Feather - Fibre	Normal	$18.50	
+65X40CM	INSERTS	ECO880	Duck Feather - Fibre	Firm Fill	$19.10	
+65X40CM	INSERTS	ECO881	Duck Feather - Fibre	Extra Firm Fill	$19.70	
+65X40CM	INSERTS	ECO882	100% Polyester	Normal	$18.50	
+65X40CM	INSERTS	ECO883	100% Polyester	Firm Fill	$19.10	
+65X40CM	INSERTS	ECO884	100% Polyester	Extra Firm Fill	$19.70	
+65X40CM	INSERTS	ECO885	30% Down 70% Feather	Normal	$31.50	
+65X40CM	INSERTS	ECO886	30% Down 70% Feather	Firm Fill	$34.10	
+65X40CM	INSERTS	ECO887	30% Down 70% Feather	Extra Firm Fill	$36.70	
+65X40CM	INSERTS	ECO888	50% Down 50% Feather	Normal	$50.00	
+65X40CM	INSERTS	ECO889	50% Down 50% Feather	Firm Fill	$52.60	
+65X40CM	INSERTS	ECO890	50% Down 50% Feather	Extra Firm Fill	$55.20	
+65X40CM	INSERTS	ECO891	80% Down 20% Feather	Normal	$61.00	
+65X40CM	INSERTS	ECO892	80% Down 20% Feather	Firm Fill	$63.60	
+65X40CM	INSERTS	ECO893	80% Down 20% Feather	Extra Firm Fill	$66.20	
+65X65CM	INSERTS	ECO894	100% Feather	Normal	$22.00	
+65X65CM	INSERTS	ECO895	100% Feather	Firm Fill	$22.60	
+65X65CM	INSERTS	ECO896	100% Feather	Extra Firm Fill	$23.20	
+65X65CM	INSERTS	ECO897	Duck Feather - Foam	Normal	$28.75	
+65X65CM	INSERTS	ECO898	Duck Feather - Foam	Firm Fill	$29.35	
+65X65CM	INSERTS	ECO899	Duck Feather - Foam	Extra Firm Fill	$29.95	
+65X65CM	INSERTS	ECO900	Duck Feather - Fibre	Normal	$28.75	
+65X65CM	INSERTS	ECO901	Duck Feather - Fibre	Firm Fill	$29.35	
+65X65CM	INSERTS	ECO902	Duck Feather - Fibre	Extra Firm Fill	$29.95	
+65X65CM	INSERTS	ECO903	100% Polyester	Normal	$28.75	
+65X65CM	INSERTS	ECO904	100% Polyester	Firm Fill	$29.35	
+65X65CM	INSERTS	ECO905	100% Polyester	Extra Firm Fill	$29.95	
+65X65CM	INSERTS	ECO906	30% Down 70% Feather	Normal	$54.60	
+65X65CM	INSERTS	ECO907	30% Down 70% Feather	Firm Fill	$57.20	
+65X65CM	INSERTS	ECO908	30% Down 70% Feather	Extra Firm Fill	$59.80	
+65X65CM	INSERTS	ECO909	50% Down 50% Feather	Normal	$76.50	
+65X65CM	INSERTS	ECO910	50% Down 50% Feather	Firm Fill	$79.10	
+65X65CM	INSERTS	ECO911	50% Down 50% Feather	Extra Firm Fill	$81.70	
+65X65CM	INSERTS	ECO912	80% Down 20% Feather	Normal	$91.00	
+65X65CM	INSERTS	ECO913	80% Down 20% Feather	Firm Fill	$93.60	
+65X65CM	INSERTS	ECO914	80% Down 20% Feather	Extra Firm Fill	$96.20	
+Single 80% Duck  Down	DUCK WINTER	ECO915	DUCK		$105.00	
+Double 80% Duck  Down	DUCK WINTER	ECO916	DUCK		$120.00	
+King Single 80% Duck  Down	DUCK WINTER	ECO917	DUCK		$120.00	
+Queen 80% Duck  Down	DUCK WINTER	ECO918	DUCK		$140.00	
+King 80% Duck  Down	DUCK WINTER	ECO919	DUCK		$160.00	
+Super King 80% Duck  Down	DUCK WINTER	ECO920	DUCK		$230.00	
+Single 80% Hungarian Goose down	HUNGARIAN WINTER	ECO921	HUNGARIAN		$175.00	
+Double 80% Hungarian Goose down	HUNGARIAN WINTER	ECO922	HUNGARIAN		$215.00	
+King Single 80% Hungarian Goose down	HUNGARIAN WINTER	ECO923	HUNGARIAN		$215.00	
+Queen 80% Hungarian Goose down	HUNGARIAN WINTER	ECO924	HUNGARIAN		$255.00	
+King 80% Hungarian Goose down	HUNGARIAN WINTER	ECO925	HUNGARIAN		$300.00	
+Super King 80% Hungarian Goose down	HUNGARIAN WINTER	ECO926	HUNGARIAN		$380.00	
+Single 50% Duck  Down	DUCK LIGHT	ECO927	DUCK		$70.00	
+Double 50% Duck  Down	DUCK LIGHT	ECO928	DUCK		$80.00	
+King Single 50% Duck  Down	DUCK LIGHT	ECO929	DUCK		$80.00	
+Queen 50% Duck  Down	DUCK LIGHT	ECO930	DUCK		$95.00	
+King 50% Duck  Down	DUCK LIGHT	ECO931	DUCK		$105.00	
+Super King 50% Duck  Down	DUCK LIGHT	ECO932	DUCK		$135.00	
+Single 80% Duck  Down	DUCK SUMMER	ECO933	DUCK		$70.50	
+Double 80% Duck  Down	DUCK SUMMER	ECO934	DUCK		$80.50	
+King Single 80% Duck  Down	DUCK SUMMER	ECO935	DUCK		$80.50	
+Queen 80% Duck  Down	DUCK SUMMER	ECO936	DUCK		$95.00	
+King 80% Duck  Down	DUCK SUMMER	ECO937	DUCK		$104.00	
+Super King 80% Duck  Down	DUCK SUMMER	ECO938	DUCK		$139.00	
+Single 80% Hungarian Goose down	HUNGARIAN LIGHT	ECO939	HUNGARIAN		121	
+Double 80% Hungarian Goose down	HUNGARIAN LIGHT	ECO940	HUNGARIAN		142	
+King Single 80% Hungarian Goose down	HUNGARIAN LIGHT	ECO941	HUNGARIAN		142	
+Queen 80% Hungarian Goose down	HUNGARIAN LIGHT	ECO942	HUNGARIAN		170	
+King 80% Hungarian Goose down	HUNGARIAN LIGHT	ECO943	HUNGARIAN		186	
+Super King 80% Hungarian Goose down	HUNGARIAN LIGHT	ECO944	HUNGARIAN		273	
+Single 80% Hungarian Goose down	HUNGARIAN SUMMER	ECO945	HUNGARIAN		$98.00	
+Double 80% Hungarian Goose down	HUNGARIAN SUMMER	ECO946	HUNGARIAN		$119.00	
+King Single 80% Hungarian Goose down	HUNGARIAN SUMMER	ECO947	HUNGARIAN		$119.00	
+Queen 80% Hungarian Goose down	HUNGARIAN SUMMER	ECO948	HUNGARIAN		$140.00	
+King 80% Hungarian Goose down	HUNGARIAN SUMMER	ECO949	HUNGARIAN		$151.00	
+Super King 80% Hungarian Goose down	HUNGARIAN SUMMER	ECO950	HUNGARIAN		$234.00	
+Standard 80% Duck Down pillow	PILLOW	ECO951	DUCK		$60.00	
+King 80% Duck Down pillow	PILLOW	ECO952	DUCK		$87.50	
+Standard Hungarian 80% Goosedown pillow	PILLOW	ECO953	GOOSE		$105.00	
+King Hungarian 80% Goosedown pillow	PILLOW	ECO954	GOOSE		$113.00	
+80 Chamber duck pillow	PILLOW	ECO955	DUCK		$40.00	
