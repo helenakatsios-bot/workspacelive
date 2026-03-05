@@ -61,23 +61,49 @@ export default function PriceListsPage() {
         (p.filling && p.filling.toLowerCase().includes(search)) ||
         (p.weight && p.weight.toLowerCase().includes(search));
     });
-    const hiddenCategories = ["CASES", "CASSETTES CASES", "CHANNELLED CASES", "BLANKETS", "JACKETS", "MISC"];
-    // Merge INSERTS into CUSTOM INSERTS
-    const categoryMerges: Record<string, string> = { "INSERTS": "CUSTOM INSERTS" };
+    const hiddenCategories = ["CASES", "CASSETTES CASES", "CHANNELLED CASES", "MISC", "CUSTOM INSERTS"];
     const groups: Record<string, PriceListPrice[]> = {};
     for (const p of filtered) {
       const rawCat = (p.category || "").toUpperCase();
       if (hiddenCategories.includes(rawCat)) continue;
-      let cat = p.category || "FREIGHT";
-      if (categoryMerges[rawCat]) cat = categoryMerges[rawCat];
+      const cat = p.category || "UNCATEGORISED";
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(p);
     }
     return groups;
   }, [priceListPrices, priceSearch]);
 
+  const CATEGORY_ORDER = [
+    "INSERTS",
+    "BULK",
+    "WINTER 80% DOWN",
+    "80% MID WARM FILLED",
+    "50% DUCK WINTER FILLED",
+    "50% MID WARM FILLED",
+    "HUNGARIAN WINTER STRIP",
+    "HUNGARIAN LIGHT FILL",
+    "4 SEASONS FILLED",
+    "MATTRESS TOPPER FILLED",
+    "80% DUCK SUMMER FILLED",
+    "80% GOOSE SUMMER FILLED",
+    "80% DUCK COT FILLED",
+    "PIPED PILLOWS",
+    "CHAMBER PILLOW",
+    "HUNGARIAN PILLOW",
+    "MICROSOFT",
+    "BLANKETS",
+    "JACKETS",
+  ];
+
   const totalProducts = priceListPrices?.length || 0;
-  const categories = Object.keys(groupedPrices).sort();
+  const categories = Object.keys(groupedPrices).sort((a, b) => {
+    const ai = CATEGORY_ORDER.indexOf(a.toUpperCase());
+    const bi = CATEGORY_ORDER.indexOf(b.toUpperCase());
+    if (ai === -1 && bi === -1) return a.localeCompare(b);
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
 
   const toggleCategory = (cat: string) => {
     setCollapsedCategories(prev => {
