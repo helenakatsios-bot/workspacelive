@@ -1223,6 +1223,48 @@ async function runStartupTasks() {
     console.error("[CI-CLEANUP] Error:", err.message);
   }
 
+  // ============================================================
+  // STANDARD PRICE LIST DEDUPLICATION (March 2026)
+  // The Standard price list was re-uploaded, which created duplicate
+  // price entries where products couldn't be matched by name.
+  // Keep only the most-recently-updated entry per (name, filling, weight).
+  // ============================================================
+  try {
+    const stdList = await pool.query(`SELECT id FROM price_lists WHERE UPPER(name) = 'STANDARD' LIMIT 1`);
+    if (stdList.rows.length > 0) {
+      const stdId = stdList.rows[0].id;
+      // Delete older duplicate entries — where another row for the same product name,
+      // filling and weight exists with a more recent updated_at.
+      const dupeDel = await pool.query(`
+        DELETE FROM price_list_prices
+        WHERE id IN (
+          SELECT plp.id
+          FROM price_list_prices plp
+          JOIN products p ON p.id = plp.product_id
+          WHERE plp.price_list_id = $1
+            AND EXISTS (
+              SELECT 1
+              FROM price_list_prices plp2
+              JOIN products p2 ON p2.id = plp2.product_id
+              WHERE plp2.price_list_id = $1
+                AND UPPER(p2.name) = UPPER(p.name)
+                AND COALESCE(plp2.filling, '') = COALESCE(plp.filling, '')
+                AND COALESCE(plp2.weight, '') = COALESCE(plp.weight, '')
+                AND (plp2.updated_at > plp.updated_at
+                     OR (plp2.updated_at = plp.updated_at AND plp2.id > plp.id))
+            )
+        )
+      `, [stdId]);
+      if ((dupeDel.rowCount || 0) > 0) {
+        console.log(`[STD-DEDUP] Removed ${dupeDel.rowCount} duplicate entries from Standard price list`);
+      } else {
+        console.log("[STD-DEDUP] Standard price list already clean (no duplicates found)");
+      }
+    }
+  } catch (err: any) {
+    console.error("[STD-DEDUP] Error:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 

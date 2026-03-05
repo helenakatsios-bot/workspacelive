@@ -1441,6 +1441,19 @@ export async function registerRoutes(
               console.log(`[IMPORT] Matched "${productName}" by duplicate SKU ${sku} to existing product`);
             }
           }
+          // Before creating a new product, check if this price list already has a product with the same name.
+          // This prevents duplicates when re-importing a CSV with slightly different formatting.
+          if (!productId) {
+            const existingInList = await pool.query(
+              `SELECT p.id FROM price_list_prices plp JOIN products p ON p.id = plp.product_id
+               WHERE plp.price_list_id = $1 AND UPPER(p.name) = $2 LIMIT 1`,
+              [priceListId, nameUpper]
+            );
+            if (existingInList.rows.length > 0) {
+              productId = existingInList.rows[0].id;
+              console.log(`[IMPORT] Matched "${productName}" by existing price list entry`);
+            }
+          }
           if (!productId) {
             if (!sku || existingSkus.has(sku.toUpperCase())) {
               sku = generateSku(category, existingSkus);
