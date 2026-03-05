@@ -834,6 +834,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [search, setSearch] = useState("");
   const [customInsertSearch, setCustomInsertSearch] = useState("");
+  const [sizeGroupFillings, setSizeGroupFillings] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [editLoaded, setEditLoaded] = useState(false);
 
@@ -997,6 +998,21 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
     }
     return sorted;
   }, [filteredProducts]);
+
+  const buildSizeGroups = (prods: any[]) => {
+    if (!prods.some((p: any) => p.name.includes(' - '))) return null;
+    const sizeMap = new Map<string, { filling: string; productId: string; price: string }[]>();
+    for (const p of prods) {
+      const dashIdx = p.name.indexOf(' - ');
+      if (dashIdx < 0) continue;
+      const size = p.name.substring(0, dashIdx);
+      const filling = (p.variantPrices?.[0]?.filling as string | undefined) || p.name;
+      const price = (p.unitPrice as string) || (p.variantPrices?.[0]?.unitPrice as string) || "0";
+      if (!sizeMap.has(size)) sizeMap.set(size, []);
+      sizeMap.get(size)!.push({ filling, productId: p.id as string, price });
+    }
+    return Array.from(sizeMap.entries()).map(([size, options]) => ({ size, options }));
+  };
 
   const isNonZero = (price: string | null | undefined): boolean => {
     return !!price && price !== "0.00" && price !== "0";
@@ -1218,7 +1234,10 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
           </div>
 
           {Object.entries(grouped).map(([category, prods]) => {
-            const hasFillingOption = FILLING_CATEGORIES.includes(category);
+            const sizeGroups = buildSizeGroups(prods);
+            const hasMultipleFillings = sizeGroups ? sizeGroups.some(sg => sg.options.length > 1) : false;
+            const showFillingColumn = sizeGroups ? hasMultipleFillings : FILLING_CATEGORIES.includes(category);
+            const showWeightColumn = !sizeGroups && WEIGHT_CATEGORIES.includes(category);
             const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
               'INSERTS': 'INSERTS STANDARD SIZE',
               'CUSTOM INSERTS': 'CUSTOM INSERTS 100% FEATHER ONLY',
@@ -1241,7 +1260,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                   <span className="font-semibold text-sm">{displayCategory}</span>
                   {categoryHasItems && <Badge variant="default" className="text-xs">In cart</Badge>}
                 </div>
-                <Badge variant="secondary">{prods.filter((p: any) => p.name !== 'CUSTOM INSERT').length}</Badge>
+                <Badge variant="secondary">{sizeGroups ? sizeGroups.length : prods.filter((p: any) => p.name !== 'CUSTOM INSERT').length}</Badge>
               </button>
               {isExpanded && (
               <CardContent className="p-0 pt-0">
@@ -1261,117 +1280,189 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                   <TableHeader>
                     <TableRow>
                       <TableHead>Product</TableHead>
-                      {hasFillingOption && <TableHead>Filling *</TableHead>}
-                      {WEIGHT_CATEGORIES.includes(category) && <TableHead>Weight *</TableHead>}
+                      {showFillingColumn && <TableHead>Filling *</TableHead>}
+                      {showWeightColumn && <TableHead>Weight *</TableHead>}
                       <TableHead className="text-center w-[140px]">Quantity *</TableHead>
                       <TableHead className="text-right">Price</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {prods.filter((product: any) => {
-                      if (product.name === 'CUSTOM INSERT') return false;
-                      if (category === 'CUSTOM INSERTS' && customInsertSearch) {
-                        const q = customInsertSearch.toLowerCase();
-                        return product.name.toLowerCase().includes(q) || (product.description || '').toLowerCase().includes(q) || (product.sku || '').toLowerCase().includes(q);
-                      }
-                      return true;
-                    }).map((product: any) => (
-                      <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
-                        <TableCell>
-                          <p className="font-medium">{product.name}</p>
-                          {product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
-                        </TableCell>
-                        {hasFillingOption && (
-                          <TableCell>
-                            {(() => {
-                              const productFillings: string[] = product.variantPrices && product.variantPrices.length > 0
-                                ? Array.from(new Set<string>(product.variantPrices.map((vp: any) => vp.filling).filter(Boolean).map((f: string) => f.trim()))).sort()
-                                : (fillingOptions[category] || []);
-                              return (
+                    {sizeGroups ? (
+                      sizeGroups.map(({ size, options }) => {
+                        const sgKey = `${category}__${size}`;
+                        const selectedFilling = options.length === 1
+                          ? options[0].filling
+                          : (sizeGroupFillings[sgKey] || "");
+                        const resolvedOpt = options.find(o => o.filling === selectedFilling) || null;
+                        const productId = resolvedOpt?.productId || "";
+                        const price = resolvedOpt?.price || "0";
+                        return (
+                          <TableRow key={size} data-testid={`row-product-sg-${size}`}>
+                            <TableCell>
+                              <p className="font-medium">{size}</p>
+                              {options.length === 1 && (
+                                <p className="text-xs text-muted-foreground">{options[0].filling}</p>
+                              )}
+                            </TableCell>
+                            {hasMultipleFillings && (
+                              <TableCell>
                                 <Select
-                                  value={fillings[product.id] || ""}
-                                  onValueChange={(val) => setFillings((prev) => ({ ...prev, [product.id]: val }))}
+                                  value={selectedFilling}
+                                  onValueChange={(val) => {
+                                    if (productId) {
+                                      setCart(prev => { const { [productId]: _, ...rest } = prev; return rest; });
+                                    }
+                                    setSizeGroupFillings(prev => ({ ...prev, [sgKey]: val }));
+                                  }}
                                 >
-                                  <SelectTrigger className="w-[120px]" data-testid={`select-filling-${product.id}`}>
+                                  <SelectTrigger className="w-[130px]" data-testid={`select-filling-sg-${size}`}>
                                     <SelectValue placeholder="Select..." />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {productFillings.map((opt) => (
-                                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                    {options.map(o => (
+                                      <SelectItem key={o.filling} value={o.filling}>{o.filling}</SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
-                              );
-                            })()}
-                          </TableCell>
-                        )}
-                        {WEIGHT_CATEGORIES.includes(category) && (
+                              </TableCell>
+                            )}
+                            <TableCell>
+                              <Input
+                                type="number"
+                                inputMode="numeric"
+                                min={0}
+                                value={productId ? (cart[productId] || "") : ""}
+                                placeholder="0"
+                                disabled={hasMultipleFillings && !productId}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                  if (!productId) return;
+                                  const val = parseInt(e.target.value) || 0;
+                                  setCart(prev => {
+                                    if (val <= 0) { const { [productId]: _, ...rest } = prev; return rest; }
+                                    return { ...prev, [productId]: val };
+                                  });
+                                }}
+                                className="h-8 w-[70px] text-center mx-auto"
+                                data-testid={`input-qty-sg-${size}`}
+                              />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {productId ? (
+                                <span className="font-medium">${parseFloat(price).toFixed(2)}</span>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    ) : (
+                      prods.filter((product: any) => {
+                        if (product.name === 'CUSTOM INSERT') return false;
+                        if (category === 'CUSTOM INSERTS' && customInsertSearch) {
+                          const q = customInsertSearch.toLowerCase();
+                          return product.name.toLowerCase().includes(q) || (product.description || '').toLowerCase().includes(q) || (product.sku || '').toLowerCase().includes(q);
+                        }
+                        return true;
+                      }).map((product: any) => (
+                        <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
                           <TableCell>
-                            {(() => {
-                              const selectedFilling = fillings[product.id] || "";
-                              const availableWeights: string[] = selectedFilling && product.variantPrices
-                                ? Array.from(new Set<string>(
-                                    product.variantPrices
-                                      .filter((vp: any) => vp.filling === selectedFilling && vp.weight)
-                                      .map((vp: any) => vp.weight.trim())
-                                  )).sort()
-                                : (weightOptions[category] || ['Normal']);
-                              const currentWeight = weights[product.id] || "";
-                              if (currentWeight && !availableWeights.includes(currentWeight)) {
-                                setTimeout(() => setWeights((prev) => ({ ...prev, [product.id]: "" })), 0);
-                              }
-                              return (
-                                <Select
-                                  value={currentWeight && availableWeights.includes(currentWeight) ? currentWeight : ""}
-                                  onValueChange={(val) => setWeights((prev) => ({ ...prev, [product.id]: val }))}
-                                >
-                                  <SelectTrigger className="w-[140px]" data-testid={`select-weight-${product.id}`}>
-                                    <SelectValue placeholder="Select..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {availableWeights.map((opt: string) => (
-                                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              );
-                            })()}
+                            <p className="font-medium">{product.name}</p>
+                            {product.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{product.description}</p>}
                           </TableCell>
-                        )}
-                        <TableCell>
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            min={0}
-                            value={cart[product.id] || ""}
-                            placeholder="0"
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value) || 0;
-                              setCart((prev) => {
-                                if (val <= 0) {
-                                  const { [product.id]: _, ...rest } = prev;
-                                  return rest;
+                          {showFillingColumn && (
+                            <TableCell>
+                              {(() => {
+                                const productFillings: string[] = product.variantPrices && product.variantPrices.length > 0
+                                  ? Array.from(new Set<string>(product.variantPrices.map((vp: any) => vp.filling).filter(Boolean).map((f: string) => f.trim()))).sort()
+                                  : (fillingOptions[category] || []);
+                                return (
+                                  <Select
+                                    value={fillings[product.id] || ""}
+                                    onValueChange={(val) => setFillings((prev) => ({ ...prev, [product.id]: val }))}
+                                  >
+                                    <SelectTrigger className="w-[120px]" data-testid={`select-filling-${product.id}`}>
+                                      <SelectValue placeholder="Select..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {productFillings.map((opt) => (
+                                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                );
+                              })()}
+                            </TableCell>
+                          )}
+                          {showWeightColumn && (
+                            <TableCell>
+                              {(() => {
+                                const selectedFilling = fillings[product.id] || "";
+                                const availableWeights: string[] = selectedFilling && product.variantPrices
+                                  ? Array.from(new Set<string>(
+                                      product.variantPrices
+                                        .filter((vp: any) => vp.filling === selectedFilling && vp.weight)
+                                        .map((vp: any) => vp.weight.trim())
+                                    )).sort()
+                                  : (weightOptions[category] || ['Normal']);
+                                const currentWeight = weights[product.id] || "";
+                                if (currentWeight && !availableWeights.includes(currentWeight)) {
+                                  setTimeout(() => setWeights((prev) => ({ ...prev, [product.id]: "" })), 0);
                                 }
-                                return { ...prev, [product.id]: val };
-                              });
-                            }}
-                            className="h-8 w-[70px] text-center mx-auto"
-                            data-testid={`input-qty-${product.id}`}
-                          />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {(() => {
-                            const displayPrice = getVariantPrice(product, fillings[product.id], weights[product.id]);
-                            return (
-                              <span className="font-medium">
-                                ${parseFloat(displayPrice).toFixed(2)}
-                              </span>
-                            );
-                          })()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                                return (
+                                  <Select
+                                    value={currentWeight && availableWeights.includes(currentWeight) ? currentWeight : ""}
+                                    onValueChange={(val) => setWeights((prev) => ({ ...prev, [product.id]: val }))}
+                                  >
+                                    <SelectTrigger className="w-[140px]" data-testid={`select-weight-${product.id}`}>
+                                      <SelectValue placeholder="Select..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {availableWeights.map((opt: string) => (
+                                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                );
+                              })()}
+                            </TableCell>
+                          )}
+                          <TableCell>
+                            <Input
+                              type="number"
+                              inputMode="numeric"
+                              min={0}
+                              value={cart[product.id] || ""}
+                              placeholder="0"
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value) || 0;
+                                setCart((prev) => {
+                                  if (val <= 0) {
+                                    const { [product.id]: _, ...rest } = prev;
+                                    return rest;
+                                  }
+                                  return { ...prev, [product.id]: val };
+                                });
+                              }}
+                              className="h-8 w-[70px] text-center mx-auto"
+                              data-testid={`input-qty-${product.id}`}
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {(() => {
+                              const displayPrice = getVariantPrice(product, fillings[product.id], weights[product.id]);
+                              return (
+                                <span className="font-medium">
+                                  ${parseFloat(displayPrice).toFixed(2)}
+                                </span>
+                              );
+                            })()}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                     {category === 'INSERTS' && (
                       <>
                         {customLines.map((line) => (
