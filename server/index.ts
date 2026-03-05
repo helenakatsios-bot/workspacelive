@@ -1393,14 +1393,9 @@ async function runStartupTasks() {
           }
         }
 
-        // Step 3: Wipe all existing ECO-SKU entries from this price list then re-insert
-        const ecoProductIds = [...skuToId.values()];
-        if (ecoProductIds.length > 0) {
-          await pool.query(
-            `DELETE FROM price_list_prices WHERE price_list_id = $1 AND product_id = ANY($2::uuid[])`,
-            [_eduId2, ecoProductIds]
-          );
-        }
+        // Step 3: Wipe ALL entries from this price list completely, then re-insert from CSV
+        // This removes any legacy entries from old partial uploads that don't have ECO SKUs
+        await pool.query(`DELETE FROM price_list_prices WHERE price_list_id = $1`, [_eduId2]);
 
         let imported = 0;
         for (const row of eduRows) {
