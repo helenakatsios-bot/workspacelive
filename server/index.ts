@@ -1172,6 +1172,32 @@ async function runStartupTasks() {
     console.error("[STRIP-PRICES] Error updating strip quilt prices:", err.message);
   }
 
+  // ============================================================
+  // CUSTOM INSERTS PRICE LIST CLEANUP (March 2026)
+  // Remove BLANKETS, JACKETS, MISC from the "CUSTOM INSERTS" price list.
+  // These categories were imported in error and should not be there.
+  // ============================================================
+  try {
+    const ciList = await pool.query(`SELECT id FROM price_lists WHERE UPPER(name) = 'CUSTOM INSERTS' LIMIT 1`);
+    if (ciList.rows.length > 0) {
+      const ciId = ciList.rows[0].id;
+      const delResult = await pool.query(`
+        DELETE FROM price_list_prices plp
+        USING products p
+        WHERE plp.product_id = p.id
+          AND plp.price_list_id = $1
+          AND UPPER(p.category) IN ('BLANKETS', 'JACKETS', 'MISC')
+      `, [ciId]);
+      if ((delResult.rowCount || 0) > 0) {
+        console.log(`[CI-CLEANUP] Removed ${delResult.rowCount} BLANKETS/JACKETS/MISC entries from CUSTOM INSERTS price list`);
+      } else {
+        console.log("[CI-CLEANUP] CUSTOM INSERTS price list already clean (no BLANKETS/JACKETS/MISC found)");
+      }
+    }
+  } catch (err: any) {
+    console.error("[CI-CLEANUP] Error:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 

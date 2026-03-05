@@ -61,12 +61,15 @@ export default function PriceListsPage() {
         (p.filling && p.filling.toLowerCase().includes(search)) ||
         (p.weight && p.weight.toLowerCase().includes(search));
     });
-    const hiddenCategories = ["CASES", "CASSETTES CASES", "CHANNELLED CASES"];
+    const hiddenCategories = ["CASES", "CASSETTES CASES", "CHANNELLED CASES", "BLANKETS", "JACKETS", "MISC"];
+    // Merge INSERTS into CUSTOM INSERTS
+    const categoryMerges: Record<string, string> = { "INSERTS": "CUSTOM INSERTS" };
     const groups: Record<string, PriceListPrice[]> = {};
     for (const p of filtered) {
-      const rawCat = p.category || "";
-      if (hiddenCategories.includes(rawCat.toUpperCase())) continue;
-      const cat = rawCat || "FREIGHT";
+      const rawCat = (p.category || "").toUpperCase();
+      if (hiddenCategories.includes(rawCat)) continue;
+      let cat = p.category || "FREIGHT";
+      if (categoryMerges[rawCat]) cat = categoryMerges[rawCat];
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(p);
     }
