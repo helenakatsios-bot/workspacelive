@@ -1373,41 +1373,46 @@ async function runStartupTasks() {
           eduRows.push({ name, cat, sku, filling, weight, price });
         }
 
-        // Step 2: Ensure all products exist (find by SKU or create)
+        // Step 2: Ensure all products exist using upsert (ON CONFLICT handles SKU uniqueness)
         let created = 0;
         const skuToId = new Map<string, string>();
         for (const row of eduRows) {
-          const existing = await pool.query(`SELECT id, category FROM products WHERE UPPER(sku) = $1 LIMIT 1`, [row.sku]);
-          if (existing.rows.length > 0) {
-            skuToId.set(row.sku, existing.rows[0].id);
-            if ((existing.rows[0].category || "").toUpperCase() !== row.cat) {
-              await pool.query(`UPDATE products SET category = $1, name = $2 WHERE id = $3`, [row.cat, row.name, existing.rows[0].id]);
-            }
-          } else {
-            const newProd = await pool.query(
-              `INSERT INTO products (name, sku, category, unit_price, active) VALUES ($1, $2, $3, $4, true) RETURNING id`,
+          try {
+            const upsert = await pool.query(
+              `INSERT INTO products (name, sku, category, unit_price, active)
+               VALUES ($1, $2, $3, $4, true)
+               ON CONFLICT (sku) DO UPDATE SET category = $3, name = $1, active = true
+               RETURNING id`,
               [row.name, row.sku, row.cat, row.price.toFixed(2)]
             );
-            skuToId.set(row.sku, newProd.rows[0].id);
+            skuToId.set(row.sku, upsert.rows[0].id);
             created++;
+          } catch (rowErr: any) {
+            console.error(`[EDU-IMPORT] Failed upsert for ${row.sku}: ${rowErr.message}`);
           }
         }
 
         // Step 3: Wipe ALL entries from this price list completely, then re-insert from CSV
-        // This removes any legacy entries from old partial uploads that don't have ECO SKUs
         await pool.query(`DELETE FROM price_list_prices WHERE price_list_id = $1`, [_eduId2]);
 
-        let imported = 0;
+        let imported = 0, skipped = 0;
         for (const row of eduRows) {
           const productId = skuToId.get(row.sku);
-          if (!productId) continue;
-          await pool.query(
-            `INSERT INTO price_list_prices (price_list_id, product_id, filling, weight, unit_price) VALUES ($1, $2, $3, $4, $5)`,
-            [_eduId2, productId, row.filling, row.weight, row.price.toFixed(2)]
-          );
-          imported++;
+          if (!productId) { skipped++; continue; }
+          try {
+            await pool.query(
+              `INSERT INTO price_list_prices (price_list_id, product_id, filling, weight, unit_price)
+               VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT DO NOTHING`,
+              [_eduId2, productId, row.filling, row.weight, row.price.toFixed(2)]
+            );
+            imported++;
+          } catch (rowErr: any) {
+            console.error(`[EDU-IMPORT] Failed insert price for ${row.sku}: ${rowErr.message}`);
+            skipped++;
+          }
         }
-        console.log(`[EDU-IMPORT] Done: ${imported} inserted (clean reload), ${created} new products created`);
+        console.log(`[EDU-IMPORT] Done: ${imported} inserted, ${skipped} skipped, ${created} products upserted`);
       }
     }
   } catch (err: any) {
