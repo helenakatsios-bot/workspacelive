@@ -1071,6 +1071,8 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
     if (products) {
       const missingFilling = cartItems.filter((item) => {
         const cat = (item as any).category || "";
+        // Size-grouped products (name contains " - ") already have filling embedded in the product itself
+        if ((item.name as string).includes(' - ')) return false;
         return FILLING_CATEGORIES.includes(cat) && !fillings[item.id];
       });
       if (missingFilling.length > 0) {
@@ -1079,6 +1081,8 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
       }
       const missingWeight = cartItems.filter((item) => {
         const cat = (item as any).category || "";
+        // Size-grouped products have filling/weight embedded in product name
+        if ((item.name as string).includes(' - ')) return false;
         return WEIGHT_CATEGORIES.includes(cat) && !weights[item.id];
       });
       if (missingWeight.length > 0) {
