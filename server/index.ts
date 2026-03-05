@@ -23,6 +23,7 @@ import { importLMPriceList } from "./import-lm-pricelist";
 import { importSpaceCraftPriceList } from "./import-spacecraft-pricelist";
 import { importWalterGPriceList } from "./import-walterg-pricelist";
 import { importCastlePriceList } from "./import-castle-pricelist";
+import { importAllPriceLists } from "./import-all-price-lists";
 
 const app = express();
 const httpServer = createServer(app);
@@ -128,6 +129,13 @@ async function runStartupTasks() {
     console.log("Admin accounts synced successfully");
   } catch (error) {
     console.error("Account sync error:", error);
+  }
+
+  // Import all 17 price lists from CSV files (idempotent - skips if already imported)
+  try {
+    await importAllPriceLists();
+  } catch (error) {
+    console.error("Price list import error:", error);
   }
 
   // One-time cleanup: remove old pre-imported price lists that are now superseded
