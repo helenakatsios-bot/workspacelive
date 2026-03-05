@@ -1224,45 +1224,62 @@ async function runStartupTasks() {
   }
 
   // ============================================================
-  // STANDARD PRICE LIST DEDUPLICATION (March 2026)
-  // The Standard price list was re-uploaded, which created duplicate
-  // price entries where products couldn't be matched by name.
-  // Keep only the most-recently-updated entry per (name, filling, weight).
+  // ALL PRICE LIST DEDUPLICATION (March 2026)
+  // Removes duplicate price_list_prices entries across ALL price lists:
+  // Step 1 — same product_id + filling + weight in same price list
+  // Step 2 — same product name + filling + weight in same price list
   // ============================================================
   try {
-    const stdList = await pool.query(`SELECT id FROM price_lists WHERE UPPER(name) = 'STANDARD' LIMIT 1`);
-    if (stdList.rows.length > 0) {
-      const stdId = stdList.rows[0].id;
-      // Delete older duplicate entries — where another row for the same product name,
-      // filling and weight exists with a more recent updated_at.
-      const dupeDel = await pool.query(`
-        DELETE FROM price_list_prices
-        WHERE id IN (
-          SELECT plp.id
-          FROM price_list_prices plp
-          JOIN products p ON p.id = plp.product_id
-          WHERE plp.price_list_id = $1
-            AND EXISTS (
-              SELECT 1
-              FROM price_list_prices plp2
-              JOIN products p2 ON p2.id = plp2.product_id
-              WHERE plp2.price_list_id = $1
-                AND UPPER(p2.name) = UPPER(p.name)
-                AND COALESCE(plp2.filling, '') = COALESCE(plp.filling, '')
-                AND COALESCE(plp2.weight, '') = COALESCE(plp.weight, '')
-                AND (plp2.updated_at > plp.updated_at
-                     OR (plp2.updated_at = plp.updated_at AND plp2.id > plp.id))
-            )
+    // Step 1: Remove exact product_id + filling + weight duplicates in every price list
+    const dedup1 = await pool.query(`
+      DELETE FROM price_list_prices
+      WHERE id IN (
+        SELECT plp.id
+        FROM price_list_prices plp
+        WHERE EXISTS (
+          SELECT 1 FROM price_list_prices plp2
+          WHERE plp2.price_list_id = plp.price_list_id
+            AND plp2.product_id = plp.product_id
+            AND COALESCE(plp2.filling, '') = COALESCE(plp.filling, '')
+            AND COALESCE(plp2.weight, '') = COALESCE(plp.weight, '')
+            AND (plp2.updated_at > plp.updated_at
+                 OR (plp2.updated_at = plp.updated_at AND plp2.id > plp.id))
         )
-      `, [stdId]);
-      if ((dupeDel.rowCount || 0) > 0) {
-        console.log(`[STD-DEDUP] Removed ${dupeDel.rowCount} duplicate entries from Standard price list`);
-      } else {
-        console.log("[STD-DEDUP] Standard price list already clean (no duplicates found)");
-      }
+      )
+    `);
+    if ((dedup1.rowCount || 0) > 0) {
+      console.log(`[DEDUP] Step 1: Removed ${dedup1.rowCount} exact product_id duplicate entries`);
+    }
+
+    // Step 2: Remove same product name + filling + weight duplicates in every price list
+    const dedup2 = await pool.query(`
+      DELETE FROM price_list_prices
+      WHERE id IN (
+        SELECT plp.id
+        FROM price_list_prices plp
+        JOIN products p ON p.id = plp.product_id
+        WHERE EXISTS (
+          SELECT 1
+          FROM price_list_prices plp2
+          JOIN products p2 ON p2.id = plp2.product_id
+          WHERE plp2.price_list_id = plp.price_list_id
+            AND UPPER(TRIM(p2.name)) = UPPER(TRIM(p.name))
+            AND COALESCE(plp2.filling, '') = COALESCE(plp.filling, '')
+            AND COALESCE(plp2.weight, '') = COALESCE(plp.weight, '')
+            AND (plp2.updated_at > plp.updated_at
+                 OR (plp2.updated_at = plp.updated_at AND plp2.id > plp.id))
+        )
+      )
+    `);
+    if ((dedup2.rowCount || 0) > 0) {
+      console.log(`[DEDUP] Step 2: Removed ${dedup2.rowCount} same-name duplicate entries across all price lists`);
+    }
+
+    if ((dedup1.rowCount || 0) === 0 && (dedup2.rowCount || 0) === 0) {
+      console.log("[DEDUP] All price lists already clean");
     }
   } catch (err: any) {
-    console.error("[STD-DEDUP] Error:", err.message);
+    console.error("[DEDUP] Error:", err.message);
   }
 
   // ============================================================
