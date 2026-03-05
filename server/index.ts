@@ -482,6 +482,59 @@ async function runStartupTasks() {
       console.log(`Normalized ${nameFixCount} dimension-based product names to proper size names`);
     }
 
+    // Ensure Silver Blanket products exist in every price list that has Khaki Blankets
+    const khakiResult = await pool.query(`
+      SELECT plp.price_list_id, p.id as khaki_product_id, p.name as khaki_name, plp.unit_price
+      FROM price_list_prices plp
+      JOIN products p ON p.id = plp.product_id
+      WHERE plp.filling = 'Khaki Blanket' AND p.category = 'BLANKETS'
+    `);
+    let silverAdded = 0;
+    for (const row of khakiResult.rows) {
+      const silverName = (row.khaki_name as string).replace('KHAKI BLANKET', 'SILVER BLANKET');
+      // Check if Silver already exists in this price list (by name match via product)
+      const existsResult = await pool.query(`
+        SELECT plp.id FROM price_list_prices plp
+        JOIN products p ON p.id = plp.product_id
+        WHERE plp.price_list_id = $1 AND plp.filling = 'Silver Blanket'
+        AND p.name = $2 AND p.category = 'BLANKETS'
+      `, [row.price_list_id, silverName]);
+      if (existsResult.rows.length > 0) continue;
+      // Find or create the Silver product
+      let silverProductId: string | null = null;
+      const findProduct = await pool.query(
+        `SELECT id FROM products WHERE name = $1 AND category = 'BLANKETS'`,
+        [silverName]
+      );
+      if (findProduct.rows.length > 0) {
+        silverProductId = findProduct.rows[0].id;
+      } else {
+        // Create the Silver product with a unique SKU
+        const skuMax = await pool.query(`
+          SELECT COALESCE(MAX(CAST(SUBSTRING(sku FROM 4) AS INTEGER)), 456) as maxnum
+          FROM products WHERE sku ~ '^PFH[0-9]+$'
+        `);
+        const newSku = `PFH${(skuMax.rows[0].maxnum as number) + 1}`;
+        const createResult = await pool.query(
+          `INSERT INTO products (name, sku, category, unit_price, active)
+           VALUES ($1, $2, 'BLANKETS', $3, true)
+           ON CONFLICT (sku) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+          [silverName, newSku, row.unit_price]
+        );
+        silverProductId = createResult.rows[0]?.id || null;
+      }
+      if (silverProductId) {
+        await pool.query(
+          `INSERT INTO price_list_prices (price_list_id, product_id, filling, weight, unit_price)
+           VALUES ($1, $2, 'Silver Blanket', '', $3)
+           ON CONFLICT DO NOTHING`,
+          [row.price_list_id, silverProductId, row.unit_price]
+        );
+        silverAdded++;
+      }
+    }
+    if (silverAdded > 0) console.log(`Silver Blanket: added ${silverAdded} missing variants across price lists`);
+
     console.log("Category normalization complete");
   } catch (error) {
     console.error("Category normalization error:", error);
