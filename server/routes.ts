@@ -5572,6 +5572,31 @@ Rules:
     }
   });
 
+  // ==================== ONE-TIME PRICE LIST CLEANUP ====================
+  app.delete("/api/admin/cleanup-old-price-lists", async (req, res) => {
+    const key = (req.query.key || req.headers["x-api-key"]) as string;
+    if (!key || key !== process.env.CRM_API_KEY) return res.status(401).json({ message: "Unauthorized" });
+    const oldNames = [
+      "EXTRA FIRM FILL AS FIRM PRICE",
+      "EXTRA FIRM FILL AS FIRM PRICE ",
+      "HOTEL LUXURY HUNGARIAN PILLOW",
+      "JENNIFER BUTTON",
+      "L&M",
+      "eco down under",
+    ];
+    const deleted: string[] = [];
+    for (const name of oldNames) {
+      const rows = await pool.query("SELECT id FROM price_lists WHERE name = $1", [name]);
+      for (const row of rows.rows) {
+        await pool.query("UPDATE companies SET price_list_id = NULL WHERE price_list_id = $1", [row.id]);
+        await pool.query("DELETE FROM price_list_prices WHERE price_list_id = $1", [row.id]);
+        await pool.query("DELETE FROM price_lists WHERE id = $1", [row.id]);
+        deleted.push(name);
+      }
+    }
+    res.json({ deleted, message: `Removed ${deleted.length} old price lists` });
+  });
+
   // ==================== MILO ORDER-COMPLETE CALLBACK WEBHOOK ====================
   // Called by the Milo/Purax app when an order has been completed
   app.post("/api/webhooks/milo/order-complete", async (req, res) => {
