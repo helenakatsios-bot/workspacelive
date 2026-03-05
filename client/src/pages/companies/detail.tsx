@@ -917,7 +917,7 @@ export default function CompanyDetailPage() {
                         <SelectValue placeholder="Add category..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {['CASES', 'JACKETS', 'WINTER', 'BLANKETS'].filter(c => !(company.portalCategories || []).includes(c)).map((cat) => (
+                        {['CASES', 'JACKETS', 'WINTER', 'BLANKETS', 'INSERTS', 'CUSTOM INSERTS'].filter(c => !(company.portalCategories || []).includes(c)).map((cat) => (
                           <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                         ))}
                       </SelectContent>
