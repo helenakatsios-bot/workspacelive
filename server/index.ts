@@ -1251,7 +1251,7 @@ async function runStartupTasks() {
       console.log(`[DEDUP] Step 1: Removed ${dedup1.rowCount} exact product_id duplicate entries`);
     }
 
-    // Step 2: Remove same product name + filling + weight duplicates in every price list
+    // Step 2: Remove same product name + category + filling + weight duplicates in every price list
     const dedup2 = await pool.query(`
       DELETE FROM price_list_prices
       WHERE id IN (
@@ -1264,6 +1264,7 @@ async function runStartupTasks() {
           JOIN products p2 ON p2.id = plp2.product_id
           WHERE plp2.price_list_id = plp.price_list_id
             AND UPPER(TRIM(p2.name)) = UPPER(TRIM(p.name))
+            AND UPPER(COALESCE(p2.category, '')) = UPPER(COALESCE(p.category, ''))
             AND COALESCE(plp2.filling, '') = COALESCE(plp.filling, '')
             AND COALESCE(plp2.weight, '') = COALESCE(plp.weight, '')
             AND (plp2.updated_at > plp.updated_at
