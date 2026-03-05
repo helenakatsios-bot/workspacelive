@@ -1266,12 +1266,19 @@ async function runStartupTasks() {
   }
 
   // ============================================================
-  // ECO DOWN UNDER — remove BLANKETS and JACKETS entries
+  // ECO DOWN UNDER — remove BLANKETS, JACKETS, MISC entries
+  // Targets the specific production price list ID directly,
+  // plus any other price list matching the name pattern.
   // ============================================================
   try {
-    const eduClean = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE '%eco%down%under%' ORDER BY created_at DESC LIMIT 1`);
-    if (eduClean.rows.length > 0) {
-      const eduCleanId = eduClean.rows[0].id;
+    // Collect candidate price list IDs: known prod ID + name match
+    const eduIds = new Set<string>();
+    // Hardcoded production ECO DOWNUNDER price list ID
+    eduIds.add('93834733-e2f9-4710-b2c5-40ebab2b8660');
+    const eduSearch = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE '%eco%down%under%'`);
+    for (const row of eduSearch.rows) eduIds.add(row.id);
+
+    for (const eduCleanId of eduIds) {
       const del = await pool.query(`
         DELETE FROM price_list_prices
         WHERE price_list_id = $1
@@ -1280,7 +1287,7 @@ async function runStartupTasks() {
           )
       `, [eduCleanId]);
       if (del.rowCount && del.rowCount > 0) {
-        console.log(`[EDU-CLEANUP] Removed ${del.rowCount} BLANKETS/JACKETS/MISC entries from ECO DOWN UNDER price list`);
+        console.log(`[EDU-CLEANUP] Removed ${del.rowCount} BLANKETS/JACKETS/MISC entries from price list ${eduCleanId}`);
       }
     }
   } catch (err: any) {
@@ -1308,9 +1315,18 @@ async function runStartupTasks() {
   // into the "ECO DOWN UNDER PRICES" price list. Idempotent.
   // ============================================================
   try {
+    // Try name match first, fall back to known production price list ID
+    let eduId2: string | null = null;
     const eduList2 = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE '%eco%down%under%' ORDER BY created_at DESC LIMIT 1`);
     if (eduList2.rows.length > 0) {
-      const eduId2 = eduList2.rows[0].id;
+      eduId2 = eduList2.rows[0].id;
+    } else {
+      // Check if the known production ID exists
+      const prodCheck = await pool.query(`SELECT id FROM price_lists WHERE id = '93834733-e2f9-4710-b2c5-40ebab2b8660' LIMIT 1`);
+      if (prodCheck.rows.length > 0) eduId2 = prodCheck.rows[0].id;
+    }
+    if (eduId2 !== null) {
+      const _eduId2 = eduId2;
       const csvPath = path.join(__dirname, "data", "eco_down_under_prices.csv");
       if (fs.existsSync(csvPath)) {
         const csvText = fs.readFileSync(csvPath, "utf8");
@@ -1356,7 +1372,7 @@ async function runStartupTasks() {
           // Upsert price_list_prices
           const existingPrice = await pool.query(
             `SELECT id FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 AND COALESCE(filling,'') = $3 AND COALESCE(weight,'') = $4 LIMIT 1`,
-            [eduId2, productId, filling || "", weight || ""]
+            [_eduId2, productId, filling || "", weight || ""]
           );
           if (existingPrice.rows.length > 0) {
             await pool.query(`UPDATE price_list_prices SET unit_price = $1, updated_at = NOW() WHERE id = $2`, [price.toFixed(2), existingPrice.rows[0].id]);
@@ -1364,7 +1380,7 @@ async function runStartupTasks() {
           } else {
             await pool.query(
               `INSERT INTO price_list_prices (price_list_id, product_id, filling, weight, unit_price) VALUES ($1, $2, $3, $4, $5)`,
-              [eduId2, productId, filling, weight, price.toFixed(2)]
+              [_eduId2, productId, filling, weight, price.toFixed(2)]
             );
             imported++;
           }
