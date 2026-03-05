@@ -1271,7 +1271,7 @@ async function runStartupTasks() {
   // into the "ECO DOWN UNDER PRICES" price list. Idempotent.
   // ============================================================
   try {
-    const eduList2 = await pool.query(`SELECT id FROM price_lists WHERE UPPER(name) = 'ECO DOWN UNDER PRICES' LIMIT 1`);
+    const eduList2 = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE '%eco%down%under%' ORDER BY created_at DESC LIMIT 1`);
     if (eduList2.rows.length > 0) {
       const eduId2 = eduList2.rows[0].id;
       const csvPath = path.join(__dirname, "data", "eco_down_under_prices.csv");
