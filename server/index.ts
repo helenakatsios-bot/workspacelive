@@ -434,6 +434,7 @@ async function runStartupTasks() {
     if (quiltFix.rowCount && quiltFix.rowCount > 0) {
       console.log(`Renamed ${quiltFix.rowCount} products to HUNGARIAN WINTER STRIP`);
     }
+    await pool.query("UPDATE products SET category = 'HUNGARIAN ALL SEASONS' WHERE category IN ('HUNGARIAN LIGHT FILL', 'HUNGARIAN LIGHT')");
     const stripFix = await pool.query("UPDATE products SET category = 'HUNGARIAN PILLOW' WHERE category = 'STRIP PILLOW'");
     if (stripFix.rowCount && stripFix.rowCount > 0) {
       console.log(`Renamed ${stripFix.rowCount} STRIP PILLOW products to HUNGARIAN PILLOW`);
