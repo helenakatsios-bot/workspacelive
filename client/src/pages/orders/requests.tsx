@@ -492,6 +492,15 @@ export default function OrderRequestsPage() {
                       {convertToOrderMutation.isPending ? "Converting..." : "Convert to Order"}
                     </Button>
                   )}
+                  {selectedRequest.status === "converted" && selectedRequest.convertedOrderId && (
+                    <Button
+                      size="sm"
+                      onClick={() => { setSelectedId(null); navigate(`/orders/${selectedRequest.convertedOrderId}`); }}
+                      data-testid="button-view-order"
+                    >
+                      View Order
+                    </Button>
+                  )}
                   {selectedRequest.status === "converted" && (
                     <Button
                       variant="outline"
