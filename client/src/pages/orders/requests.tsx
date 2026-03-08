@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, MapPin, Phone, Mail, User, Building2, FileText, Clock, Trash2, Pencil, Check, X, Paperclip, Download, ShoppingBag } from "lucide-react";
+import { Loader2, MapPin, Phone, Mail, User, Building2, FileText, Clock, Trash2, Pencil, Check, X, Paperclip, Download, ShoppingBag, SendHorizonal } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -162,6 +162,7 @@ export default function OrderRequestsPage() {
                   <TableHead>Contact</TableHead>
                   <TableHead>Items</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Sent to Purax</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -208,6 +209,23 @@ export default function OrderRequestsPage() {
                           </Badge>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell data-testid={`cell-purax-${req.id}`}>
+                      {req.puraxSyncStatus === "sent" ? (
+                        <span className="flex items-center gap-1 text-green-700 dark:text-green-400 text-xs font-medium">
+                          <Check className="w-3.5 h-3.5" />
+                          Sent
+                        </span>
+                      ) : req.puraxSyncStatus === "failed" ? (
+                        <span className="flex items-center gap-1 text-red-600 dark:text-red-400 text-xs font-medium">
+                          <X className="w-3.5 h-3.5" />
+                          Failed
+                        </span>
+                      ) : req.status === "converted" ? (
+                        <span className="text-xs text-muted-foreground">Not sent</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

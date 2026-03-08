@@ -5854,10 +5854,25 @@ Rules:
       for (const row of attachCounts.rows) {
         countMap[row.entity_id] = row.count;
       }
-      const withCounts = requests.map((r: any) => ({
-        ...r,
-        attachmentCount: countMap[r.id] || 0,
-      }));
+      // Get purax sync status from linked orders
+      const puraxResult = await pool.query(
+        `SELECT id, purax_sync_status, purax_synced_at FROM orders WHERE id IN (
+          SELECT converted_order_id FROM customer_order_requests WHERE converted_order_id IS NOT NULL
+        )`
+      );
+      const puraxMap: Record<string, { status: string; syncedAt: string | null }> = {};
+      for (const row of puraxResult.rows) {
+        puraxMap[row.id] = { status: row.purax_sync_status, syncedAt: row.purax_synced_at };
+      }
+      const withCounts = requests.map((r: any) => {
+        const purax = r.convertedOrderId ? puraxMap[r.convertedOrderId] : null;
+        return {
+          ...r,
+          attachmentCount: countMap[r.id] || 0,
+          puraxSyncStatus: purax?.status || null,
+          puraxSyncedAt: purax?.syncedAt || null,
+        };
+      });
       res.json(withCounts);
     } catch (error) {
       console.error("Get order requests error:", error);
