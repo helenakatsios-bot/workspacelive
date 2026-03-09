@@ -131,6 +131,31 @@ async function runStartupTasks() {
     console.error("Account sync error:", error);
   }
 
+  // Remove duplicate price lists (same name created by concurrent imports) — keep the one with most prices
+  try {
+    const dupNames = await pool.query(
+      `SELECT name FROM price_lists GROUP BY name HAVING COUNT(*) > 1`
+    );
+    for (const { name } of dupNames.rows) {
+      const lists = await pool.query(
+        `SELECT pl.id, COUNT(plp.id) as cnt
+         FROM price_lists pl
+         LEFT JOIN price_list_prices plp ON plp.price_list_id = pl.id
+         WHERE pl.name = $1
+         GROUP BY pl.id
+         ORDER BY COUNT(plp.id) DESC, pl.created_at ASC`,
+        [name]
+      );
+      const toDelete = lists.rows.slice(1).map((r: any) => r.id);
+      for (const id of toDelete) {
+        await pool.query(`DELETE FROM price_lists WHERE id = $1`, [id]);
+        console.log(`Dedup: removed extra price list "${name}" id=${id}`);
+      }
+    }
+  } catch (error) {
+    console.error("Price list dedup error:", error);
+  }
+
   // One-time cleanup: remove old pre-imported price lists that are now superseded
   try {
     // Exact name cleanup only — do NOT use case-insensitive match to avoid deleting correctly-named lists

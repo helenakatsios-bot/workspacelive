@@ -105,7 +105,7 @@ const PRICE_LISTS: PriceListConfig[] = [
     name: "Poulos",
     description: "Poulos pricing",
     isDefault: false,
-    csvFiles: ["poulos_prices.csv"],
+    csvFiles: ["prices_for_replit_poulos_CSV_OFFICAL_1773097451070.csv", "poulos_prices.csv"],
     categoryNorm: (cat) => {
       if (cat === "KHAKI BLANKET" || cat === "SILVER BLANKET") return "BLANKETS";
       if (cat === "STRIP PILLOW") return "HUNGARIAN PILLOW";
