@@ -159,6 +159,33 @@ async function runStartupTasks() {
     console.error("Old price list cleanup error:", error);
   }
 
+  // Detect and fix corrupted Poulos price list (categories set to SKU values like MW14, HLC182)
+  try {
+    const poulosCheck = await pool.query(`
+      SELECT COUNT(*) as bad FROM price_list_prices plp
+      JOIN price_lists pl ON pl.id = plp.price_list_id
+      JOIN products p ON p.id = plp.product_id
+      WHERE pl.name = 'Poulos'
+      AND (p.category ~ '^MW[0-9]' OR p.category ~ '^HLC[0-9]' OR p.category = 'INSERT')
+    `);
+    if (parseInt(poulosCheck.rows[0].bad) > 0) {
+      console.log(`Poulos: detected ${poulosCheck.rows[0].bad} entries with corrupt categories — resetting for re-import`);
+      // Delete Poulos price_list_prices so import will run fresh
+      await pool.query(`
+        DELETE FROM price_list_prices WHERE price_list_id = (
+          SELECT id FROM price_lists WHERE name = 'Poulos' LIMIT 1
+        )
+      `);
+      // Delete MW* products that have SKU-like category names (created from bad import)
+      await pool.query(`
+        DELETE FROM products WHERE sku ~ '^MW[0-9]' AND category ~ '^(MW|HLC|INSERT)[0-9]?'
+      `);
+      console.log("Poulos: reset complete, will re-import from correct CSV");
+    }
+  } catch (error) {
+    console.error("Poulos reset error:", error);
+  }
+
   // Import all 17 price lists from CSV files (idempotent - skips if already imported)
   try {
     await importAllPriceLists();

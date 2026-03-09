@@ -105,10 +105,13 @@ const PRICE_LISTS: PriceListConfig[] = [
     name: "Poulos",
     description: "Poulos pricing",
     isDefault: false,
-    csvFiles: [
-      "prices_for_replit_poulos_CSV_OFFICAL_1772688490432.csv",
-      "prices_for_replit_poulos_CSV_OFFICAL_1771796454133.csv",
-    ],
+    csvFiles: ["poulos_prices.csv"],
+    categoryNorm: (cat) => {
+      if (cat === "KHAKI BLANKET" || cat === "SILVER BLANKET") return "BLANKETS";
+      if (cat === "STRIP PILLOW") return "HUNGARIAN PILLOW";
+      if (cat === "BULK") return "BULK LOOSE FILLING";
+      return cat;
+    },
   },
   {
     name: "Hotel Luxury Collection",
