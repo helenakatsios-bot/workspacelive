@@ -159,51 +159,35 @@ async function runStartupTasks() {
     console.error("Old price list cleanup error:", error);
   }
 
-  // Fix Poulos product categories — read CSV and update any products where category looks like a SKU value
+  // Purge products with SKU-like category names (corrupt data from bad Poulos import)
+  // Bad categories: starts with "MW" or "HLC", or equals "INSERT" or "PILLOW" (without S)
   try {
-    const poulosCsvPath = path.join(process.cwd(), "attached_assets", "poulos_prices.csv");
-    if (fs.existsSync(poulosCsvPath)) {
-      const csvContent = fs.readFileSync(poulosCsvPath, "utf-8");
-      const csvLines = csvContent.split("\n").filter((l) => l.trim());
-      const normPoulosCategory = (cat: string) => {
-        const c = cat.trim().toUpperCase();
-        if (c === "KHAKI BLANKET" || c === "SILVER BLANKET") return "BLANKETS";
-        if (c === "BULK") return "BULK LOOSE FILLING";
-        if (c === "STRIP PILLOW") return "HUNGARIAN PILLOW";
-        if (c === "INSERT") return "INSERTS";
-        return c;
-      };
-      const skuCategoryMap = new Map<string, { name: string; category: string }>();
-      for (let i = 1; i < csvLines.length; i++) {
-        const fields = csvLines[i].split(",").map((f) => f.replace(/^"|"$/g, "").trim());
-        if (fields.length < 3) continue;
-        const name = fields[0].trim();
-        const category = normPoulosCategory(fields[1]);
-        const sku = fields[2].trim();
-        if (sku && name && category) skuCategoryMap.set(sku, { name, category });
-      }
-      let fixedCount = 0;
-      for (const [sku, { name, category }] of skuCategoryMap) {
-        const result = await pool.query(
-          `UPDATE products SET category = $1, name = $2 WHERE sku = $3
-           AND (category ~ '^MW\\d' OR category ~ '^HLC\\d' OR category = 'INSERT' OR category ~ '^[0-9]')`,
-          [category, name, sku]
-        );
-        fixedCount += result.rowCount ?? 0;
-      }
-      if (fixedCount > 0) {
-        console.log(`Poulos: fixed categories for ${fixedCount} products — resetting price list for re-import`);
-        await pool.query(`
-          DELETE FROM price_list_prices WHERE price_list_id = (
-            SELECT id FROM price_lists WHERE name = 'Poulos' LIMIT 1
-          )
-        `);
-      } else {
-        console.log("Poulos: product categories look correct, no fix needed");
-      }
+    const badCatCheck = await pool.query(`
+      SELECT COUNT(*) as bad FROM products
+      WHERE category ~ '^MW' OR category ~ '^HLC' OR category = 'INSERT' OR category = 'PILLOW'
+    `);
+    const badCount = parseInt(badCatCheck.rows[0].bad);
+    if (badCount > 0) {
+      console.log(`Poulos cleanup: found ${badCount} products with corrupt category names — purging`);
+      // Remove all price_list_prices that reference these bad products
+      await pool.query(`
+        DELETE FROM price_list_prices WHERE product_id IN (
+          SELECT id FROM products
+          WHERE category ~ '^MW' OR category ~ '^HLC' OR category = 'INSERT' OR category = 'PILLOW'
+        )
+      `);
+      // Remove the bad products themselves
+      const del = await pool.query(`
+        DELETE FROM products
+        WHERE category ~ '^MW' OR category ~ '^HLC' OR category = 'INSERT' OR category = 'PILLOW'
+        RETURNING id
+      `);
+      console.log(`Poulos cleanup: deleted ${del.rowCount} products — Poulos will be re-imported from CSV`);
+    } else {
+      console.log("Poulos cleanup: no corrupt products found");
     }
   } catch (error) {
-    console.error("Poulos category fix error:", error);
+    console.error("Poulos cleanup error:", error);
   }
 
   // Import all 17 price lists from CSV files (idempotent - skips if already imported)
