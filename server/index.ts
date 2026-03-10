@@ -887,6 +887,29 @@ async function runStartupTasks() {
     console.error("Portal status fix error:", err.message);
   }
 
+  // Fix pillow product names: rename any remaining "30% GOOSE DOWN PILLOW" to "80% GOOSE DOWN PILLOW"
+  // (applies to all price lists except Hotel Luxury Collection which has its own naming)
+  try {
+    const pillowFix = await pool.query(`
+      UPDATE products
+      SET name = REGEXP_REPLACE(name, '30% GOOSE DOWN PILLOW', '80% GOOSE DOWN PILLOW', 'gi')
+      WHERE name ILIKE '%30% GOOSE DOWN PILLOW%'
+        AND category NOT IN ('MICROSOFT')
+        AND id NOT IN (
+          SELECT DISTINCT p.id FROM products p
+          JOIN price_list_prices plp ON plp.product_id = p.id
+          JOIN price_lists pl ON pl.id = plp.price_list_id
+          WHERE pl.name ILIKE '%hotel%luxury%'
+        )
+      RETURNING id, name
+    `);
+    if (pillowFix.rowCount && pillowFix.rowCount > 0) {
+      console.log(`Pillow name fix: renamed ${pillowFix.rowCount} products to 80% GOOSE DOWN PILLOW`);
+    }
+  } catch (err: any) {
+    console.error("Pillow name fix error:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 
