@@ -2452,18 +2452,29 @@ export async function registerRoutes(
 
       const newStatus = xeroInv.Status as string; // DRAFT, SUBMITTED, AUTHORISED, PAID, VOIDED
       const isPaid = newStatus === "PAID";
+      const isInvoiced = newStatus === "AUTHORISED" || newStatus === "PAID";
 
       await pool.query(
-        `UPDATE orders SET xero_invoice_status = $1, payment_status = $2, updated_at = NOW() WHERE id = $3`,
-        [newStatus, isPaid ? "paid" : (order as any).paymentStatus, order.id]
+        `UPDATE orders SET xero_invoice_status = $1, payment_status = $2,
+         status = CASE WHEN $3 AND status NOT IN ('completed','cancelled') THEN 'completed' ELSE status END,
+         updated_at = NOW() WHERE id = $4`,
+        [newStatus, isPaid ? "paid" : (order as any).paymentStatus, isInvoiced, order.id]
       );
 
-      if (isPaid) {
+      if (isInvoiced) {
+        // Also mark any linked portal order request as completed
+        await pool.query(
+          `UPDATE customer_order_requests SET status = 'completed'
+           WHERE converted_order_id = $1 AND status != 'completed'`,
+          [order.id]
+        );
         await storage.createActivity({
           entityType: "order",
           activityType: "system",
           entityId: order.id,
-          content: `Xero invoice marked as PAID — payment synced to order`,
+          content: isPaid
+            ? `Xero invoice marked as PAID — order and portal marked as completed`
+            : `Xero invoice AUTHORISED — order and portal marked as completed`,
           createdBy: (req as any).session?.userId || null,
         });
       }
@@ -3086,21 +3097,26 @@ export async function registerRoutes(
       const order = await storage.getOrder(invoice.orderId);
       if (!order) return;
 
+      // Also mark the CRM order itself as completed so portal order list reflects it
+      await pool.query(
+        `UPDATE orders SET status = 'completed', updated_at = NOW() WHERE id = $1 AND status NOT IN ('completed', 'cancelled')`,
+        [invoice.orderId]
+      );
+
       // Find the portal order request linked to this CRM order
       const portalResult = await pool.query(
         `SELECT id, status FROM customer_order_requests WHERE converted_order_id = $1 LIMIT 1`,
         [invoice.orderId]
       );
-      if (portalResult.rows.length === 0) return;
-
-      const portalOrder = portalResult.rows[0];
-      if (portalOrder.status === "completed") return; // Already done
-
-      // Mark the portal order as completed
-      await pool.query(
-        `UPDATE customer_order_requests SET status = 'completed' WHERE id = $1`,
-        [portalOrder.id]
-      );
+      if (portalResult.rows.length > 0) {
+        const portalOrder = portalResult.rows[0];
+        if (portalOrder.status !== "completed") {
+          await pool.query(
+            `UPDATE customer_order_requests SET status = 'completed' WHERE id = $1`,
+            [portalOrder.id]
+          );
+        }
+      }
 
       // Add an activity log entry so the CRM shows what happened
       const invoiceNumber = updated.invoiceNumber || invoice.invoiceNumber;
@@ -5631,9 +5647,16 @@ Rules:
         return res.status(404).json({ message: `Order not found (orderId=${orderId}, orderNumber=${orderNumber})` });
       }
 
-      // Mark as completed
+      // Mark the order as completed
       await pool.query(
         `UPDATE orders SET status = 'completed', updated_at = NOW() WHERE id = $1`,
+        [order.id]
+      );
+
+      // Also mark any linked portal order request as completed
+      await pool.query(
+        `UPDATE customer_order_requests SET status = 'completed'
+         WHERE converted_order_id = $1 AND status != 'completed'`,
         [order.id]
       );
 

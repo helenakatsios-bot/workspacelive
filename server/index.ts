@@ -858,8 +858,25 @@ async function runStartupTasks() {
 
 
 
-  // All price list imports and auto-manipulation removed — prices managed via admin UI
-
+  // Fix orders that have an Xero invoice (AUTHORISED/PAID) but still show as 'new' or 'confirmed' in the portal
+  try {
+    const staleOrders = await pool.query(`
+      UPDATE orders SET status = 'completed', updated_at = NOW()
+      WHERE xero_invoice_status IN ('AUTHORISED', 'PAID')
+        AND status NOT IN ('completed', 'cancelled')
+      RETURNING id, order_number
+    `);
+    if (staleOrders.rowCount && staleOrders.rowCount > 0) {
+      const ids = staleOrders.rows.map((r: any) => r.id);
+      await pool.query(`
+        UPDATE customer_order_requests SET status = 'completed'
+        WHERE converted_order_id = ANY($1::varchar[]) AND status != 'completed'
+      `, [ids]);
+      console.log(`Portal status fix: marked ${staleOrders.rowCount} invoiced orders as completed (${staleOrders.rows.map((r: any) => r.order_number).join(', ')})`);
+    }
+  } catch (err: any) {
+    console.error("Portal status fix error:", err.message);
+  }
 
   console.log("All startup tasks completed");
 }
