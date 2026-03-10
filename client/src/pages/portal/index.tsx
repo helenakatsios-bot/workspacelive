@@ -1041,12 +1041,41 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
       const dashIdx = p.name.indexOf(' - ');
       if (dashIdx < 0) continue;
       const size = p.name.substring(0, dashIdx);
-      const filling = (p.variantPrices?.[0]?.filling as string | undefined) || p.name;
+      // Use the text AFTER " - " as the filling label (e.g. "80% DUCK DOWN") so options are distinguishable
+      const afterDash = p.name.substring(dashIdx + 3).trim();
+      const filling = afterDash || (p.variantPrices?.[0]?.filling as string | undefined) || p.name;
       const price = (p.unitPrice as string) || (p.variantPrices?.[0]?.unitPrice as string) || "0";
       if (!sizeMap.has(size)) sizeMap.set(size, []);
       sizeMap.get(size)!.push({ filling, productId: p.id as string, price });
     }
     return Array.from(sizeMap.entries()).map(([size, options]) => ({ size, options }));
+  };
+
+  const buildChamberPillowGroups = (prods: any[]) => {
+    const groups: { size: string; options: { filling: string; productId: string; price: string }[] }[] = [];
+    // STANDARD: group 80% and 50% into one row with dropdown
+    const stdProds = prods.filter((p: any) => (p.name as string).startsWith('STANDARD CHAMBER PILLOW - '));
+    if (stdProds.length > 0) {
+      const ORDER = ['80% DUCK DOWN', '50% DUCK DOWN'];
+      const options = stdProds.map((p: any) => {
+        const dashIdx = (p.name as string).indexOf(' - ');
+        const filling = dashIdx >= 0 ? (p.name as string).slice(dashIdx + 3).trim() : p.name;
+        return { filling, productId: p.id as string, price: (p.unitPrice as string) || "0" };
+      }).sort((a: any, b: any) => {
+        return (ORDER.indexOf(a.filling) === -1 ? 99 : ORDER.indexOf(a.filling)) -
+               (ORDER.indexOf(b.filling) === -1 ? 99 : ORDER.indexOf(b.filling));
+      });
+      groups.push({ size: 'STANDARD CHAMBER PILLOW', options });
+    }
+    // KING 80%: single row, no dropdown (only show 80% duck, per user spec)
+    const king80 = prods.find((p: any) => (p.name as string) === 'KING 80% CHAMBER PILLOW');
+    if (king80) {
+      groups.push({
+        size: 'KING 80% CHAMBER PILLOW',
+        options: [{ filling: '80% DUCK DOWN', productId: king80.id as string, price: (king80.unitPrice as string) || "0" }]
+      });
+    }
+    return groups.length > 0 ? groups : null;
   };
 
   const isNonZero = (price: string | null | undefined): boolean => {
@@ -1275,7 +1304,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
           </div>
 
           {Object.entries(grouped).map(([category, prods]) => {
-            const sizeGroups = category === 'PIPED PILLOWS' ? buildPillowSizeGroups(prods) : buildSizeGroups(prods);
+            const sizeGroups = category === 'PIPED PILLOWS' ? buildPillowSizeGroups(prods) : category === 'CHAMBER PILLOW' ? buildChamberPillowGroups(prods) : buildSizeGroups(prods);
             const hasMultipleFillings = sizeGroups ? sizeGroups.some(sg => sg.options.length > 1) : false;
             const showFillingColumn = sizeGroups ? hasMultipleFillings : FILLING_CATEGORIES.includes(category);
             const showWeightColumn = !sizeGroups && WEIGHT_CATEGORIES.includes(category);
@@ -1347,24 +1376,28 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                             </TableCell>
                             {hasMultipleFillings && (
                               <TableCell>
-                                <Select
-                                  value={selectedFilling}
-                                  onValueChange={(val) => {
-                                    if (productId) {
-                                      setCart(prev => { const { [productId]: _, ...rest } = prev; return rest; });
-                                    }
-                                    setSizeGroupFillings(prev => ({ ...prev, [sgKey]: val }));
-                                  }}
-                                >
-                                  <SelectTrigger className="w-[130px]" data-testid={`select-filling-sg-${size}`}>
-                                    <SelectValue placeholder="Select..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {options.map(o => (
-                                      <SelectItem key={o.filling} value={o.filling}>{o.filling}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                {options.length === 1 ? (
+                                  <span className="text-sm text-muted-foreground">—</span>
+                                ) : (
+                                  <Select
+                                    value={selectedFilling}
+                                    onValueChange={(val) => {
+                                      if (productId) {
+                                        setCart(prev => { const { [productId]: _, ...rest } = prev; return rest; });
+                                      }
+                                      setSizeGroupFillings(prev => ({ ...prev, [sgKey]: val }));
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-[130px]" data-testid={`select-filling-sg-${size}`}>
+                                      <SelectValue placeholder="Select..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {options.map(o => (
+                                        <SelectItem key={o.filling} value={o.filling}>{o.filling}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                )}
                               </TableCell>
                             )}
                             <TableCell>

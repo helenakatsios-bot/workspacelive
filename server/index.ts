@@ -887,6 +887,30 @@ async function runStartupTasks() {
     console.error("Portal status fix error:", err.message);
   }
 
+  // Fix chamber pillow product names to use clear, consistent naming
+  try {
+    const chamberFix = await pool.query(`
+      UPDATE products SET name =
+        CASE
+          WHEN name = 'STANDARD PILLOW - 80 DUCK DOWN CHAMBER PILLOW' THEN 'STANDARD CHAMBER PILLOW - 80% DUCK DOWN'
+          WHEN name = 'STANDARD PILLOW - 50 DUCK DOWN CHAMBER PILLOW' THEN 'STANDARD CHAMBER PILLOW - 50% DUCK DOWN'
+          WHEN name = 'KING PILLOW - 80 DUCK DOWN CHAMBER PILLOW'     THEN 'KING 80% CHAMBER PILLOW'
+          WHEN name = 'KING PILLOW - 50 DUCK DOWN CHAMBER PILLOW'     THEN 'KING 50% CHAMBER PILLOW'
+        END
+      WHERE name IN (
+        'STANDARD PILLOW - 80 DUCK DOWN CHAMBER PILLOW',
+        'STANDARD PILLOW - 50 DUCK DOWN CHAMBER PILLOW',
+        'KING PILLOW - 80 DUCK DOWN CHAMBER PILLOW',
+        'KING PILLOW - 50 DUCK DOWN CHAMBER PILLOW'
+      ) AND category = 'CHAMBER PILLOW'
+    `);
+    if (chamberFix.rowCount && chamberFix.rowCount > 0) {
+      console.log(`Chamber pillow fix: renamed ${chamberFix.rowCount} products`);
+    }
+  } catch (err: any) {
+    console.error("Chamber pillow fix error:", err.message);
+  }
+
   // Fix pillow product names: rename any remaining "30% GOOSE DOWN PILLOW" to "80% GOOSE DOWN PILLOW"
   // (applies to all price lists except Hotel Luxury Collection which has its own naming)
   try {
