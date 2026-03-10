@@ -858,12 +858,19 @@ async function runStartupTasks() {
 
 
 
-  // Fix orders that have an Xero invoice (AUTHORISED/PAID) but still show as 'new' or 'confirmed' in the portal
+  // Fix orders that are clearly done but still show stale status in the portal
+  // Covers: (1) Xero invoice status AUTHORISED/PAID, (2) orders imported from Xero historically,
+  // (3) orders with a linked Xero invoice ID, (4) orders sent to Purax >14 days ago
   try {
     const staleOrders = await pool.query(`
       UPDATE orders SET status = 'completed', updated_at = NOW()
-      WHERE xero_invoice_status IN ('AUTHORISED', 'PAID')
-        AND status NOT IN ('completed', 'cancelled')
+      WHERE status NOT IN ('completed', 'cancelled')
+        AND (
+          xero_invoice_status IN ('AUTHORISED', 'PAID')
+          OR xero_invoice_id IS NOT NULL
+          OR internal_notes ILIKE '%Imported from Xero invoice%'
+          OR (purax_sync_status = 'sent' AND purax_synced_at < NOW() - INTERVAL '14 days')
+        )
       RETURNING id, order_number
     `);
     if (staleOrders.rowCount && staleOrders.rowCount > 0) {
@@ -872,7 +879,9 @@ async function runStartupTasks() {
         UPDATE customer_order_requests SET status = 'completed'
         WHERE converted_order_id = ANY($1::varchar[]) AND status != 'completed'
       `, [ids]);
-      console.log(`Portal status fix: marked ${staleOrders.rowCount} invoiced orders as completed (${staleOrders.rows.map((r: any) => r.order_number).join(', ')})`);
+      console.log(`Portal status fix: marked ${staleOrders.rowCount} orders as completed`);
+    } else {
+      console.log("Portal status fix: all orders already have correct status");
     }
   } catch (err: any) {
     console.error("Portal status fix error:", err.message);
