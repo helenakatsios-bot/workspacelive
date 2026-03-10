@@ -1003,6 +1003,35 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
     return sorted;
   }, [filteredProducts]);
 
+  const PILLOW_SIZES = ['STANDARD', 'KING', 'QUEEN', 'EURO'];
+
+  const buildPillowSizeGroups = (prods: any[]) => {
+    const sizeMap = new Map<string, { filling: string; productId: string; price: string }[]>();
+    const FILLING_ORDER = ['100% FEATHER', '30% DUCK DOWN', '50% DUCK DOWN', '80% DUCK DOWN', '80% GOOSE DOWN'];
+    for (const p of prods) {
+      const name = (p.name as string).trim();
+      const sizePrefix = PILLOW_SIZES.find(s => name.startsWith(s + ' '));
+      if (!sizePrefix) continue;
+      // Extract filling label by stripping size prefix and " PILLOW" suffix
+      const filling = name.slice(sizePrefix.length + 1).replace(/ PILLOW$/i, '').trim();
+      const price = (p.unitPrice as string) || (p.variantPrices?.[0]?.unitPrice as string) || "0";
+      if (!sizeMap.has(sizePrefix)) sizeMap.set(sizePrefix, []);
+      sizeMap.get(sizePrefix)!.push({ filling, productId: p.id as string, price });
+    }
+    if (sizeMap.size === 0) return null;
+    return PILLOW_SIZES
+      .filter(s => sizeMap.has(s))
+      .map(s => {
+        const options = sizeMap.get(s)!;
+        options.sort((a, b) => {
+          const ai = FILLING_ORDER.indexOf(a.filling);
+          const bi = FILLING_ORDER.indexOf(b.filling);
+          return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        });
+        return { size: s + ' PILLOW', options };
+      });
+  };
+
   const buildSizeGroups = (prods: any[]) => {
     if (!prods.some((p: any) => p.name.includes(' - '))) return null;
     const sizeMap = new Map<string, { filling: string; productId: string; price: string }[]>();
@@ -1075,8 +1104,9 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
     if (products) {
       const missingFilling = cartItems.filter((item) => {
         const cat = (item as any).category || "";
-        // Size-grouped products (name contains " - ") already have filling embedded in the product itself
+        // Size-grouped products (name contains " - " or are pillow products) already have filling embedded in the product itself
         if ((item.name as string).includes(' - ')) return false;
+        if (cat === 'PIPED PILLOWS') return false;
         return FILLING_CATEGORIES.includes(cat) && !fillings[item.id];
       });
       if (missingFilling.length > 0) {
@@ -1087,6 +1117,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
         const cat = (item as any).category || "";
         // Size-grouped products have filling/weight embedded in product name
         if ((item.name as string).includes(' - ')) return false;
+        if (cat === 'PIPED PILLOWS') return false;
         return WEIGHT_CATEGORIES.includes(cat) && !weights[item.id];
       });
       if (missingWeight.length > 0) {
@@ -1242,7 +1273,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
           </div>
 
           {Object.entries(grouped).map(([category, prods]) => {
-            const sizeGroups = buildSizeGroups(prods);
+            const sizeGroups = category === 'PIPED PILLOWS' ? buildPillowSizeGroups(prods) : buildSizeGroups(prods);
             const hasMultipleFillings = sizeGroups ? sizeGroups.some(sg => sg.options.length > 1) : false;
             const showFillingColumn = sizeGroups ? hasMultipleFillings : FILLING_CATEGORIES.includes(category);
             const showWeightColumn = !sizeGroups && WEIGHT_CATEGORIES.includes(category);
