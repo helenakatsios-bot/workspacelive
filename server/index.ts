@@ -887,6 +887,25 @@ async function runStartupTasks() {
     console.error("Portal status fix error:", err.message);
   }
 
+  // Fix Hungarian pillow product names: remove " - " format for clean single-option display
+  try {
+    await pool.query(`
+      UPDATE products SET name =
+        CASE
+          WHEN name = 'STANDARD PILLOW - 80% HUNGARIAN PILLOW' THEN 'STANDARD 80% HUNGARIAN PILLOW'
+          WHEN name = 'KING PILLOW - 80% HUNGARIAN PILLOW'     THEN 'KING 80% HUNGARIAN PILLOW'
+          WHEN name = 'QUEEN PILLOW - 80% HUNGARIAN PILLOW'    THEN 'QUEEN 80% HUNGARIAN PILLOW'
+        END
+      WHERE name IN (
+        'STANDARD PILLOW - 80% HUNGARIAN PILLOW',
+        'KING PILLOW - 80% HUNGARIAN PILLOW',
+        'QUEEN PILLOW - 80% HUNGARIAN PILLOW'
+      ) AND category = 'HUNGARIAN PILLOW'
+    `);
+  } catch (err: any) {
+    console.error("Hungarian pillow fix error:", err.message);
+  }
+
   // Fix chamber pillow product names to use clear, consistent naming
   try {
     const chamberFix = await pool.query(`

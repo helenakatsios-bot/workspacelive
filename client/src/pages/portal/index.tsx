@@ -1051,6 +1051,14 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
     return Array.from(sizeMap.entries()).map(([size, options]) => ({ size, options }));
   };
 
+  const buildHungarianPillowGroups = (prods: any[]) => {
+    // Each Hungarian pillow is its own row — no filling dropdown needed (single option each)
+    return prods.map((p: any) => ({
+      size: p.name as string,
+      options: [{ filling: '', productId: p.id as string, price: (p.unitPrice as string) || "0" }]
+    }));
+  };
+
   const buildChamberPillowGroups = (prods: any[]) => {
     const groups: { size: string; options: { filling: string; productId: string; price: string }[] }[] = [];
     // STANDARD: group 80% and 50% into one row with dropdown
@@ -1304,7 +1312,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
           </div>
 
           {Object.entries(grouped).map(([category, prods]) => {
-            const sizeGroups = category === 'PIPED PILLOWS' ? buildPillowSizeGroups(prods) : category === 'CHAMBER PILLOW' ? buildChamberPillowGroups(prods) : buildSizeGroups(prods);
+            const sizeGroups = category === 'PIPED PILLOWS' ? buildPillowSizeGroups(prods) : category === 'CHAMBER PILLOW' ? buildChamberPillowGroups(prods) : category === 'HUNGARIAN PILLOW' ? buildHungarianPillowGroups(prods) : buildSizeGroups(prods);
             const hasMultipleFillings = sizeGroups ? sizeGroups.some(sg => sg.options.length > 1) : false;
             const showFillingColumn = sizeGroups ? hasMultipleFillings : FILLING_CATEGORIES.includes(category);
             const showWeightColumn = !sizeGroups && WEIGHT_CATEGORIES.includes(category);
@@ -1370,7 +1378,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                           <TableRow key={size} data-testid={`row-product-sg-${size}`}>
                             <TableCell>
                               <p className="font-medium">{size}</p>
-                              {options.length === 1 && (
+                              {options.length === 1 && options[0].filling && (
                                 <p className="text-xs text-muted-foreground">{options[0].filling}</p>
                               )}
                             </TableCell>
