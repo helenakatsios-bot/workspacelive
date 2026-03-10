@@ -1012,6 +1012,8 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
       const name = (p.name as string).trim();
       const sizePrefix = PILLOW_SIZES.find(s => name.startsWith(s + ' '));
       if (!sizePrefix) continue;
+      // Skip chamber-style products like "STANDARD PILLOW - 80 DUCK DOWN CHAMBER PILLOW"
+      if (name.includes(' - ')) continue;
       // Extract filling label by stripping size prefix and " PILLOW" suffix
       const filling = name.slice(sizePrefix.length + 1).replace(/ PILLOW$/i, '').trim();
       const price = (p.unitPrice as string) || (p.variantPrices?.[0]?.unitPrice as string) || "0";
