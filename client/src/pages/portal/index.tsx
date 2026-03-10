@@ -826,6 +826,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
   const [fillings, setFillings] = useState<Record<string, string>>({});
   const [customDescriptions, setCustomDescriptions] = useState<Record<string, string>>({});
   const [customLines, setCustomLines] = useState<{ id: string; size: string; filling: string; weight: string; qty: number }[]>([]);
+  const [customQuiltLines, setCustomQuiltLines] = useState<{ id: string; description: string; qty: number }[]>([{ id: crypto.randomUUID(), description: "", qty: 0 }]);
   const [weights, setWeights] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
@@ -1136,7 +1137,8 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
 
   const handleSubmit = async () => {
     const hasCustomLines = customLines.some((l) => l.size && l.qty > 0);
-    if (cartItems.length === 0 && !hasCustomLines) {
+    const hasCustomQuiltLines = customQuiltLines.some((l) => l.description.trim() && l.qty > 0);
+    if (cartItems.length === 0 && !hasCustomLines && !hasCustomQuiltLines) {
       toast({ title: "Empty cart", description: "Add at least one product to your order", variant: "destructive" });
       return;
     }
@@ -1183,6 +1185,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
       ];
       const fullNotes = [notes, ...extraNotes].filter(Boolean).join("\n\n");
       const activeCustomLines = customLines.filter((l) => l.size && l.qty > 0);
+      const activeCustomQuiltLines = customQuiltLines.filter((l) => l.description.trim() && l.qty > 0);
       const payload = {
         items: cartItems.map((item) => {
           const unitPrice = parseFloat(item.effectivePrice || item.unitPrice || "0");
@@ -1198,6 +1201,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
           };
         }),
         customItems: activeCustomLines.map((l) => ({ size: l.size, filling: l.filling, weight: l.weight, quantity: l.qty })),
+        customQuiltItems: activeCustomQuiltLines.map((l) => ({ description: l.description.trim(), quantity: l.qty })),
         customerNotes: fullNotes,
         customerName: customerName || undefined,
         shippingAddress: deliveryAddress || undefined,
@@ -1278,6 +1282,16 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
   };
   const removeCustomLine = (id: string) => {
     setCustomLines((prev) => prev.filter((l) => l.id !== id));
+  };
+
+  const addCustomQuiltLine = () => {
+    setCustomQuiltLines((prev) => [...prev, { id: crypto.randomUUID(), description: "", qty: 0 }]);
+  };
+  const updateCustomQuiltLine = (id: string, field: "description" | "qty", value: any) => {
+    setCustomQuiltLines((prev) => prev.map((l) => l.id === id ? { ...l, [field]: value } : l));
+  };
+  const removeCustomQuiltLine = (id: string) => {
+    setCustomQuiltLines((prev) => prev.filter((l) => l.id !== id));
   };
 
   if (loadingProducts || (isEditMode && loadingEditRequest)) {
@@ -1677,6 +1691,76 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
             </Card>
           );
           })}
+
+          {/* CUSTOM QUILT section */}
+          <Card>
+            <button
+              className="flex items-center justify-between w-full px-4 py-3 text-left hover-elevate rounded-md"
+              onClick={() => toggleCategory("__CUSTOM_QUILT__")}
+              data-testid="button-toggle-category-CUSTOM-QUILT"
+            >
+              <div className="flex items-center gap-2">
+                {expandedCategories.has("__CUSTOM_QUILT__") ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                <span className="font-semibold text-sm">CUSTOM QUILT</span>
+                {customQuiltLines.some((l) => l.description.trim() && l.qty > 0) && <Badge variant="default" className="text-xs">In cart</Badge>}
+              </div>
+            </button>
+            {expandedCategories.has("__CUSTOM_QUILT__") && (
+              <CardContent className="p-0 pt-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="text-center w-[140px]">Quantity *</TableHead>
+                      <TableHead className="text-right w-[80px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {customQuiltLines.map((line) => (
+                      <TableRow key={line.id} data-testid={`row-custom-quilt-${line.id}`}>
+                        <TableCell>
+                          <textarea
+                            className="w-full min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                            placeholder="Describe your custom quilt (size, filling, fabric, etc.)"
+                            value={line.description}
+                            onChange={(e) => updateCustomQuiltLine(line.id, "description", e.target.value)}
+                            data-testid={`input-desc-quilt-${line.id}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            value={line.qty || ""}
+                            placeholder="0"
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => updateCustomQuiltLine(line.id, "qty", parseInt(e.target.value) || 0)}
+                            className="h-8 w-[70px] text-center mx-auto"
+                            data-testid={`input-qty-quilt-${line.id}`}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {customQuiltLines.length > 1 && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeCustomQuiltLine(line.id)} data-testid={`button-remove-quilt-${line.id}`}>
+                              <X className="w-3 h-3" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell colSpan={3}>
+                        <Button variant="outline" size="sm" onClick={addCustomQuiltLine} data-testid="button-add-custom-quilt">
+                          <Plus className="w-3 h-3 mr-1" /> Add Another
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </CardContent>
+            )}
+          </Card>
         </div>
 
         <div className="space-y-4">
@@ -1688,7 +1772,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {cartItems.length === 0 && !customLines.some((l) => l.size && l.qty > 0) ? (
+              {cartItems.length === 0 && !customLines.some((l) => l.size && l.qty > 0) && !customQuiltLines.some((l) => l.description.trim() && l.qty > 0) ? (
                 <p className="text-sm text-muted-foreground text-center py-4">No items added yet</p>
               ) : (
                 <div className="space-y-2">
@@ -1710,6 +1794,14 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                             ({[line.filling, line.weight].filter(Boolean).join(", ")})
                           </span>
                         )}
+                      </span>
+                      <span className="flex-shrink-0 text-muted-foreground text-xs mt-0.5">TBD</span>
+                    </div>
+                  ))}
+                  {customQuiltLines.filter((l) => l.description.trim() && l.qty > 0).map((line) => (
+                    <div key={line.id} className="flex justify-between text-sm" data-testid={`cart-quilt-${line.id}`}>
+                      <span className="truncate mr-2">
+                        <span className="font-medium">Custom Quilt:</span> {line.description} x{line.qty}
                       </span>
                       <span className="flex-shrink-0 text-muted-foreground text-xs mt-0.5">TBD</span>
                     </div>
@@ -1835,7 +1927,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                 </div>
               </div>
 
-              <Button className="w-full" disabled={(cartItems.length === 0 && !customLines.some((l) => l.size && l.qty > 0)) || submitting} onClick={handleSubmit} data-testid="button-submit-order">
+              <Button className="w-full" disabled={(cartItems.length === 0 && !customLines.some((l) => l.size && l.qty > 0) && !customQuiltLines.some((l) => l.description.trim() && l.qty > 0)) || submitting} onClick={handleSubmit} data-testid="button-submit-order">
                 {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShoppingCart className="w-4 h-4 mr-2" />}
                 {isEditMode ? "Update Order" : "Place Order"}
               </Button>

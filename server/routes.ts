@@ -6696,10 +6696,11 @@ Rules:
 
   app.post("/api/portal/orders", requirePortalAuth, async (req, res) => {
     try {
-      const { items, customItems, customerNotes, customerName: submittedCustomerName, shippingAddress: deliveryAddress, customerOrderNumber } = req.body;
+      const { items, customItems, customQuiltItems, customerNotes, customerName: submittedCustomerName, shippingAddress: deliveryAddress, customerOrderNumber } = req.body;
       const hasItems = items && Array.isArray(items) && items.length > 0;
       const hasCustomItems = customItems && Array.isArray(customItems) && customItems.length > 0;
-      if (!hasItems && !hasCustomItems) {
+      const hasCustomQuiltItems = customQuiltItems && Array.isArray(customQuiltItems) && customQuiltItems.length > 0;
+      if (!hasItems && !hasCustomItems && !hasCustomQuiltItems) {
         return res.status(400).json({ message: "At least one item is required" });
       }
       const companyId = req.session.portalCompanyId!;
@@ -6758,6 +6759,17 @@ Rules:
           orderItems.push({
             productId: null,
             productName: `CUSTOM INSERT: ${ci.size}${ci.filling ? ` (${ci.filling})` : ''}${ci.weight ? ` [${ci.weight}]` : ''}`,
+            sku: "",
+            quantity: qty,
+          });
+        }
+      }
+      if (hasCustomQuiltItems) {
+        for (const cq of customQuiltItems) {
+          const qty = Math.max(1, parseInt(cq.quantity) || 1);
+          orderItems.push({
+            productId: null,
+            productName: `CUSTOM QUILT: ${cq.description}`,
             sku: "",
             quantity: qty,
           });
@@ -6875,10 +6887,11 @@ Rules:
         return res.status(400).json({ message: "This order has already been accepted and can no longer be edited" });
       }
 
-      const { items, customItems, customerNotes, customerName: submittedCustomerName, shippingAddress: deliveryAddress, customerOrderNumber } = req.body;
+      const { items, customItems, customQuiltItems, customerNotes, customerName: submittedCustomerName, shippingAddress: deliveryAddress, customerOrderNumber } = req.body;
       const hasItems = items && Array.isArray(items) && items.length > 0;
       const hasCustomItems = customItems && Array.isArray(customItems) && customItems.length > 0;
-      if (!hasItems && !hasCustomItems) {
+      const hasCustomQuiltItems = customQuiltItems && Array.isArray(customQuiltItems) && customQuiltItems.length > 0;
+      if (!hasItems && !hasCustomItems && !hasCustomQuiltItems) {
         return res.status(400).json({ message: "At least one item is required" });
       }
 
@@ -6929,6 +6942,17 @@ Rules:
           orderItems.push({
             productId: null,
             productName: `CUSTOM INSERT: ${ci.size}${ci.filling ? ` (${ci.filling})` : ''}${ci.weight ? ` [${ci.weight}]` : ''}`,
+            sku: "",
+            quantity: qty,
+          });
+        }
+      }
+      if (hasCustomQuiltItems) {
+        for (const cq of customQuiltItems) {
+          const qty = Math.max(1, parseInt(cq.quantity) || 1);
+          orderItems.push({
+            productId: null,
+            productName: `CUSTOM QUILT: ${cq.description}`,
             sku: "",
             quantity: qty,
           });
