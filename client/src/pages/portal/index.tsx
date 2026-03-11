@@ -850,32 +850,62 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
     const newCart: Record<string, number> = {};
     const newFillings: Record<string, string> = {};
     const newWeights: Record<string, string> = {};
+    const newSizeGroupFillings: Record<string, string> = {};
     const newCustomLines: { id: string; size: string; filling: string; weight: string; qty: number }[] = [];
+    const newCustomQuiltLines: { id: string; description: string; qty: number }[] = [];
+    const categoriesToExpand = new Set<string>();
+
     for (const item of items) {
       if (!item.productId) {
-        const nameMatch = (item.productName || "").match(/CUSTOM INSERT:\s*(.+?)(?:\s*\(([^)]*)\))?(?:\s*\[([^\]]*)\])?$/);
-        newCustomLines.push({
-          id: `custom-${Date.now()}-${Math.random()}`,
-          size: nameMatch ? nameMatch[1].trim() : item.productName || "",
-          filling: nameMatch && nameMatch[2] ? nameMatch[2].trim() : "",
-          weight: nameMatch && nameMatch[3] ? nameMatch[3].trim() : "",
-          qty: item.quantity || 1,
-        });
+        // Free-text items: CUSTOM QUILT or CUSTOM INSERT
+        if ((item.productName || "").startsWith("CUSTOM QUILT:")) {
+          const description = (item.productName || "").replace(/^CUSTOM QUILT:\s*/, "").trim();
+          newCustomQuiltLines.push({
+            id: `quilt-${Date.now()}-${Math.random()}`,
+            description,
+            qty: item.quantity || 1,
+          });
+          categoriesToExpand.add("__CUSTOM_QUILT__");
+        } else {
+          const nameMatch = (item.productName || "").match(/CUSTOM INSERT:\s*(.+?)(?:\s*\(([^)]*)\))?(?:\s*\[([^\]]*)\])?$/);
+          newCustomLines.push({
+            id: `custom-${Date.now()}-${Math.random()}`,
+            size: nameMatch ? nameMatch[1].trim() : (item.productName || "").replace(/^CUSTOM INSERT:\s*/, ""),
+            filling: nameMatch?.[2]?.trim() || "",
+            weight: nameMatch?.[3]?.trim() || "",
+            qty: item.quantity || 1,
+          });
+          categoriesToExpand.add("CUSTOM INSERTS");
+        }
       } else {
-        const cartKey = (item.filling || item.weight)
-          ? `${item.productId}::${item.filling || ''}::${item.weight || ''}`
-          : item.productId;
-        newCart[cartKey] = item.quantity || 1;
-        if (!item.filling && !item.weight) {
-          if (item.filling) newFillings[item.productId] = item.filling;
-          if (item.weight) newWeights[item.productId] = item.weight;
+        // Regular product — always use productId as the cart key directly
+        newCart[item.productId] = item.quantity || 1;
+        if (item.filling) newFillings[item.productId] = item.filling;
+        if (item.weight) newWeights[item.productId] = item.weight;
+
+        // Restore sizeGroupFillings for categories like CHAMBER PILLOW
+        // (products whose name contains " - " to form a size/filling pair)
+        const product = (products as any[]).find((p: any) => p.id === item.productId);
+        if (product) {
+          categoriesToExpand.add(product.category || "");
+          if (product.name && product.name.includes(" - ")) {
+            const dashIdx = product.name.indexOf(" - ");
+            const size = product.name.substring(0, dashIdx);
+            const filling = product.name.substring(dashIdx + 3);
+            newSizeGroupFillings[`${product.category}__${size}`] = filling;
+          }
         }
       }
     }
+
     setCart(newCart);
     setFillings(newFillings);
     setWeights(newWeights);
+    setSizeGroupFillings(newSizeGroupFillings);
     if (newCustomLines.length > 0) setCustomLines(newCustomLines);
+    setCustomQuiltLines(newCustomQuiltLines.length > 0 ? newCustomQuiltLines : [{ id: crypto.randomUUID(), description: "", qty: 0 }]);
+    // Auto-expand categories that have restored items so the customer can see them immediately
+    setExpandedCategories(categoriesToExpand);
 
     const rawNotes = editRequest.customerNotes || "";
     const poMatch = rawNotes.match(/^PO\/Order #:\s*(.+?)$/m);
