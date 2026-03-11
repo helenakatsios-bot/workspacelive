@@ -260,7 +260,7 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
         "SELECT COUNT(*) as cnt FROM price_list_prices WHERE price_list_id = $1",
         [priceListId]
       );
-      if (parseInt(existingPrices.rows[0].cnt) > 0) {
+      if (parseInt(existingPrices.rows[0].cnt) >= rows.length) {
         console.log(`[${config.name}] Already imported (${existingPrices.rows[0].cnt} prices), skipping`);
         await client.query("ROLLBACK");
         return;
