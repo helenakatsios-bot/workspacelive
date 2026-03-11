@@ -234,7 +234,7 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
   for (let i = startRow; i < lines.length; i++) {
     const fields = parseCsvLine(lines[i]);
     if (fields.length < 6) continue;
-    const productName = fields[0].trim();
+    const productName = fields[0].trim().replace(/[^\x20-\x7E]/g, ' ').replace(/\s+/g, ' ').trim();
     if (!productName) continue;
     const rawCategoryField = config.swapSkuCategory ? fields[2] : fields[1];
     const rawSkuField = config.swapSkuCategory ? fields[1] : fields[2];

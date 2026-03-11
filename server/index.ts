@@ -864,6 +864,31 @@ async function runStartupTasks() {
     console.error("CUST INSERTS rename error:", err.message);
   }
 
+  // Strip non-ASCII/non-printable characters from product names (e.g. † dagger from Pearls Manchester CSV)
+  try {
+    const dirtyProds = await pool.query(`
+      SELECT id, name FROM products
+      WHERE octet_length(name) > length(name) OR name LIKE '%†%'
+    `);
+    let cleanedCount = 0;
+    for (const row of dirtyProds.rows) {
+      const cleaned = row.name.replace(/[^\x20-\x7E]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (cleaned !== row.name) {
+        await pool.query(`UPDATE products SET name = $1 WHERE id = $2`, [cleaned, row.id]);
+        cleanedCount++;
+      }
+    }
+    if (cleanedCount > 0) console.log(`Cleaned non-ASCII chars from ${cleanedCount} product names`);
+    // Also fix any product names where a space is missing before a dash (e.g. "DOWN- " → "DOWN - ")
+    const spaceFix = await pool.query(`
+      UPDATE products SET name = regexp_replace(name, '([A-Za-z0-9%])- ', '\\1 - ', 'g')
+      WHERE name ~ '[A-Za-z0-9%]- '
+    `);
+    if (spaceFix.rowCount && spaceFix.rowCount > 0) console.log(`Fixed missing spaces before dashes in ${spaceFix.rowCount} product names`);
+  } catch (err: any) {
+    console.error("Product name cleanup error:", err.message);
+  }
+
   // Add Xero invoice columns to orders table if not present
   try {
     await pool.query(`
