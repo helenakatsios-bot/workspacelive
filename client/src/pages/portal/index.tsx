@@ -839,6 +839,18 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
   const [submitting, setSubmitting] = useState(false);
   const [editLoaded, setEditLoaded] = useState(false);
 
+  // Reset all cart state whenever the edit request ID changes (new edit session)
+  useEffect(() => {
+    setEditLoaded(false);
+    setCart({});
+    setFillings({});
+    setWeights({});
+    setSizeGroupFillings({});
+    setCustomLines([]);
+    setCustomQuiltLines([{ id: crypto.randomUUID(), description: "", qty: 0 }]);
+    setExpandedCategories(new Set());
+  }, [editRequestId]);
+
   useEffect(() => {
     if (!isEditMode || !editRequest || !products || editLoaded) return;
     if (editRequest.status !== "pending") {
@@ -880,8 +892,22 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
       } else {
         // Regular product — always use productId as the cart key directly
         newCart[item.productId] = item.quantity || 1;
-        if (item.filling) newFillings[item.productId] = item.filling;
-        if (item.weight) newWeights[item.productId] = item.weight;
+
+        // Restore filling and weight — they may be stored as separate fields OR
+        // embedded only in productName like "30X55CM (100% Feather, Extra Firm Fill)"
+        if (item.filling) {
+          newFillings[item.productId] = item.filling;
+        } else if (item.productName) {
+          const parenMatch = (item.productName as string).match(/\(([^)]+)\)$/);
+          if (parenMatch) {
+            const parts = parenMatch[1].split(/, /);
+            if (parts[0]?.trim()) newFillings[item.productId] = parts[0].trim();
+            if (parts[1]?.trim()) newWeights[item.productId] = parts[1].trim();
+          }
+        }
+        if (item.weight && !newWeights[item.productId]) {
+          newWeights[item.productId] = item.weight;
+        }
 
         // Restore sizeGroupFillings for categories like CHAMBER PILLOW
         // (products whose name contains " - " to form a size/filling pair)
