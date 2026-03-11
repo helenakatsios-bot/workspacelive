@@ -788,6 +788,31 @@ async function runStartupTasks() {
     console.error("50X110CM full price fix error:", err.message);
   }
 
+  // Fix 35X80CM duck feather custom insert prices (corrected to 17.65/18.25/18.85)
+  try {
+    const custInsertsPl = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) ILIKE '%custom insert%' LIMIT 1`);
+    if (custInsertsPl.rows.length > 0) {
+      const plId = custInsertsPl.rows[0].id;
+      const fixes = [
+        { weight: "Normal", price: "17.65" },
+        { weight: "Firm Fill", price: "18.25" },
+        { weight: "Extra Firm Fill", price: "18.85" },
+      ];
+      let fixCount = 0;
+      for (const { weight, price } of fixes) {
+        const r = await pool.query(
+          `UPDATE price_list_prices SET unit_price = $1 WHERE price_list_id = $2 AND sku = 'CUSTINNERS - 19' AND weight = $3 AND unit_price != $1`,
+          [price, plId, weight]
+        );
+        fixCount += r.rowCount ?? 0;
+      }
+      if (fixCount > 0) console.log(`Fixed ${fixCount} 35X80CM custom insert price entries`);
+      else console.log(`35X80CM custom insert prices already correct`);
+    }
+  } catch (err: any) {
+    console.error("35X80CM price fix error:", err.message);
+  }
+
   // COMER & KING: assign Interiors as main price list, COMER & KING list as additional
   try {
     const comerKingComp = await pool.query(`SELECT id FROM companies WHERE trading_name ILIKE '%COMER%KING%' OR legal_name ILIKE '%COMER%KING%' LIMIT 1`);
