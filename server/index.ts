@@ -791,6 +791,26 @@ async function runStartupTasks() {
     console.error("COMER & KING price list assignment error:", err.message);
   }
 
+  // Assign Pearls Manchester price list to both Pearls Manchester companies
+  try {
+    const pearlsPlResult = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'pearls manchester' LIMIT 1`);
+    if (pearlsPlResult.rows.length > 0) {
+      const pearlsPlId = pearlsPlResult.rows[0].id;
+      const pearlsComps = await pool.query(`SELECT id FROM companies WHERE trading_name ILIKE '%pearls manchester%' OR legal_name ILIKE '%pearls manchester%'`);
+      let assigned = 0;
+      for (const comp of pearlsComps.rows) {
+        const updated = await pool.query(
+          `UPDATE companies SET price_list_id = $1 WHERE id = $2 AND (price_list_id IS NULL OR price_list_id != $1) RETURNING id`,
+          [pearlsPlId, comp.id]
+        );
+        if (updated.rowCount && updated.rowCount > 0) assigned++;
+      }
+      if (assigned > 0) console.log(`Pearls Manchester: assigned price list to ${assigned} companies`);
+    }
+  } catch (err: any) {
+    console.error("Pearls Manchester price list assignment error:", err.message);
+  }
+
   // Ensure "Custom Inserts" price list exists, then assign it to Standard/Interiors companies
   try {
     let customInsertsResult = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'custom inserts' LIMIT 1`);

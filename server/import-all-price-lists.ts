@@ -17,6 +17,8 @@ interface PriceListConfig {
   isDefault: boolean;
   csvFiles: string[];
   categoryNorm?: (cat: string) => string;
+  csvStartRow?: number;
+  swapSkuCategory?: boolean;
 }
 
 const PRICE_LISTS: PriceListConfig[] = [
@@ -174,6 +176,14 @@ const PRICE_LISTS: PriceListConfig[] = [
       "prices_for_replit_space_craft_CSV_OFFICAL_1771797487577.csv",
     ],
   },
+  {
+    name: "Pearls Manchester",
+    description: "Pearls Manchester pricing",
+    isDefault: false,
+    csvFiles: ["PEARLS_MANCHESTER_OFFICAL_1773200416713.csv"],
+    csvStartRow: 2,
+    swapSkuCategory: true,
+  },
 ];
 
 function parseCsvLine(line: string): string[] {
@@ -219,14 +229,17 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
   const content = fs.readFileSync(csvPath, "utf-8");
   const lines = content.split("\n").filter((l) => l.trim());
 
+  const startRow = config.csvStartRow ?? 1;
   const rows: CsvRow[] = [];
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = startRow; i < lines.length; i++) {
     const fields = parseCsvLine(lines[i]);
     if (fields.length < 6) continue;
     const productName = fields[0].trim();
     if (!productName) continue;
-    const category = normCategory(fields[1]);
-    const sku = fields[2].trim();
+    const rawCategoryField = config.swapSkuCategory ? fields[2] : fields[1];
+    const rawSkuField = config.swapSkuCategory ? fields[1] : fields[2];
+    const category = normCategory(rawCategoryField);
+    const sku = rawSkuField.trim();
     const filling = fields[3].trim();
     const weight = fields[4].trim();
     const price = parsePrice(fields[5]);
@@ -338,7 +351,7 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
 }
 
 export async function importAllPriceLists(): Promise<void> {
-  console.log("Starting price list import for all 17 lists...");
+  console.log("Starting price list import for all 18 lists...");
   for (const config of PRICE_LISTS) {
     try {
       await importOnePriceList(config);
