@@ -215,7 +215,25 @@ async function runStartupTasks() {
     console.error("Poulos cleanup error:", error);
   }
 
-  // Import all 17 price lists from CSV files (idempotent - skips if already imported)
+  // Fix CUSTINNERS-25 SKU conflict: if 40x100cm still holds that SKU and 39x79cm doesn't exist,
+  // free the slot and clear Custom Inserts prices so the import below creates 39x79cm correctly.
+  try {
+    const conflict = await pool.query(
+      `SELECT 1 FROM products WHERE sku = 'CUSTINNERS - 25' AND name = '40 x 100cm duck feather' LIMIT 1`
+    );
+    const missing = await pool.query(
+      `SELECT 1 FROM products WHERE name = '39 x 79cm duck feather' LIMIT 1`
+    );
+    if (conflict.rows.length > 0 && missing.rows.length === 0) {
+      await pool.query(`UPDATE products SET sku = 'CUSTINNERS - 25B' WHERE sku = 'CUSTINNERS - 25' AND name = '40 x 100cm duck feather'`);
+      await pool.query(`DELETE FROM price_list_prices WHERE price_list_id = (SELECT id FROM price_lists WHERE name = 'Custom Inserts')`);
+      console.log("Fixed CUSTINNERS-25 SKU conflict; Custom Inserts will re-import with 39 x 79cm");
+    }
+  } catch (err: any) {
+    console.error("CUSTINNERS-25 fix error:", err.message);
+  }
+
+  // Import all 18 price lists from CSV files (idempotent - skips if already imported)
   try {
     await importAllPriceLists();
   } catch (error) {
