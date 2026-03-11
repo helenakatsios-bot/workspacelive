@@ -664,6 +664,16 @@ export async function autoSyncXeroInvoices(accessToken: string, tenantId: string
           total: String(xInv.Total || 0),
           dueDate: parseXeroDate(xInv.DueDate) || null,
         }).where(eq(invoices.id, existingInvoice[0].id));
+        // When Xero marks an invoice as paid, sync that to the order's payment status
+        if (invoiceStatus === "paid") {
+          if (existingInvoice[0].orderId) {
+            await db.update(orders).set({ paymentStatus: "paid" })
+              .where(and(eq(orders.id, existingInvoice[0].orderId), eq(orders.paymentStatus, "unpaid")));
+          }
+          // Also match via order's own xeroInvoiceId column (belt and suspenders)
+          await db.update(orders).set({ paymentStatus: "paid" })
+            .where(and(eq(orders.xeroInvoiceId, xInv.InvoiceID), eq(orders.paymentStatus, "unpaid")));
+        }
         updated++;
       } else {
         let companyId: string | undefined;
