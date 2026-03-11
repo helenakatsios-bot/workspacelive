@@ -2912,7 +2912,8 @@ export async function registerRoutes(
         notes: combinedNotes,
         subtotal: `$${order.subtotal}`,
         tax: `$${order.tax}`,
-        totalAmount: `$${order.subtotal}`,
+        // Puradown prices are already GST-inclusive so send the full total; all other accounts send ex-GST subtotal
+        totalAmount: `$${(company?.tradingName || company?.legalName || "").toLowerCase().includes('puradown') ? order.total : order.subtotal}`,
         pdfData: primaryPdfData,
         originalEmailHtml: originalEmailHtml || null,
         attachments: attachmentsPayload,
