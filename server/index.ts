@@ -1016,6 +1016,27 @@ async function runStartupTasks() {
     console.error("Pillow name fix error:", err.message);
   }
 
+  // Backfill payment status: mark orders as paid where their linked Xero invoice is paid
+  try {
+    const backfill = await pool.query(`
+      UPDATE orders SET payment_status = 'paid'
+      WHERE payment_status = 'unpaid'
+      AND (
+        (xero_invoice_id IS NOT NULL AND xero_invoice_id IN (
+          SELECT xero_invoice_id FROM invoices WHERE status = 'paid' AND xero_invoice_id IS NOT NULL
+        ))
+        OR id IN (
+          SELECT order_id FROM invoices WHERE status = 'paid' AND order_id IS NOT NULL
+        )
+      )
+    `);
+    if (backfill.rowCount && backfill.rowCount > 0) {
+      console.log(`Payment status backfill: marked ${backfill.rowCount} orders as paid from Xero invoices`);
+    }
+  } catch (err: any) {
+    console.error("Payment status backfill error:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 
