@@ -2912,7 +2912,7 @@ export async function registerRoutes(
         notes: combinedNotes,
         subtotal: `$${order.subtotal}`,
         tax: `$${order.tax}`,
-        totalAmount: `$${order.total}`,
+        totalAmount: `$${order.subtotal}`,
         pdfData: primaryPdfData,
         originalEmailHtml: originalEmailHtml || null,
         attachments: attachmentsPayload,
