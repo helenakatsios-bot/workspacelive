@@ -493,6 +493,15 @@ export const portalUsers = pgTable("portal_users", {
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   lastLogin: timestamp("last_login"),
+  recurringItems: jsonb("recurring_items").$type<{
+    productId: string;
+    productName: string;
+    category: string;
+    filling?: string;
+    weight?: string;
+    unitPrice: string;
+    quantity: number;
+  }[]>(),
 }, (table) => [
   index("portal_users_company_idx").on(table.companyId),
   index("portal_users_email_idx").on(table.email),

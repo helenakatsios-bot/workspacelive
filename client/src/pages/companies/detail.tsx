@@ -41,6 +41,8 @@ import {
   ShieldCheck,
   ShieldOff,
   KeyRound,
+  RefreshCw,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -211,6 +213,45 @@ export default function CompanyDetailPage() {
       return res.json();
     },
     enabled: !!params?.id && isAdmin,
+  });
+
+  const { data: recurringItems, refetch: refetchRecurringItems } = useQuery<any[]>({
+    queryKey: ["/api/companies", params?.id, "portal-recurring-items"],
+    queryFn: async () => {
+      const res = await fetch(`/api/companies/${params?.id}/portal-recurring-items`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!params?.id && isAdmin,
+  });
+
+  const [copyOrderDialogOpen, setCopyOrderDialogOpen] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState("");
+
+  const copyFromOrderMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const res = await apiRequest("POST", `/api/companies/${params?.id}/portal-recurring-items/from-order/${orderId}`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      refetchRecurringItems();
+      setCopyOrderDialogOpen(false);
+      setSelectedOrderId("");
+      toast({ title: "Recurring template saved", description: `${data.itemCount} items copied from order.` });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to copy order.", variant: "destructive" }),
+  });
+
+  const clearRecurringItemsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", `/api/companies/${params?.id}/portal-recurring-items`, { items: [] });
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchRecurringItems();
+      toast({ title: "Recurring template cleared" });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to clear template.", variant: "destructive" }),
   });
 
   const createPortalUserMutation = useMutation({
@@ -922,6 +963,93 @@ export default function CompanyDetailPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+                {isAdmin && companyPortalUsers && companyPortalUsers.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs text-muted-foreground flex items-center gap-1"><RefreshCw className="w-3 h-3" /> Recurring Order Template</p>
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-xs px-2"
+                          data-testid="button-copy-from-order"
+                          onClick={() => setCopyOrderDialogOpen(true)}
+                        >
+                          <Copy className="w-3 h-3 mr-1" /> Copy from Order
+                        </Button>
+                        {recurringItems && recurringItems.length > 0 && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 text-xs px-2 text-destructive hover:text-destructive"
+                            data-testid="button-clear-recurring"
+                            onClick={() => { if (confirm("Clear recurring template?")) clearRecurringItemsMutation.mutate(); }}
+                          >
+                            Clear
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    {recurringItems && recurringItems.length > 0 ? (
+                      <div className="rounded-md border overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="text-left p-1.5 pl-2 font-medium">Product</th>
+                              <th className="text-center p-1.5 font-medium">Qty</th>
+                              <th className="text-right p-1.5 pr-2 font-medium">Unit Price</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {recurringItems.map((item: any, i: number) => (
+                              <tr key={i} className="border-t">
+                                <td className="p-1.5 pl-2">
+                                  <p className="font-medium">{item.productName}</p>
+                                  {(item.filling || item.weight) && (
+                                    <p className="text-muted-foreground text-xs">{[item.filling, item.weight].filter(Boolean).join(" · ")}</p>
+                                  )}
+                                </td>
+                                <td className="p-1.5 text-center">{item.quantity}</td>
+                                <td className="p-1.5 pr-2 text-right">${parseFloat(item.unitPrice || "0").toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground/60 italic">No recurring template set. Copy from an order to get started.</p>
+                    )}
+                    {copyOrderDialogOpen && (
+                      <div className="mt-2 p-2 rounded-md border bg-muted/30">
+                        <p className="text-xs font-medium mb-1">Select an order to copy:</p>
+                        <Select value={selectedOrderId} onValueChange={setSelectedOrderId}>
+                          <SelectTrigger className="w-full h-7 text-xs" data-testid="select-copy-order">
+                            <SelectValue placeholder="Choose an order..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(orders || []).map((o: any) => (
+                              <SelectItem key={o.id} value={o.id}>
+                                #{o.orderNumber} — {o.orderDate ? format(new Date(o.orderDate), "d MMM yyyy") : "—"} {o.total ? `($${parseFloat(o.total).toFixed(0)})` : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <div className="flex gap-1 mt-1.5">
+                          <Button
+                            size="sm"
+                            className="h-6 text-xs"
+                            disabled={!selectedOrderId || copyFromOrderMutation.isPending}
+                            onClick={() => copyFromOrderMutation.mutate(selectedOrderId)}
+                            data-testid="button-confirm-copy-order"
+                          >
+                            {copyFromOrderMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Copy"}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setCopyOrderDialogOpen(false); setSelectedOrderId(""); }}>Cancel</Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 {isAdmin && (

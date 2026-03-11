@@ -6419,6 +6419,18 @@ Rules:
     }
   });
 
+  app.get("/api/portal/recurring-items", requirePortalAuth, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT recurring_items FROM portal_users WHERE id = $1`,
+        [req.session.portalUserId]
+      );
+      res.json(result.rows[0]?.recurring_items || []);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch recurring items" });
+    }
+  });
+
   app.get("/api/portal/orders", requirePortalAuth, async (req, res) => {
     try {
       const result = await pool.query(`
@@ -7157,6 +7169,61 @@ Rules:
       })));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch portal users" });
+    }
+  });
+
+  app.get("/api/companies/:id/portal-recurring-items", requireAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT recurring_items FROM portal_users WHERE company_id = $1 LIMIT 1`,
+        [req.params.id]
+      );
+      res.json(result.rows[0]?.recurring_items || []);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch recurring items" });
+    }
+  });
+
+  app.put("/api/companies/:id/portal-recurring-items", requireAdmin, async (req, res) => {
+    try {
+      const { items } = req.body;
+      await pool.query(
+        `UPDATE portal_users SET recurring_items = $1 WHERE company_id = $2`,
+        [JSON.stringify(items), req.params.id]
+      );
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save recurring items" });
+    }
+  });
+
+  app.post("/api/companies/:id/portal-recurring-items/from-order/:orderId", requireAdmin, async (req, res) => {
+    try {
+      const { orderId, id: companyId } = req.params;
+      const orderResult = await pool.query(
+        `SELECT ol.product_id, ol.product_name, ol.quantity, ol.filling, ol.weight, ol.unit_price, p.category
+         FROM order_lines ol
+         LEFT JOIN products p ON p.id = ol.product_id
+         WHERE ol.order_id = $1
+         ORDER BY ol.id`,
+        [orderId]
+      );
+      const items = orderResult.rows.map((r: any) => ({
+        productId: r.product_id,
+        productName: r.product_name,
+        category: r.category || "",
+        filling: r.filling || undefined,
+        weight: r.weight || undefined,
+        unitPrice: r.unit_price,
+        quantity: r.quantity,
+      }));
+      await pool.query(
+        `UPDATE portal_users SET recurring_items = $1 WHERE company_id = $2`,
+        [JSON.stringify(items), companyId]
+      );
+      res.json({ success: true, itemCount: items.length });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to copy order as recurring template" });
     }
   });
 
