@@ -195,6 +195,12 @@ const PRICE_LISTS: PriceListConfig[] = [
     isDefault: false,
     csvFiles: ["HIGHGATE_INSERTS_OFFICAL__1773274327476.csv"],
   },
+  {
+    name: "15% Duck Down Inserts",
+    description: "15% Duck Down Inserts pricing",
+    isDefault: false,
+    csvFiles: ["15%_DUCK_DOWN_INSERTS_OFFICAL_1773358738971.csv"],
+  },
 ];
 
 function parseCsvLine(line: string): string[] {
