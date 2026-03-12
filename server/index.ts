@@ -1270,70 +1270,97 @@ async function runStartupTasks() {
     console.error("Payment status backfill error:", err.message);
   }
 
-  // --- SHEERTEX PRICE LIST REBUILD ---
-  // Fix incorrect product links: SHEER1 was linked to a HIGHGATE INSERTS product,
-  // SHEER12-16 to "80% HUNGARIAN GOOSE" products. Rebuild with correct SHEER SKUs + categories.
+  // --- SHEERTEX PRICE LIST FIX ---
+  // Fix category names and ensure all 16 SHEER products are in the list with correct categories.
   try {
-    const sheertexPL = await pool.query(`SELECT id FROM price_lists WHERE UPPER(name) = 'SHEERTEX PRICES' OR UPPER(name) = 'SHEERTEX' LIMIT 1`);
+    const sheertexPL = await pool.query(`SELECT id, name FROM price_lists WHERE name ILIKE '%sheer%' LIMIT 1`);
     if (sheertexPL.rows.length > 0) {
       const sheertexId = sheertexPL.rows[0].id;
-      const sheertexItems = [
-        { sku: 'SHEER1',  name: '50X50CM',                          category: 'INSERTS',           filling: '100% Feather', weight: 'Normal',     price: '11.00' },
-        { sku: 'SHEER2',  name: 'SINGLE - 4 SEASONS 80% DUCK DOWN', category: '4 SEASONS DUCK FILLED',     filling: 'Duck',  weight: null, price: '86.00' },
-        { sku: 'SHEER3',  name: 'DOUBLE - 4 SEASONS 80% DUCK DOWN', category: '4 SEASONS DUCK FILLED',     filling: 'Duck',  weight: null, price: '104.00' },
-        { sku: 'SHEER4',  name: 'QUEEN - 4 SEASONS 80% DUCK DOWN',  category: '4 SEASONS DUCK FILLED',     filling: 'Duck',  weight: null, price: '129.00' },
-        { sku: 'SHEER5',  name: 'KING - 4 SEASONS 80% DUCK DOWN',   category: '4 SEASONS DUCK FILLED',     filling: 'Duck',  weight: null, price: '148.00' },
-        { sku: 'SHEER6',  name: 'SUPER KING - 4 SEASONS 80% DUCK DOWN', category: '4 SEASONS DUCK FILLED', filling: 'Duck',  weight: null, price: '195.00' },
-        { sku: 'SHEER7',  name: 'SINGLE - 50% DUCK DOWN MID WARM',  category: '50% DUCK MID WARM FILLED',  filling: 'Duck',  weight: null, price: '60.00' },
-        { sku: 'SHEER8',  name: 'DOUBLE - 50% DUCK DOWN MID WARM',  category: '50% DUCK MID WARM FILLED',  filling: 'Duck',  weight: null, price: '68.00' },
-        { sku: 'SHEER9',  name: 'QUEEN - 50% DUCK DOWN MID WARM',   category: '50% DUCK MID WARM FILLED',  filling: 'Duck',  weight: null, price: '80.00' },
-        { sku: 'SHEER10', name: 'KING - 50% DUCK DOWN MID WARM',    category: '50% DUCK MID WARM FILLED',  filling: 'Duck',  weight: null, price: '90.00' },
-        { sku: 'SHEER11', name: 'SUPER KING - 50% DUCK DOWN MID WARM', category: '50% DUCK MID WARM FILLED', filling: 'Duck', weight: null, price: '125.00' },
-        { sku: 'SHEER12', name: 'SINGLE - 80% GOOSE DOWN MID WARM', category: '80% GOOSE MID WARM FILLED', filling: 'Goose', weight: null, price: '118.75' },
-        { sku: 'SHEER13', name: 'DOUBLE - 80% GOOSE DOWN MID WARM', category: '80% GOOSE MID WARM FILLED', filling: 'Goose', weight: null, price: '139.50' },
-        { sku: 'SHEER14', name: 'QUEEN - 80% GOOSE DOWN MID WARM',  category: '80% GOOSE MID WARM FILLED', filling: 'Goose', weight: null, price: '166.00' },
-        { sku: 'SHEER15', name: 'KING - 80% GOOSE DOWN MID WARM',   category: '80% GOOSE MID WARM FILLED', filling: 'Goose', weight: null, price: '188.20' },
-        { sku: 'SHEER16', name: 'SUPER KING - 80% GOOSE DOWN MID WARM', category: '80% GOOSE MID WARM FILLED', filling: 'Goose', weight: null, price: '275.00' },
-      ];
-      // Remove all existing Sheertex entries so we can re-link cleanly
-      await pool.query(`DELETE FROM price_list_prices WHERE price_list_id = $1`, [sheertexId]);
-      for (const item of sheertexItems) {
-        // Ensure product exists with SHEER SKU and correct category
-        let prodRes = await pool.query(`SELECT id FROM products WHERE sku = $1 LIMIT 1`, [item.sku]);
-        let productId: string;
-        if (prodRes.rows.length > 0) {
-          productId = prodRes.rows[0].id;
-          // Ensure category is correct
-          await pool.query(`UPDATE products SET category = $1, name = $2 WHERE id = $3`, [item.category, item.name, productId]);
-        } else {
-          // Check by name + category (safe: same name different category = different product)
-          const byName = await pool.query(
-            `SELECT id FROM products WHERE UPPER(name) = $1 AND UPPER(COALESCE(category,'')) = $2 LIMIT 1`,
-            [item.name.toUpperCase(), item.category.toUpperCase()]
-          );
-          if (byName.rows.length > 0) {
-            productId = byName.rows[0].id;
-            await pool.query(`UPDATE products SET sku = $1 WHERE id = $2 AND sku IS NULL`, [item.sku, productId]);
-          } else {
-            const newProd = await pool.query(
-              `INSERT INTO products (id, sku, name, category, unit_price, active)
-               VALUES (gen_random_uuid(), $1, $2, $3, $4, true) RETURNING id`,
-              [item.sku, item.name, item.category, item.price]
-            );
-            productId = newProd.rows[0].id;
-          }
+      console.log(`[Sheertex] Found price list: "${sheertexPL.rows[0].name}" (${sheertexId})`);
+
+      // Step 1: Fix category names on all products currently in the Sheertex price list
+      const categoryFixes: Record<string, string> = {
+        '4 SEASONS FILLED':     '4 SEASONS DUCK FILLED',
+        'FOUR SEASONS FILLED':  '4 SEASONS DUCK FILLED',
+        '50% DUCK WINTER FILLED': '50% DUCK MID WARM FILLED',
+        '50% MID WARM FILLED':  '50% DUCK MID WARM FILLED',
+        '80% HUNGARIAN GOOSE':  '80% GOOSE MID WARM FILLED',
+        '80% MID WARM FILLED':  '80% GOOSE MID WARM FILLED',
+        'HIGHGATE INSERTS':     'INSERTS',
+        'INSERT':               'INSERTS',
+      };
+      const existingProds = await pool.query(
+        `SELECT DISTINCT p.id, p.category FROM price_list_prices plp
+         JOIN products p ON p.id = plp.product_id
+         WHERE plp.price_list_id = $1`, [sheertexId]
+      );
+      let fixCount = 0;
+      for (const row of existingProds.rows) {
+        const newCat = categoryFixes[row.category] || categoryFixes[(row.category || '').toUpperCase()];
+        if (newCat) {
+          await pool.query(`UPDATE products SET category = $1 WHERE id = $2`, [newCat, row.id]);
+          fixCount++;
         }
+      }
+      if (fixCount > 0) console.log(`[Sheertex] Fixed ${fixCount} product categories`);
+
+      // Step 2: Ensure SHEER1 (50X50CM INSERT) exists in the list
+      // Find or create a product with sku=SHEER1 / category=INSERTS
+      let sheer1Id: string | null = null;
+      const bySkuRes = await pool.query(`SELECT id FROM products WHERE sku = 'SHEER1' LIMIT 1`);
+      if (bySkuRes.rows.length > 0) {
+        sheer1Id = bySkuRes.rows[0].id;
+        await pool.query(`UPDATE products SET category = 'INSERTS', name = '50X50CM' WHERE id = $1`, [sheer1Id]);
+      } else {
+        // Look for any 50X50CM product in Sheertex price list
+        const byName = await pool.query(
+          `SELECT p.id FROM products p
+           JOIN price_list_prices plp ON plp.product_id = p.id
+           WHERE plp.price_list_id = $1 AND UPPER(p.name) = '50X50CM' LIMIT 1`, [sheertexId]
+        );
+        if (byName.rows.length > 0) {
+          sheer1Id = byName.rows[0].id;
+          await pool.query(`UPDATE products SET category = 'INSERTS', sku = 'SHEER1' WHERE id = $1`, [sheer1Id]);
+          console.log(`[Sheertex] Fixed existing 50X50CM product → INSERTS category`);
+        } else {
+          // Create fresh SHEER1 product
+          const newProd = await pool.query(
+            `INSERT INTO products (id, sku, name, category, unit_price, active)
+             VALUES (gen_random_uuid(), 'SHEER1', '50X50CM', 'INSERTS', '11.00', true) RETURNING id`
+          );
+          sheer1Id = newProd.rows[0].id;
+          console.log(`[Sheertex] Created SHEER1 (50X50CM, INSERTS)`);
+        }
+      }
+      // Add SHEER1 to Sheertex if not already there
+      const sheer1Exists = await pool.query(
+        `SELECT id FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 LIMIT 1`,
+        [sheertexId, sheer1Id]
+      );
+      if (sheer1Exists.rows.length === 0) {
         await pool.query(
           `INSERT INTO price_list_prices (id, price_list_id, product_id, filling, weight, unit_price)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
-           ON CONFLICT DO NOTHING`,
-          [sheertexId, productId, item.filling || null, item.weight || null, item.price]
+           VALUES (gen_random_uuid(), $1, $2, '100% Feather', 'Normal', '11.00')`,
+          [sheertexId, sheer1Id]
         );
+        console.log(`[Sheertex] Added SHEER1 (50X50CM INSERT $11.00) to price list`);
       }
-      console.log(`[Sheertex] Rebuilt ${sheertexItems.length} entries with correct product categories`);
+
+      // Remove any HIGHGATE INSERTS products still lingering in Sheertex
+      const removed = await pool.query(
+        `DELETE FROM price_list_prices WHERE price_list_id = $1
+         AND product_id IN (SELECT id FROM products WHERE UPPER(COALESCE(category,'')) LIKE '%HIGHGATE%')`,
+        [sheertexId]
+      );
+      if ((removed.rowCount || 0) > 0) console.log(`[Sheertex] Removed ${removed.rowCount} stale Highgate entry(ies)`);
+
+      const finalCount = await pool.query(`SELECT COUNT(*) FROM price_list_prices WHERE price_list_id = $1`, [sheertexId]);
+      console.log(`[Sheertex] Done. Total entries: ${finalCount.rows[0].count}`);
+    } else {
+      console.log(`[Sheertex] Price list not found — skipping`);
     }
   } catch (err: any) {
-    console.error("[Sheertex rebuild] Error:", err.message);
+    console.error("[Sheertex fix] Error:", err.message);
   }
 
   console.log("All startup tasks completed");
