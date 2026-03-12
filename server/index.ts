@@ -835,6 +835,25 @@ async function runStartupTasks() {
     console.error("COMER & KING price list assignment error:", err.message);
   }
 
+  // Remove HIGHGATE INSERTS products from "100 PLUS INSERTS" price list
+  try {
+    const hundredPlusList = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE '100 plus inserts' LIMIT 1`);
+    if (hundredPlusList.rows.length > 0) {
+      const plId = hundredPlusList.rows[0].id;
+      const result = await pool.query(
+        `DELETE FROM price_list_prices
+         WHERE price_list_id = $1
+           AND product_id IN (SELECT id FROM products WHERE category = 'HIGHGATE INSERTS')`,
+        [plId]
+      );
+      if (result.rowCount && result.rowCount > 0) {
+        console.log(`100 PLUS INSERTS: removed ${result.rowCount} Highgate Insert entries`);
+      }
+    }
+  } catch (err: any) {
+    console.error("100 PLUS INSERTS Highgate cleanup error:", err.message);
+  }
+
   // Assign Pearls Manchester price list to both Pearls Manchester companies
   try {
     const pearlsPlResult = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'pearls manchester' LIMIT 1`);
