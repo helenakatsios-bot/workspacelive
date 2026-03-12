@@ -1049,8 +1049,6 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
     const groups: Record<string, any[]> = {};
     for (const p of filteredProducts) {
       let cat = p.category || "Other";
-      // Rename "INSERTS" to "100 PLUS INSERTS" for min-qty customers
-      if (minQty > 1 && cat === 'INSERTS') cat = '100 PLUS INSERTS';
       if (HIDDEN_PORTAL_CATEGORIES.includes(cat)) continue;
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(p);
@@ -1067,7 +1065,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
       }
     }
     return sorted;
-  }, [filteredProducts, minQty]);
+  }, [filteredProducts]);
 
   const PILLOW_SIZES = ['STANDARD', 'KING', 'QUEEN', 'EURO'];
 
@@ -1397,6 +1395,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
             const isPillowExpanded = category === 'PIPED PILLOWS';
             const showFillingColumn = isPillowExpanded ? false : (sizeGroups ? hasMultipleFillings : FILLING_CATEGORIES.includes(category));
             const showWeightColumn = !sizeGroups && WEIGHT_CATEGORIES.includes(category);
+            const catMinQty = category === '100 PLUS INSERTS' ? 100 : minQty;
             const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
               'INSERTS': 'INSERTS STANDARD SIZE',
               'CUSTOM INSERTS': 'CUSTOM INSERTS 100% FEATHER ONLY',
@@ -1636,7 +1635,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
                               <Input
                                 type="number"
                                 inputMode="numeric"
-                                min={minQty}
+                                min={catMinQty}
                                 value={cart[product.id] || ""}
                                 placeholder="0"
                                 onFocus={(e) => e.target.select()}
@@ -1647,21 +1646,21 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
                                       const { [product.id]: _, ...rest } = prev;
                                       return rest;
                                     }
-                                    const snapped = val < minQty ? minQty : val;
+                                    const snapped = val < catMinQty ? catMinQty : val;
                                     return { ...prev, [product.id]: snapped };
                                   });
                                 }}
                                 onBlur={(e) => {
                                   const val = parseInt(e.target.value) || 0;
-                                  if (val > 0 && val < minQty) {
-                                    setCart((prev) => ({ ...prev, [product.id]: minQty }));
+                                  if (val > 0 && val < catMinQty) {
+                                    setCart((prev) => ({ ...prev, [product.id]: catMinQty }));
                                   }
                                 }}
                                 className="h-8 w-[70px] text-center mx-auto"
                                 data-testid={`input-qty-${product.id}`}
                               />
-                              {minQty > 1 && (
-                                <span className="text-[10px] text-muted-foreground">Min {minQty}</span>
+                              {catMinQty > 1 && (
+                                <span className="text-[10px] text-muted-foreground">Min {catMinQty}</span>
                               )}
                             </div>
                           </TableCell>

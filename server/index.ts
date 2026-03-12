@@ -887,18 +887,30 @@ async function runStartupTasks() {
       if (inserted > 0) console.log(`100 Plus Inserts: inserted ${inserted} price entries`);
     }
 
-    // Always set Decor Lux's main price list to "100 Plus Inserts" and clear additional price lists
+    // Ensure Decor Lux has Interiors as main price list and "100 Plus Inserts" as an additional list
     const decorLux = await pool.query(`SELECT id, price_list_id FROM companies WHERE trading_name ILIKE '%DECOR LUX%' OR legal_name ILIKE '%DECOR LUX%' LIMIT 1`);
     if (decorLux.rows.length > 0) {
       const dlId = decorLux.rows[0].id;
-      if (decorLux.rows[0].price_list_id !== hundredPlusId) {
-        await pool.query(`UPDATE companies SET price_list_id = $1 WHERE id = $2`, [hundredPlusId, dlId]);
-        console.log(`100 Plus Inserts: set as main price list for Decor Lux`);
-      }
-      // Remove all additional price lists from Decor Lux (they cause unwanted products to appear in the portal)
-      const removed = await pool.query(`DELETE FROM company_additional_price_lists WHERE company_id = $1`, [dlId]);
-      if (removed.rowCount && removed.rowCount > 0) {
-        console.log(`100 Plus Inserts: removed ${removed.rowCount} additional price list(s) from Decor Lux`);
+      // Set main price list to Interiors
+      const interiorsResult = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'interiors' LIMIT 1`);
+      if (interiorsResult.rows.length > 0) {
+        const interiorsId = interiorsResult.rows[0].id;
+        if (decorLux.rows[0].price_list_id !== interiorsId) {
+          await pool.query(`UPDATE companies SET price_list_id = $1 WHERE id = $2`, [interiorsId, dlId]);
+          console.log(`Decor Lux: restored Interiors as main price list`);
+        }
+        // Ensure "100 Plus Inserts" is an additional price list (not the main)
+        const alreadyAdditional = await pool.query(
+          `SELECT id FROM company_additional_price_lists WHERE company_id = $1 AND price_list_id = $2`,
+          [dlId, hundredPlusId]
+        );
+        if (alreadyAdditional.rows.length === 0) {
+          await pool.query(
+            `INSERT INTO company_additional_price_lists (company_id, price_list_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [dlId, hundredPlusId]
+          );
+          console.log(`Decor Lux: added 100 Plus Inserts as additional price list`);
+        }
       }
     }
   } catch (err: any) {

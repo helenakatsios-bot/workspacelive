@@ -6654,10 +6654,14 @@ Rules:
 
       // Load additional price lists for this company and merge their products in
       const additionalPlResult = await pool.query(
-        `SELECT price_list_id FROM company_additional_price_lists WHERE company_id = $1`,
+        `SELECT capl.price_list_id, pl.name as price_list_name
+         FROM company_additional_price_lists capl
+         JOIN price_lists pl ON pl.id = capl.price_list_id
+         WHERE capl.company_id = $1`,
         [companyId]
       );
       for (const aplRow of additionalPlResult.rows) {
+        const isHundredPlus = (aplRow.price_list_name || '').toLowerCase().includes('100 plus');
         const addlPrices = await pool.query(
           `SELECT plp.product_id, plp.filling, plp.weight, plp.unit_price,
                   p.id, p.sku, p.name, p.description, p.category
@@ -6669,7 +6673,10 @@ Rules:
           [aplRow.price_list_id]
         );
         for (const row of addlPrices.rows) {
-          const displayCategory = categoryRenames[row.category] || row.category;
+          let displayCategory = categoryRenames[row.category] || row.category;
+          // Products from a "100 Plus" additional list get their own category so they
+          // appear in a separate "100 PLUS INSERTS" section with min-qty enforcement
+          if (isHundredPlus) displayCategory = '100 PLUS INSERTS';
           if (!productMap.has(row.product_id)) {
             productMap.set(row.product_id, {
               id: row.product_id,
@@ -6679,6 +6686,9 @@ Rules:
               category: displayCategory,
               unitPrice: "0",
             });
+          } else {
+            // Always update category for 100 Plus products so they move to their own section
+            if (isHundredPlus) productMap.get(row.product_id)!.category = displayCategory;
           }
           if (row.filling || row.weight) {
             if (!variantMap.has(row.product_id)) variantMap.set(row.product_id, []);
