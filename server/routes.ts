@@ -1282,6 +1282,111 @@ export async function registerRoutes(
     }
   });
 
+  // Add a single item to a price list (finds or creates the product)
+  app.post("/api/price-lists/:priceListId/prices", requireAdmin, async (req, res) => {
+    try {
+      const { priceListId } = req.params;
+      const { productName, sku, category, filling, weight, price } = req.body;
+      if (!productName || !price) {
+        return res.status(400).json({ message: "Product name and price are required" });
+      }
+      const unitPrice = parseFloat(price);
+      if (isNaN(unitPrice) || unitPrice < 0) {
+        return res.status(400).json({ message: "Invalid price" });
+      }
+      // Find or create the product
+      let productId: string;
+      const skuUpper = sku ? sku.trim().toUpperCase() : null;
+      const catUpper = (category || "").trim().toUpperCase();
+      // Try by SKU first
+      if (skuUpper) {
+        const bySkuResult = await pool.query("SELECT id FROM products WHERE sku = $1 LIMIT 1", [skuUpper]);
+        if (bySkuResult.rows.length > 0) {
+          productId = bySkuResult.rows[0].id;
+        }
+      }
+      // Try by name + category
+      if (!productId!) {
+        const byNameResult = await pool.query(
+          "SELECT id FROM products WHERE UPPER(name) = $1 AND UPPER(COALESCE(category,'')) = $2 LIMIT 1",
+          [productName.trim().toUpperCase(), catUpper]
+        );
+        if (byNameResult.rows.length > 0) {
+          productId = byNameResult.rows[0].id;
+        }
+      }
+      // Create new product if not found
+      if (!productId!) {
+        const newProd = await pool.query(
+          `INSERT INTO products (id, sku, name, category, unit_price, active)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, true) RETURNING id`,
+          [skuUpper || null, productName.trim(), catUpper || null, unitPrice.toFixed(2)]
+        );
+        productId = newProd.rows[0].id;
+      }
+      // Upsert the price entry
+      const existing = await pool.query(
+        `SELECT id FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2
+         AND COALESCE(filling,'') = $3 AND COALESCE(weight,'') = $4`,
+        [priceListId, productId, filling || "", weight || ""]
+      );
+      let rowId: string;
+      if (existing.rows.length > 0) {
+        rowId = existing.rows[0].id;
+        await pool.query("UPDATE price_list_prices SET unit_price = $1 WHERE id = $2", [unitPrice.toFixed(2), rowId]);
+      } else {
+        const ins = await pool.query(
+          `INSERT INTO price_list_prices (id, price_list_id, product_id, sku, filling, weight, unit_price)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6) RETURNING id`,
+          [priceListId, productId, skuUpper || null, filling || null, weight || null, unitPrice.toFixed(2)]
+        );
+        rowId = ins.rows[0].id;
+      }
+      // Return the new row with product info
+      const row = await pool.query(
+        `SELECT plp.id, plp.product_id, plp.sku, plp.filling, plp.weight, plp.unit_price,
+                p.name as product_name, p.category
+         FROM price_list_prices plp JOIN products p ON p.id = plp.product_id
+         WHERE plp.id = $1`,
+        [rowId]
+      );
+      res.status(201).json(row.rows[0]);
+    } catch (error) {
+      console.error("Add price list item error:", error);
+      res.status(500).json({ message: "Failed to add item to price list" });
+    }
+  });
+
+  // Edit a single price entry
+  app.patch("/api/price-list-prices/:id", requireAdmin, async (req, res) => {
+    try {
+      const { price, filling, weight } = req.body;
+      const unitPrice = parseFloat(price);
+      if (isNaN(unitPrice) || unitPrice < 0) {
+        return res.status(400).json({ message: "Invalid price" });
+      }
+      await pool.query(
+        "UPDATE price_list_prices SET unit_price = $1, filling = $2, weight = $3 WHERE id = $4",
+        [unitPrice.toFixed(2), filling || null, weight || null, req.params.id]
+      );
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Edit price list price error:", error);
+      res.status(500).json({ message: "Failed to update price" });
+    }
+  });
+
+  // Delete a single price entry
+  app.delete("/api/price-list-prices/:id", requireAdmin, async (req, res) => {
+    try {
+      await pool.query("DELETE FROM price_list_prices WHERE id = $1", [req.params.id]);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete price list price error:", error);
+      res.status(500).json({ message: "Failed to delete price entry" });
+    }
+  });
+
   app.post("/api/price-lists/:priceListId/import-csv", requireAdmin, async (req, res) => {
     try {
       const { rows } = req.body;
