@@ -858,34 +858,78 @@ async function runStartupTasks() {
       console.log(`100 Plus Inserts: removed ${removed.rowCount} Highgate Insert entries`);
     }
 
-    // Ensure exactly 9 prices exist (40X40CM, 45X45CM, 65X65CM × 100% Feather × 3 weights)
-    const priceCount = await pool.query(`SELECT COUNT(*) FROM price_list_prices WHERE price_list_id = $1`, [hundredPlusId]);
-    if (parseInt(priceCount.rows[0].count) === 0) {
-      // Look up the product IDs by name and filling from the Interiors list
-      const prods = await pool.query(
-        `SELECT DISTINCT p.id, p.name, plp.filling, plp.weight FROM products p
-         JOIN price_list_prices plp ON p.id = plp.product_id
-         JOIN price_lists pl ON pl.id = plp.price_list_id
-         WHERE pl.name = 'Interiors' AND p.name IN ('40X40CM','45X45CM','65X65CM') AND plp.filling = '100% Feather'`
-      );
-      const priceMap: Record<string, Record<string, number>> = {
-        '40X40CM': { 'Extra Firm Fill': 10.00, 'Firm Fill': 9.40, 'Normal': 8.80 },
-        '45X45CM': { 'Extra Firm Fill': 11.20, 'Firm Fill': 10.60, 'Normal': 10.00 },
-        '65X65CM': { 'Extra Firm Fill': 22.20, 'Firm Fill': 21.60, 'Normal': 21.00 },
-      };
-      let inserted = 0;
-      for (const row of prods.rows) {
-        const price = priceMap[row.name]?.[row.weight];
-        if (price !== undefined) {
-          await pool.query(
-            `INSERT INTO price_list_prices (price_list_id, product_id, filling, weight, unit_price) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
-            [hundredPlusId, row.id, row.filling, row.weight, price]
+    // Remove old INTERIOR-xx SKU duplicates from this list (replaced by PLUS1-PLUS24)
+    const oldRemoved = await pool.query(
+      `DELETE FROM price_list_prices WHERE price_list_id = $1 AND product_id IN (SELECT id FROM products WHERE sku ILIKE 'INTERIOR -%')`,
+      [hundredPlusId]
+    );
+    if (oldRemoved.rowCount && oldRemoved.rowCount > 0) {
+      console.log(`100 Plus Inserts: removed ${oldRemoved.rowCount} old INTERIOR-xx duplicate entries`);
+    }
+
+    // Ensure all 24 standard 100 Plus Inserts prices exist (upsert approach — safe to re-run)
+    const hundredPlusItems: Array<{ name: string; sku: string; filling: string; weight: string; price: number }> = [
+      { name: '40X40CM', sku: 'PLUS1',  filling: '100% Feather', weight: 'Normal',         price: 8.80 },
+      { name: '40X40CM', sku: 'PLUS2',  filling: '100% Feather', weight: 'Firm Fill',       price: 9.40 },
+      { name: '40X40CM', sku: 'PLUS3',  filling: '100% Feather', weight: 'Extra Firm Fill', price: 10.00 },
+      { name: '45X45CM', sku: 'PLUS4',  filling: '100% Feather', weight: 'Normal',         price: 10.00 },
+      { name: '45X45CM', sku: 'PLUS5',  filling: '100% Feather', weight: 'Firm Fill',       price: 10.60 },
+      { name: '45X45CM', sku: 'PLUS6',  filling: '100% Feather', weight: 'Extra Firm Fill', price: 11.20 },
+      { name: '50X30CM', sku: 'PLUS7',  filling: '100% Feather', weight: 'Normal',         price: 12.80 },
+      { name: '50X30CM', sku: 'PLUS8',  filling: '100% Feather', weight: 'Firm Fill',       price: 13.40 },
+      { name: '50X30CM', sku: 'PLUS9',  filling: '100% Feather', weight: 'Extra Firm Fill', price: 14.00 },
+      { name: '50X50CM', sku: 'PLUS10', filling: '100% Feather', weight: 'Normal',         price: 11.00 },
+      { name: '50X50CM', sku: 'PLUS11', filling: '100% Feather', weight: 'Firm Fill',       price: 11.60 },
+      { name: '50X50CM', sku: 'PLUS12', filling: '100% Feather', weight: 'Extra Firm Fill', price: 12.20 },
+      { name: '55X55CM', sku: 'PLUS13', filling: '100% Feather', weight: 'Normal',         price: 12.00 },
+      { name: '55X55CM', sku: 'PLUS14', filling: '100% Feather', weight: 'Firm Fill',       price: 12.60 },
+      { name: '55X55CM', sku: 'PLUS15', filling: '100% Feather', weight: 'Extra Firm Fill', price: 13.20 },
+      { name: '60X40CM', sku: 'PLUS16', filling: '100% Feather', weight: 'Normal',         price: 15.00 },
+      { name: '60X40CM', sku: 'PLUS17', filling: '100% Feather', weight: 'Firm Fill',       price: 15.60 },
+      { name: '60X40CM', sku: 'PLUS18', filling: '100% Feather', weight: 'Extra Firm Fill', price: 16.20 },
+      { name: '60X60CM', sku: 'PLUS19', filling: '100% Feather', weight: 'Normal',         price: 14.50 },
+      { name: '60X60CM', sku: 'PLUS20', filling: '100% Feather', weight: 'Firm Fill',       price: 15.10 },
+      { name: '60X60CM', sku: 'PLUS21', filling: '100% Feather', weight: 'Extra Firm Fill', price: 15.70 },
+      { name: '65X65CM', sku: 'PLUS22', filling: '100% Feather', weight: 'Normal',         price: 21.00 },
+      { name: '65X65CM', sku: 'PLUS23', filling: '100% Feather', weight: 'Firm Fill',       price: 21.60 },
+      { name: '65X65CM', sku: 'PLUS24', filling: '100% Feather', weight: 'Extra Firm Fill', price: 22.20 },
+    ];
+    let hpInserted = 0;
+    for (const item of hundredPlusItems) {
+      // Find or create product by SKU
+      let productId: string | null = null;
+      const bySku = await pool.query(`SELECT id FROM products WHERE sku = $1 LIMIT 1`, [item.sku]);
+      if (bySku.rows.length > 0) {
+        productId = bySku.rows[0].id;
+      } else {
+        const byName = await pool.query(
+          `SELECT id FROM products WHERE UPPER(name) = $1 AND UPPER(COALESCE(category,'')) = '100 PLUS INSERTS' LIMIT 1`,
+          [item.name.toUpperCase()]
+        );
+        if (byName.rows.length > 0) {
+          productId = byName.rows[0].id;
+        } else {
+          const created = await pool.query(
+            `INSERT INTO products (id, sku, name, category, unit_price, active) VALUES (gen_random_uuid(), $1, $2, '100 PLUS INSERTS', $3, true) RETURNING id`,
+            [item.sku, item.name, item.price.toFixed(2)]
           );
-          inserted++;
+          productId = created.rows[0].id;
         }
       }
-      if (inserted > 0) console.log(`100 Plus Inserts: inserted ${inserted} price entries`);
+      // Upsert price entry
+      const existing = await pool.query(
+        `SELECT id FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2 AND COALESCE(filling,'') = $3 AND COALESCE(weight,'') = $4`,
+        [hundredPlusId, productId, item.filling, item.weight]
+      );
+      if (existing.rows.length === 0) {
+        await pool.query(
+          `INSERT INTO price_list_prices (id, price_list_id, product_id, sku, filling, weight, unit_price) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)`,
+          [hundredPlusId, productId, item.sku, item.filling, item.weight, item.price.toFixed(2)]
+        );
+        hpInserted++;
+      }
     }
+    if (hpInserted > 0) console.log(`100 Plus Inserts: inserted ${hpInserted} new price entries`);
 
     // Ensure Decor Lux has Interiors as main price list and "100 Plus Inserts" as an additional list
     const decorLux = await pool.query(`SELECT id, price_list_id FROM companies WHERE trading_name ILIKE '%DECOR LUX%' OR legal_name ILIKE '%DECOR LUX%' LIMIT 1`);
