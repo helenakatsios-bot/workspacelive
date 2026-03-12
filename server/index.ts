@@ -991,33 +991,50 @@ async function runStartupTasks() {
     console.error("HIGHGATE INSERTS global guard error:", err.message);
   }
 
-  // Ensure Walter G's 4 INSERTS products are in his price list at correct prices
+  // Ensure Walter G's 4 INSERTS products are in his price list at correct prices + correct category
   try {
     const wgResult = await pool.query(`SELECT id FROM price_lists WHERE name = 'Walter G' LIMIT 1`);
     if (wgResult.rows.length > 0) {
       const wgId = wgResult.rows[0].id;
-      const walterGInserts: Record<string, number> = {
-        'WALTER19': 9.45,
-        'WALTER20': 10.00,
-        'WALTER21': 11.00,
-        'WALTER22': 13.10,
-      };
-      for (const [sku, price] of Object.entries(walterGInserts)) {
-        const prod = await pool.query(`SELECT id FROM products WHERE sku = $1 LIMIT 1`, [sku]);
+      const walterGInserts = [
+        { sku: 'WALTER19', name: '30X45CM', price: 9.45 },
+        { sku: 'WALTER20', name: '35X55CM', price: 10.00 },
+        { sku: 'WALTER21', name: '50X50CM', price: 11.00 },
+        { sku: 'WALTER22', name: '55X55CM', price: 13.10 },
+      ];
+      for (const item of walterGInserts) {
+        // Find product by SKU
+        let prod = await pool.query(`SELECT id, category FROM products WHERE sku = $1 LIMIT 1`, [item.sku]);
+        let productId: string;
         if (prod.rows.length > 0) {
-          const productId = prod.rows[0].id;
-          const existing = await pool.query(
-            `SELECT id FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2`,
-            [wgId, productId]
-          );
-          if (existing.rows.length === 0) {
-            await pool.query(
-              `INSERT INTO price_list_prices (id, price_list_id, product_id, sku, filling, weight, unit_price)
-               VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)`,
-              [wgId, productId, sku, '100% Feather', null, price.toFixed(2)]
-            );
-            console.log(`Walter G: inserted ${sku} at $${price}`);
+          productId = prod.rows[0].id;
+          // Fix category if it's "INSERT" instead of "INSERTS"
+          if (prod.rows[0].category !== 'INSERTS') {
+            await pool.query(`UPDATE products SET category = 'INSERTS' WHERE id = $1`, [productId]);
+            console.log(`Walter G: fixed category for ${item.sku} (was ${prod.rows[0].category})`);
           }
+        } else {
+          // Create the product if it doesn't exist
+          const newProd = await pool.query(
+            `INSERT INTO products (id, sku, name, category, unit_price, active)
+             VALUES (gen_random_uuid(), $1, $2, 'INSERTS', $3, true) RETURNING id`,
+            [item.sku, item.name, item.price.toFixed(2)]
+          );
+          productId = newProd.rows[0].id;
+          console.log(`Walter G: created product ${item.sku}`);
+        }
+        // Add to price list if not already there
+        const existing = await pool.query(
+          `SELECT id FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2`,
+          [wgId, productId]
+        );
+        if (existing.rows.length === 0) {
+          await pool.query(
+            `INSERT INTO price_list_prices (id, price_list_id, product_id, filling, unit_price)
+             VALUES (gen_random_uuid(), $1, $2, '100% Feather', $3)`,
+            [wgId, productId, item.price.toFixed(2)]
+          );
+          console.log(`Walter G: added ${item.sku} to price list at $${item.price}`);
         }
       }
     }
