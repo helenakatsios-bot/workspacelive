@@ -835,23 +835,66 @@ async function runStartupTasks() {
     console.error("COMER & KING price list assignment error:", err.message);
   }
 
-  // Remove HIGHGATE INSERTS products from "100 PLUS INSERTS" price list
+  // Ensure "100 Plus Inserts" price list exists with 9 correct entries, and is assigned to Decor Lux
   try {
-    const hundredPlusList = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE '100 plus inserts' LIMIT 1`);
-    if (hundredPlusList.rows.length > 0) {
-      const plId = hundredPlusList.rows[0].id;
-      const result = await pool.query(
-        `DELETE FROM price_list_prices
-         WHERE price_list_id = $1
-           AND product_id IN (SELECT id FROM products WHERE category = 'HIGHGATE INSERTS')`,
-        [plId]
+    let hundredPlusId: string | null = null;
+    const existingList = await pool.query(`SELECT id FROM price_lists WHERE name = '100 Plus Inserts' LIMIT 1`);
+    if (existingList.rows.length === 0) {
+      const created = await pool.query(
+        `INSERT INTO price_lists (id, name, description, created_at) VALUES (gen_random_uuid(), '100 Plus Inserts', '100 Plus Inserts pricing - minimum order 100 units', NOW()) RETURNING id`
       );
-      if (result.rowCount && result.rowCount > 0) {
-        console.log(`100 PLUS INSERTS: removed ${result.rowCount} Highgate Insert entries`);
+      hundredPlusId = created.rows[0].id;
+      console.log(`100 Plus Inserts: created price list with id ${hundredPlusId}`);
+    } else {
+      hundredPlusId = existingList.rows[0].id;
+    }
+
+    // Remove any HIGHGATE INSERTS products from this list
+    const removed = await pool.query(
+      `DELETE FROM price_list_prices WHERE price_list_id = $1 AND product_id IN (SELECT id FROM products WHERE category = 'HIGHGATE INSERTS')`,
+      [hundredPlusId]
+    );
+    if (removed.rowCount && removed.rowCount > 0) {
+      console.log(`100 Plus Inserts: removed ${removed.rowCount} Highgate Insert entries`);
+    }
+
+    // Ensure exactly 9 prices exist (40X40CM, 45X45CM, 65X65CM × 100% Feather × 3 weights)
+    const priceCount = await pool.query(`SELECT COUNT(*) FROM price_list_prices WHERE price_list_id = $1`, [hundredPlusId]);
+    if (parseInt(priceCount.rows[0].count) === 0) {
+      // Look up the product IDs by name and filling from the Interiors list
+      const prods = await pool.query(
+        `SELECT DISTINCT p.id, p.name, plp.filling, plp.weight FROM products p
+         JOIN price_list_prices plp ON p.id = plp.product_id
+         JOIN price_lists pl ON pl.id = plp.price_list_id
+         WHERE pl.name = 'Interiors' AND p.name IN ('40X40CM','45X45CM','65X65CM') AND plp.filling = '100% Feather'`
+      );
+      const priceMap: Record<string, Record<string, number>> = {
+        '40X40CM': { 'Extra Firm Fill': 10.00, 'Firm Fill': 9.40, 'Normal': 8.80 },
+        '45X45CM': { 'Extra Firm Fill': 11.20, 'Firm Fill': 10.60, 'Normal': 10.00 },
+        '65X65CM': { 'Extra Firm Fill': 22.20, 'Firm Fill': 21.60, 'Normal': 21.00 },
+      };
+      let inserted = 0;
+      for (const row of prods.rows) {
+        const price = priceMap[row.name]?.[row.weight];
+        if (price !== undefined) {
+          await pool.query(
+            `INSERT INTO price_list_prices (price_list_id, product_id, filling, weight, unit_price) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
+            [hundredPlusId, row.id, row.filling, row.weight, price]
+          );
+          inserted++;
+        }
       }
+      if (inserted > 0) console.log(`100 Plus Inserts: inserted ${inserted} price entries`);
+    }
+
+    // Assign to Decor Lux if not already set
+    const decorLux = await pool.query(`SELECT id, price_list_id FROM companies WHERE trading_name ILIKE '%DECOR LUX%' OR legal_name ILIKE '%DECOR LUX%' LIMIT 1`);
+    if (decorLux.rows.length > 0 && decorLux.rows[0].price_list_id !== hundredPlusId) {
+      await pool.query(`UPDATE companies SET price_list_id = $1 WHERE id = $2`, [hundredPlusId, decorLux.rows[0].id]);
+      console.log(`100 Plus Inserts: assigned to Decor Lux`);
     }
   } catch (err: any) {
-    console.error("100 PLUS INSERTS Highgate cleanup error:", err.message);
+    console.error("100 Plus Inserts setup error:", err.message);
   }
 
   // Assign Pearls Manchester price list to both Pearls Manchester companies
