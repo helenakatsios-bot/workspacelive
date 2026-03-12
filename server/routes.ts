@@ -7289,6 +7289,29 @@ Rules:
     }
   });
 
+  // Portal notes - get
+  app.get("/api/portal/notes", requirePortalAuth, async (req, res) => {
+    try {
+      const userId = req.session.portalUserId!;
+      const result = await pool.query(`SELECT notes FROM portal_users WHERE id = $1`, [userId]);
+      res.json({ notes: result.rows[0]?.notes || "" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch notes" });
+    }
+  });
+
+  // Portal notes - save
+  app.patch("/api/portal/notes", requirePortalAuth, async (req, res) => {
+    try {
+      const userId = req.session.portalUserId!;
+      const { notes } = req.body;
+      await pool.query(`UPDATE portal_users SET notes = $1 WHERE id = $2`, [notes ?? null, userId]);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save notes" });
+    }
+  });
+
   // ============ ADMIN: PORTAL USER MANAGEMENT ============
 
   app.get("/api/companies/:id/portal-users", requireAdmin, async (req, res) => {

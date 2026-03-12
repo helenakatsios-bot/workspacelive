@@ -254,6 +254,38 @@ function PortalDashboard({ onNavigate }: { onNavigate: (page: string) => void })
   const { data: dashboard, isLoading } = useQuery<any>({
     queryKey: ["/api/portal/dashboard"],
   });
+  const { data: notesData } = useQuery<{ notes: string }>({
+    queryKey: ["/api/portal/notes"],
+  });
+  const [notes, setNotes] = useState("");
+  const [notesSaved, setNotesSaved] = useState(false);
+  const [notesSaving, setNotesSaving] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (notesData?.notes !== undefined) {
+      setNotes(notesData.notes);
+    }
+  }, [notesData]);
+
+  async function saveNotes() {
+    setNotesSaving(true);
+    try {
+      const res = await fetch("/api/portal/notes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ notes }),
+      });
+      if (!res.ok) throw new Error();
+      setNotesSaved(true);
+      setTimeout(() => setNotesSaved(false), 2000);
+    } catch {
+      toast({ title: "Failed to save notes", variant: "destructive" });
+    } finally {
+      setNotesSaving(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -366,6 +398,36 @@ function PortalDashboard({ onNavigate }: { onNavigate: (page: string) => void })
           ) : (
             <p className="text-sm text-muted-foreground text-center py-4">No orders yet</p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-portal-notes">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+          <CardTitle className="text-base">My Notes</CardTitle>
+          <Button
+            size="sm"
+            onClick={saveNotes}
+            disabled={notesSaving}
+            data-testid="button-save-notes"
+            className={notesSaved ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}
+          >
+            {notesSaving ? (
+              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Saving…</>
+            ) : notesSaved ? (
+              <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Saved</>
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Add any notes, reminders, or messages here…"
+            className="min-h-[120px] resize-y"
+            data-testid="textarea-portal-notes"
+          />
         </CardContent>
       </Card>
     </div>
