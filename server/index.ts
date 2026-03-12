@@ -917,6 +917,57 @@ async function runStartupTasks() {
     console.error("100 Plus Inserts setup error:", err.message);
   }
 
+  // GLOBAL RULE: Remove HIGHGATE INSERTS products from any price list that is NOT "Highgate Inserts"
+  try {
+    const highgateList = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'highgate inserts' LIMIT 1`);
+    const highgateListId = highgateList.rows[0]?.id || null;
+    const removed = await pool.query(
+      `DELETE FROM price_list_prices
+       WHERE product_id IN (SELECT id FROM products WHERE category = 'HIGHGATE INSERTS')
+       ${highgateListId ? `AND price_list_id != $1` : ''}`,
+      highgateListId ? [highgateListId] : []
+    );
+    if (removed.rowCount && removed.rowCount > 0) {
+      console.log(`GLOBAL GUARD: Removed ${removed.rowCount} HIGHGATE INSERTS entries from non-Highgate price lists`);
+    }
+  } catch (err: any) {
+    console.error("HIGHGATE INSERTS global guard error:", err.message);
+  }
+
+  // Ensure Walter G's 4 INSERTS products are in his price list at correct prices
+  try {
+    const wgResult = await pool.query(`SELECT id FROM price_lists WHERE name = 'Walter G' LIMIT 1`);
+    if (wgResult.rows.length > 0) {
+      const wgId = wgResult.rows[0].id;
+      const walterGInserts: Record<string, number> = {
+        'WALTER19': 9.45,
+        'WALTER20': 10.00,
+        'WALTER21': 11.00,
+        'WALTER22': 13.10,
+      };
+      for (const [sku, price] of Object.entries(walterGInserts)) {
+        const prod = await pool.query(`SELECT id FROM products WHERE sku = $1 LIMIT 1`, [sku]);
+        if (prod.rows.length > 0) {
+          const productId = prod.rows[0].id;
+          const existing = await pool.query(
+            `SELECT id FROM price_list_prices WHERE price_list_id = $1 AND product_id = $2`,
+            [wgId, productId]
+          );
+          if (existing.rows.length === 0) {
+            await pool.query(
+              `INSERT INTO price_list_prices (id, price_list_id, product_id, sku, filling, weight, unit_price)
+               VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)`,
+              [wgId, productId, sku, '100% Feather', null, price.toFixed(2)]
+            );
+            console.log(`Walter G: inserted ${sku} at $${price}`);
+          }
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error("Walter G INSERTS migration error:", err.message);
+  }
+
   // Assign Pearls Manchester price list to both Pearls Manchester companies
   try {
     const pearlsPlResult = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'pearls manchester' LIMIT 1`);

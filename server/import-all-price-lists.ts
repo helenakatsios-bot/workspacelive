@@ -69,6 +69,11 @@ const PRICE_LISTS: PriceListConfig[] = [
       "prices_for_replit_watler_g_CSV_OFFICAL_1772688319849.csv",
       "prices_for_replit_watler_g_CSV_OFFICAL_1771795752483.csv",
     ],
+    categoryNorm: (cat) => {
+      // Normalise "INSERT" → "INSERTS" so products match the DB category
+      if (cat === "INSERT") return "INSERTS";
+      return cat;
+    },
   },
   {
     name: "Sage & Claire",
@@ -325,6 +330,15 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
         productByName.set(lookupKey, product);
         if (product.sku) productBySku.set(product.sku.toUpperCase(), product);
         newProductCount++;
+      }
+
+      // RULE: Never import HIGHGATE INSERTS products into any price list other than "Highgate Inserts"
+      if (
+        product.category === "HIGHGATE INSERTS" &&
+        config.name.toLowerCase() !== "highgate inserts"
+      ) {
+        skippedCount += groupRows.length;
+        continue;
       }
 
       for (const row of groupRows) {
