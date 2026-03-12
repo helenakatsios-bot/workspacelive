@@ -810,7 +810,7 @@ function PortalInvoices() {
   );
 }
 
-function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: string) => void; editRequestId?: string }) {
+function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate: (page: string) => void; editRequestId?: string; minQty?: number }) {
   const { toast } = useToast();
   const isEditMode = !!editRequestId;
   const { data: products, isLoading: loadingProducts } = useQuery<any[]>({
@@ -1626,26 +1626,38 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
                             </TableCell>
                           )}
                           <TableCell>
-                            <Input
-                              type="number"
-                              inputMode="numeric"
-                              min={0}
-                              value={cart[product.id] || ""}
-                              placeholder="0"
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value) || 0;
-                                setCart((prev) => {
-                                  if (val <= 0) {
-                                    const { [product.id]: _, ...rest } = prev;
-                                    return rest;
+                            <div className="flex flex-col items-center gap-0.5">
+                              <Input
+                                type="number"
+                                inputMode="numeric"
+                                min={minQty}
+                                value={cart[product.id] || ""}
+                                placeholder="0"
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  setCart((prev) => {
+                                    if (val <= 0) {
+                                      const { [product.id]: _, ...rest } = prev;
+                                      return rest;
+                                    }
+                                    const snapped = val < minQty ? minQty : val;
+                                    return { ...prev, [product.id]: snapped };
+                                  });
+                                }}
+                                onBlur={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  if (val > 0 && val < minQty) {
+                                    setCart((prev) => ({ ...prev, [product.id]: minQty }));
                                   }
-                                  return { ...prev, [product.id]: val };
-                                });
-                              }}
-                              className="h-8 w-[70px] text-center mx-auto"
-                              data-testid={`input-qty-${product.id}`}
-                            />
+                                }}
+                                className="h-8 w-[70px] text-center mx-auto"
+                                data-testid={`input-qty-${product.id}`}
+                              />
+                              {minQty > 1 && (
+                                <span className="text-[10px] text-muted-foreground">Min {minQty}</span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             {(() => {
@@ -2164,7 +2176,7 @@ function PortalAccount() {
   );
 }
 
-function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void }) {
+function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string) => void; minQty?: number }) {
   const { toast } = useToast();
 
   const { data: recurringItemsRaw, isLoading, refetch: refetchRecurring } = useQuery<any[]>({
@@ -2225,7 +2237,7 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
   const removeEditItem = (i: number) => setEditItems(prev => prev.filter((_, idx) => idx !== i));
 
   const updateEditQty = (i: number, qty: number) => {
-    setEditItems(prev => prev.map((item, idx) => idx === i ? { ...item, quantity: Math.max(1, qty) } : item));
+    setEditItems(prev => prev.map((item, idx) => idx === i ? { ...item, quantity: Math.max(minQty, qty) } : item));
   };
 
   const addProduct = (product: any, variant?: any) => {
@@ -2239,7 +2251,7 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
       filling: filling || undefined,
       weight: weight || undefined,
       unitPrice: String(unitPrice),
-      quantity: 1,
+      quantity: minQty,
     };
     setEditItems(prev => [...prev, newItem]);
     setAddingVariant(null);
@@ -2502,14 +2514,24 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
                       <p className="text-xs text-muted-foreground">${parseFloat(item.unitPrice || "0").toFixed(2)} each</p>
                     </td>
                     <td className="p-3">
-                      <div className="flex items-center justify-center gap-1">
-                        <Button size="icon" variant="outline" className="h-7 w-7" data-testid={`button-dec-qty-${i}`} onClick={() => setQuantities(prev => ({ ...prev, [i]: Math.max(0, (prev[i] ?? item.quantity) - 1) }))}>
-                          <Minus className="w-3 h-3" />
-                        </Button>
-                        <span className="w-8 text-center font-medium" data-testid={`text-qty-${i}`}>{qty}</span>
-                        <Button size="icon" variant="outline" className="h-7 w-7" data-testid={`button-inc-qty-${i}`} onClick={() => setQuantities(prev => ({ ...prev, [i]: (prev[i] ?? item.quantity) + 1 }))}>
-                          <Plus className="w-3 h-3" />
-                        </Button>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button size="icon" variant="outline" className="h-7 w-7" data-testid={`button-dec-qty-${i}`} onClick={() => setQuantities(prev => {
+                            const cur = prev[i] ?? item.quantity;
+                            const next = cur - 1;
+                            return { ...prev, [i]: next < minQty ? 0 : next };
+                          })}>
+                            <Minus className="w-3 h-3" />
+                          </Button>
+                          <span className="w-10 text-center font-medium" data-testid={`text-qty-${i}`}>{qty}</span>
+                          <Button size="icon" variant="outline" className="h-7 w-7" data-testid={`button-inc-qty-${i}`} onClick={() => setQuantities(prev => {
+                            const cur = prev[i] ?? item.quantity;
+                            return { ...prev, [i]: cur === 0 ? minQty : cur + 1 };
+                          })}>
+                            <Plus className="w-3 h-3" />
+                          </Button>
+                        </div>
+                        {minQty > 1 && <span className="text-[10px] text-muted-foreground">Min {minQty}</span>}
                       </div>
                     </td>
                     <td className="p-3 text-right font-medium">${(qty * parseFloat(item.unitPrice || "0")).toFixed(2)}</td>
@@ -2551,6 +2573,7 @@ function PortalLayout() {
   });
 
   const hasRecurring = !!(recurringItems && recurringItems.length > 0);
+  const minQty = (company?.priceListName || "").toLowerCase().includes("100 plus") ? 100 : 1;
 
   const portalTitle = company?.tradingName || company?.legalName || "Customer Portal";
 
@@ -2571,7 +2594,7 @@ function PortalLayout() {
   const renderPage = () => {
     if (currentPage.startsWith("edit-request-")) {
       const requestId = currentPage.replace("edit-request-", "");
-      return <PortalNewOrder onNavigate={navigate} editRequestId={requestId} />;
+      return <PortalNewOrder onNavigate={navigate} editRequestId={requestId} minQty={minQty} />;
     }
     if (currentPage.startsWith("order-")) {
       const orderId = currentPage.replace("order-", "");
@@ -2585,9 +2608,9 @@ function PortalLayout() {
       case "invoices":
         return <PortalInvoices />;
       case "new-order":
-        return <PortalNewOrder onNavigate={navigate} />;
+        return <PortalNewOrder onNavigate={navigate} minQty={minQty} />;
       case "recurring":
-        return <PortalRecurring onNavigate={navigate} />;
+        return <PortalRecurring onNavigate={navigate} minQty={minQty} />;
       case "account":
         return <PortalAccount />;
       default:

@@ -6413,7 +6413,11 @@ Rules:
       const company = await storage.getCompany(req.session.portalCompanyId!);
       if (!company) return res.status(404).json({ message: "Company not found" });
       const { internalNotes, ...safeCompany } = company;
-      res.json(safeCompany);
+      const plResult = await pool.query(
+        `SELECT name FROM price_lists WHERE id = $1 LIMIT 1`,
+        [company.priceListId]
+      );
+      res.json({ ...safeCompany, priceListName: plResult.rows[0]?.name || null });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch company" });
     }
