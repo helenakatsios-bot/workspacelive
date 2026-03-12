@@ -6431,6 +6431,20 @@ Rules:
     }
   });
 
+  app.put("/api/portal/recurring-items", requirePortalAuth, async (req, res) => {
+    try {
+      const { items } = req.body;
+      if (!Array.isArray(items)) return res.status(400).json({ message: "items must be an array" });
+      await pool.query(
+        `UPDATE portal_users SET recurring_items = $1 WHERE id = $2`,
+        [JSON.stringify(items), req.session.portalUserId]
+      );
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save recurring items" });
+    }
+  });
+
   app.get("/api/portal/orders", requirePortalAuth, async (req, res) => {
     try {
       const result = await pool.query(`

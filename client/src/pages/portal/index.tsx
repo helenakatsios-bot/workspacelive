@@ -2166,55 +2166,132 @@ function PortalAccount() {
 
 function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void }) {
   const { toast } = useToast();
-  const { data: recurringItemsRaw, isLoading } = useQuery<any[]>({
+
+  const { data: recurringItemsRaw, isLoading, refetch: refetchRecurring } = useQuery<any[]>({
     queryKey: ["/api/portal/recurring-items"],
   });
-  const [quantities, setQuantities] = useState<Record<number, number>>({});
+
+  const { data: allProducts } = useQuery<any[]>({
+    queryKey: ["/api/portal/products"],
+  });
+
+  const [editMode, setEditMode] = useState(false);
+  const [editItems, setEditItems] = useState<any[]>([]);
+  const [productSearch, setProductSearch] = useState("");
+  const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [quantities, setQuantities] = useState<Record<number, number>>({});
+  const [addingVariant, setAddingVariant] = useState<{ productId: string; variants: any[] } | null>(null);
 
-  const items = recurringItemsRaw || [];
+  const savedItems = recurringItemsRaw || [];
 
-  const getQty = (i: number) => quantities[i] ?? items[i]?.quantity ?? 0;
+  const enterEditMode = () => {
+    setEditItems(savedItems.map((i: any) => ({ ...i })));
+    setEditMode(true);
+    setProductSearch("");
+    setAddingVariant(null);
+  };
 
-  const total = items.reduce((sum: number, item: any, i: number) => {
-    return sum + getQty(i) * parseFloat(item.unitPrice || "0");
-  }, 0);
+  const cancelEdit = () => {
+    setEditMode(false);
+    setEditItems([]);
+    setProductSearch("");
+    setAddingVariant(null);
+  };
 
-  const handleSubmit = async () => {
-    const orderItems = items
-      .map((item: any, i: number) => ({ ...item, qty: getQty(i) }))
-      .filter((item: any) => item.qty > 0);
+  const saveTemplate = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/portal/recurring-items", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: editItems }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      await refetchRecurring();
+      portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/recurring-items"] });
+      setEditMode(false);
+      setEditItems([]);
+      toast({ title: "Template saved!", description: "Your recurring order template has been updated." });
+    } catch {
+      toast({ title: "Error", description: "Failed to save template.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
 
+  const removeEditItem = (i: number) => setEditItems(prev => prev.filter((_, idx) => idx !== i));
+
+  const updateEditQty = (i: number, qty: number) => {
+    setEditItems(prev => prev.map((item, idx) => idx === i ? { ...item, quantity: Math.max(1, qty) } : item));
+  };
+
+  const addProduct = (product: any, variant?: any) => {
+    const filling = variant?.filling || product.filling || "";
+    const weight = variant?.weight || product.weight || "";
+    const unitPrice = variant?.unitPrice || product.unitPrice || product.price || "0";
+    const newItem = {
+      productId: product.id,
+      productName: product.name,
+      category: product.category || "",
+      filling: filling || undefined,
+      weight: weight || undefined,
+      unitPrice: String(unitPrice),
+      quantity: 1,
+    };
+    setEditItems(prev => [...prev, newItem]);
+    setProductSearch("");
+    setAddingVariant(null);
+  };
+
+  const handleProductClick = (product: any) => {
+    const variants = product.variants || [];
+    if (variants.length > 1) {
+      setAddingVariant({ productId: product.id, variants });
+    } else {
+      addProduct(product, variants[0]);
+    }
+  };
+
+  const getOrderQty = (i: number) => quantities[i] ?? savedItems[i]?.quantity ?? 0;
+  const orderTotal = savedItems.reduce((sum: number, item: any, i: number) =>
+    sum + getOrderQty(i) * parseFloat(item.unitPrice || "0"), 0);
+
+  const searchResults = productSearch.length >= 2
+    ? (allProducts || []).filter((p: any) =>
+        p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+        (p.category || "").toLowerCase().includes(productSearch.toLowerCase())
+      ).slice(0, 8)
+    : [];
+
+  const handlePlaceOrder = async () => {
+    const orderItems = savedItems.map((item: any, i: number) => ({ ...item, qty: getOrderQty(i) })).filter((item: any) => item.qty > 0);
     if (orderItems.length === 0) {
-      toast({ title: "No items", description: "Please set at least one item quantity above zero.", variant: "destructive" });
+      toast({ title: "No items", description: "Please set at least one quantity above zero.", variant: "destructive" });
       return;
     }
-
     setSubmitting(true);
     try {
-      const payload = {
-        items: orderItems.map((item: any) => ({
-          productId: item.productId,
-          productName: item.productName,
-          quantity: item.qty,
-          filling: item.filling || undefined,
-          weight: item.weight || undefined,
-          unitPrice: parseFloat(item.unitPrice || "0"),
-          lineTotal: Math.round(item.qty * parseFloat(item.unitPrice || "0") * 100) / 100,
-        })),
-        customerNotes: "Recurring order",
-      };
-
       const res = await fetch("/api/portal/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          items: orderItems.map((item: any) => ({
+            productId: item.productId,
+            productName: item.productName,
+            quantity: item.qty,
+            filling: item.filling || undefined,
+            weight: item.weight || undefined,
+            unitPrice: parseFloat(item.unitPrice || "0"),
+            lineTotal: Math.round(item.qty * parseFloat(item.unitPrice || "0") * 100) / 100,
+          })),
+          customerNotes: "Recurring order",
+        }),
         credentials: "include",
       });
-
       if (!res.ok) throw new Error((await res.json()).message || "Failed to place order");
-
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/orders"] });
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/dashboard"] });
       setSubmitted(true);
@@ -2227,21 +2304,7 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-48">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (!items.length) {
-    return (
-      <div className="p-6 text-center text-muted-foreground">
-        <RefreshCw className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p className="font-medium">No recurring order set up yet</p>
-        <p className="text-sm mt-1">Contact us to set up your recurring order template.</p>
-      </div>
-    );
+    return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   }
 
   if (submitted) {
@@ -2250,8 +2313,149 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
         <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
         <p className="text-lg font-semibold">Order submitted!</p>
         <p className="text-muted-foreground text-sm mt-1 mb-4">Your recurring order is pending review.</p>
-        <Button onClick={() => { setSubmitted(false); onNavigate("orders"); }} data-testid="button-view-orders-after-recurring">
-          View My Orders
+        <Button onClick={() => { setSubmitted(false); onNavigate("orders"); }} data-testid="button-view-orders-after-recurring">View My Orders</Button>
+      </div>
+    );
+  }
+
+  if (editMode) {
+    return (
+      <div className="p-4 md:p-6 max-w-3xl mx-auto">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-5 h-5 text-primary" />
+            <h1 className="text-xl font-semibold">Edit Recurring Template</h1>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={cancelEdit} data-testid="button-cancel-edit">Cancel</Button>
+            <Button size="sm" onClick={saveTemplate} disabled={saving} data-testid="button-save-template">
+              {saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+              Save Template
+            </Button>
+          </div>
+        </div>
+
+        {editItems.length > 0 ? (
+          <Card className="mb-4">
+            <CardContent className="p-0">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/30">
+                    <th className="text-left p-3 font-medium">Product</th>
+                    <th className="text-center p-3 font-medium w-24">Qty</th>
+                    <th className="text-right p-3 font-medium w-24">Each</th>
+                    <th className="w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {editItems.map((item: any, i: number) => (
+                    <tr key={i} className="border-b last:border-0">
+                      <td className="p-3">
+                        <p className="font-medium">{item.productName}</p>
+                        {(item.filling || item.weight) && (
+                          <p className="text-xs text-muted-foreground">{[item.filling, item.weight].filter(Boolean).join(" · ")}</p>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => updateEditQty(i, (item.quantity || 1) - 1)} data-testid={`button-edit-dec-${i}`}><Minus className="w-3 h-3" /></Button>
+                          <span className="w-8 text-center font-medium" data-testid={`text-edit-qty-${i}`}>{item.quantity || 1}</span>
+                          <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => updateEditQty(i, (item.quantity || 1) + 1)} data-testid={`button-edit-inc-${i}`}><Plus className="w-3 h-3" /></Button>
+                        </div>
+                      </td>
+                      <td className="p-3 text-right text-muted-foreground">${parseFloat(item.unitPrice || "0").toFixed(2)}</td>
+                      <td className="p-2 text-center">
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => removeEditItem(i)} data-testid={`button-remove-item-${i}`}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="mb-4 p-6 rounded-lg border border-dashed text-center text-muted-foreground">
+            <p className="text-sm">No items yet — search below to add products</p>
+          </div>
+        )}
+
+        <Card>
+          <CardContent className="p-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Add products</p>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
+              <Input
+                className="pl-8 h-9 text-sm"
+                placeholder="Search by product name or category..."
+                value={productSearch}
+                onChange={(e) => { setProductSearch(e.target.value); setAddingVariant(null); }}
+                data-testid="input-product-search"
+              />
+            </div>
+            {searchResults.length > 0 && !addingVariant && (
+              <div className="mt-2 space-y-1 max-h-56 overflow-y-auto">
+                {searchResults.map((product: any) => (
+                  <button
+                    key={product.id}
+                    className="w-full text-left px-3 py-2 rounded-md hover:bg-muted/60 text-sm flex items-center justify-between gap-2"
+                    onClick={() => handleProductClick(product)}
+                    data-testid={`button-add-product-${product.id}`}
+                  >
+                    <span>
+                      <span className="font-medium">{product.name}</span>
+                      {product.category && <span className="text-xs text-muted-foreground ml-2">{product.category}</span>}
+                    </span>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {(product.variants || []).length > 1 ? `${(product.variants || []).length} variants` : `$${parseFloat((product.variants?.[0]?.unitPrice || product.unitPrice || "0")).toFixed(2)}`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {addingVariant && (
+              <div className="mt-2">
+                <p className="text-xs text-muted-foreground mb-1">Select filling / weight:</p>
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {addingVariant.variants.map((v: any, i: number) => {
+                    const prod = (allProducts || []).find((p: any) => p.id === addingVariant.productId);
+                    return (
+                      <button
+                        key={i}
+                        className="w-full text-left px-3 py-2 rounded-md hover:bg-muted/60 text-sm flex items-center justify-between"
+                        onClick={() => prod && addProduct(prod, v)}
+                        data-testid={`button-select-variant-${i}`}
+                      >
+                        <span>{[v.filling, v.weight].filter(Boolean).join(" · ") || "Default"}</span>
+                        <span className="text-xs text-muted-foreground">${parseFloat(v.unitPrice || "0").toFixed(2)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <Button variant="ghost" size="sm" className="mt-1 h-7 text-xs" onClick={() => setAddingVariant(null)}>← Back</Button>
+              </div>
+            )}
+            {productSearch.length >= 2 && searchResults.length === 0 && !addingVariant && (
+              <p className="mt-2 text-xs text-muted-foreground text-center">No products found for "{productSearch}"</p>
+            )}
+            {productSearch.length < 2 && !addingVariant && (
+              <p className="mt-2 text-xs text-muted-foreground">Type at least 2 characters to search</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (savedItems.length === 0) {
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        <RefreshCw className="w-10 h-10 mx-auto mb-3 opacity-30" />
+        <p className="font-medium text-foreground">No recurring order set up yet</p>
+        <p className="text-sm mt-1 mb-4">Build your standard order once, then reorder it anytime with one click.</p>
+        <Button onClick={enterEditMode} data-testid="button-create-template">
+          <Plus className="w-4 h-4 mr-2" /> Create Template
         </Button>
       </div>
     );
@@ -2259,13 +2463,16 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto">
-      <div className="flex items-center gap-2 mb-4">
-        <RefreshCw className="w-5 h-5 text-primary" />
-        <h1 className="text-xl font-semibold">Recurring Order</h1>
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <RefreshCw className="w-5 h-5 text-primary" />
+          <h1 className="text-xl font-semibold">Recurring Order</h1>
+        </div>
+        <Button variant="outline" size="sm" onClick={enterEditMode} data-testid="button-edit-template">
+          <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit Template
+        </Button>
       </div>
-      <p className="text-sm text-muted-foreground mb-4">
-        Review your standard order below. Adjust quantities as needed, then click Place Order.
-      </p>
+      <p className="text-sm text-muted-foreground mb-4">Adjust quantities as needed, then place your order.</p>
 
       <Card>
         <CardContent className="p-0">
@@ -2278,9 +2485,8 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
               </tr>
             </thead>
             <tbody>
-              {items.map((item: any, i: number) => {
-                const qty = getQty(i);
-                const lineTotal = qty * parseFloat(item.unitPrice || "0");
+              {savedItems.map((item: any, i: number) => {
+                const qty = getOrderQty(i);
                 return (
                   <tr key={i} className="border-b last:border-0">
                     <td className="p-3">
@@ -2292,28 +2498,16 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
                     </td>
                     <td className="p-3">
                       <div className="flex items-center justify-center gap-1">
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          className="h-7 w-7"
-                          data-testid={`button-dec-qty-${i}`}
-                          onClick={() => setQuantities(prev => ({ ...prev, [i]: Math.max(0, (prev[i] ?? item.quantity) - 1) }))}
-                        >
+                        <Button size="icon" variant="outline" className="h-7 w-7" data-testid={`button-dec-qty-${i}`} onClick={() => setQuantities(prev => ({ ...prev, [i]: Math.max(0, (prev[i] ?? item.quantity) - 1) }))}>
                           <Minus className="w-3 h-3" />
                         </Button>
                         <span className="w-8 text-center font-medium" data-testid={`text-qty-${i}`}>{qty}</span>
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          className="h-7 w-7"
-                          data-testid={`button-inc-qty-${i}`}
-                          onClick={() => setQuantities(prev => ({ ...prev, [i]: (prev[i] ?? item.quantity) + 1 }))}
-                        >
+                        <Button size="icon" variant="outline" className="h-7 w-7" data-testid={`button-inc-qty-${i}`} onClick={() => setQuantities(prev => ({ ...prev, [i]: (prev[i] ?? item.quantity) + 1 }))}>
                           <Plus className="w-3 h-3" />
                         </Button>
                       </div>
                     </td>
-                    <td className="p-3 text-right font-medium">${lineTotal.toFixed(2)}</td>
+                    <td className="p-3 text-right font-medium">${(qty * parseFloat(item.unitPrice || "0")).toFixed(2)}</td>
                   </tr>
                 );
               })}
@@ -2325,14 +2519,9 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
       <div className="mt-4 flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">Order Total</p>
-          <p className="text-xl font-bold" data-testid="text-recurring-total">${total.toFixed(2)}</p>
+          <p className="text-xl font-bold" data-testid="text-recurring-total">${orderTotal.toFixed(2)}</p>
         </div>
-        <Button
-          size="lg"
-          onClick={handleSubmit}
-          disabled={submitting}
-          data-testid="button-place-recurring-order"
-        >
+        <Button size="lg" onClick={handlePlaceOrder} disabled={submitting} data-testid="button-place-recurring-order">
           {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
           Place Recurring Order
         </Button>
@@ -2370,7 +2559,7 @@ function PortalLayout() {
     { id: "orders", label: "Orders", icon: Package },
     { id: "invoices", label: "Invoices", icon: FileText },
     { id: "new-order", label: "New Order", icon: ShoppingCart },
-    ...(hasRecurring ? [{ id: "recurring", label: "Recurring", icon: RefreshCw }] : []),
+    { id: "recurring", label: "Recurring", icon: RefreshCw },
     { id: "account", label: "Account", icon: User },
   ];
 
