@@ -985,6 +985,7 @@ function PortalNewOrder({ onNavigate, editRequestId }: { onNavigate: (page: stri
   }, [products, search]);
 
   const PORTAL_CATEGORY_ORDER = [
+    'HIGHGATE INSERTS',
     'INSERTS',
     'CUSTOM INSERTS',
     'Custom Inserts',
