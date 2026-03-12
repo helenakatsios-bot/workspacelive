@@ -972,6 +972,9 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
     for (const [cat, set] of Object.entries(fOpts)) fillingOptions[cat] = toSorted(set);
     const weightOptions: Record<string, string[]> = {};
     for (const [cat, set] of Object.entries(wOpts)) weightOptions[cat] = toSorted(set);
+    // Mirror INSERTS options under the renamed key for 100 Plus customers
+    if (fillingOptions['INSERTS']) fillingOptions['100 PLUS INSERTS'] = fillingOptions['INSERTS'];
+    if (weightOptions['INSERTS']) weightOptions['100 PLUS INSERTS'] = weightOptions['INSERTS'];
     return { fillingOptions, weightOptions };
   }, [products]);
   const FILLING_CATEGORIES = Object.keys(fillingOptions).filter(c => c !== 'RAW MATERIAL' && c !== 'BULK LOOSE FILLING' && c !== 'BULK');
@@ -986,6 +989,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
 
   const PORTAL_CATEGORY_ORDER = [
     'HIGHGATE INSERTS',
+    '100 PLUS INSERTS',
     'INSERTS',
     'CUSTOM INSERTS',
     'Custom Inserts',
@@ -1044,7 +1048,9 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
   const grouped = useMemo(() => {
     const groups: Record<string, any[]> = {};
     for (const p of filteredProducts) {
-      const cat = p.category || "Other";
+      let cat = p.category || "Other";
+      // Rename "INSERTS" to "100 PLUS INSERTS" for min-qty customers
+      if (minQty > 1 && cat === 'INSERTS') cat = '100 PLUS INSERTS';
       if (HIDDEN_PORTAL_CATEGORIES.includes(cat)) continue;
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(p);
@@ -1061,7 +1067,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
       }
     }
     return sorted;
-  }, [filteredProducts]);
+  }, [filteredProducts, minQty]);
 
   const PILLOW_SIZES = ['STANDARD', 'KING', 'QUEEN', 'EURO'];
 
