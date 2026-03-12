@@ -2177,7 +2177,7 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
 
   const [editMode, setEditMode] = useState(false);
   const [editItems, setEditItems] = useState<any[]>([]);
-  const [productSearch, setProductSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -2189,14 +2189,14 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
   const enterEditMode = () => {
     setEditItems(savedItems.map((i: any) => ({ ...i })));
     setEditMode(true);
-    setProductSearch("");
+    setSelectedCategory("");
     setAddingVariant(null);
   };
 
   const cancelEdit = () => {
     setEditMode(false);
     setEditItems([]);
-    setProductSearch("");
+    setSelectedCategory("");
     setAddingVariant(null);
   };
 
@@ -2242,7 +2242,6 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
       quantity: 1,
     };
     setEditItems(prev => [...prev, newItem]);
-    setProductSearch("");
     setAddingVariant(null);
   };
 
@@ -2259,11 +2258,9 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
   const orderTotal = savedItems.reduce((sum: number, item: any, i: number) =>
     sum + getOrderQty(i) * parseFloat(item.unitPrice || "0"), 0);
 
-  const searchResults = productSearch.length >= 2
-    ? (allProducts || []).filter((p: any) =>
-        p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-        (p.category || "").toLowerCase().includes(productSearch.toLowerCase())
-      ).slice(0, 8)
+  const productCategories = Array.from(new Set((allProducts || []).map((p: any) => p.category || "Other"))).sort();
+  const productsInCategory = selectedCategory
+    ? (allProducts || []).filter((p: any) => (p.category || "Other") === selectedCategory)
     : [];
 
   const handlePlaceOrder = async () => {
@@ -2377,53 +2374,67 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
           </Card>
         ) : (
           <div className="mb-4 p-6 rounded-lg border border-dashed text-center text-muted-foreground">
-            <p className="text-sm">No items yet — search below to add products</p>
+            <p className="text-sm">No items yet — use the dropdown below to add products</p>
           </div>
         )}
 
         <Card>
-          <CardContent className="p-3">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Add products</p>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
-              <Input
-                className="pl-8 h-9 text-sm"
-                placeholder="Search by product name or category..."
-                value={productSearch}
-                onChange={(e) => { setProductSearch(e.target.value); setAddingVariant(null); }}
-                data-testid="input-product-search"
-              />
-            </div>
-            {searchResults.length > 0 && !addingVariant && (
-              <div className="mt-2 space-y-1 max-h-56 overflow-y-auto">
-                {searchResults.map((product: any) => (
-                  <button
-                    key={product.id}
-                    className="w-full text-left px-3 py-2 rounded-md hover:bg-muted/60 text-sm flex items-center justify-between gap-2"
-                    onClick={() => handleProductClick(product)}
-                    data-testid={`button-add-product-${product.id}`}
-                  >
-                    <span>
-                      <span className="font-medium">{product.name}</span>
-                      {product.category && <span className="text-xs text-muted-foreground ml-2">{product.category}</span>}
-                    </span>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {(product.variants || []).length > 1 ? `${(product.variants || []).length} variants` : `$${parseFloat((product.variants?.[0]?.unitPrice || product.unitPrice || "0")).toFixed(2)}`}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {addingVariant && (
-              <div className="mt-2">
-                <p className="text-xs text-muted-foreground mb-1">Select filling / weight:</p>
-                <div className="space-y-1 max-h-48 overflow-y-auto">
+          <CardContent className="p-4">
+            <p className="text-sm font-medium mb-3">Add products</p>
+
+            {!addingVariant ? (
+              <>
+                <Select
+                  value={selectedCategory}
+                  onValueChange={(val) => { setSelectedCategory(val); setAddingVariant(null); }}
+                  data-testid="select-category"
+                >
+                  <SelectTrigger className="w-full" data-testid="trigger-category">
+                    <SelectValue placeholder="Select a category…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {productCategories.map((cat: string) => (
+                      <SelectItem key={cat} value={cat} data-testid={`option-category-${cat}`}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {selectedCategory && productsInCategory.length > 0 && (
+                  <div className="mt-3 space-y-1 max-h-64 overflow-y-auto">
+                    {productsInCategory.map((product: any) => (
+                      <button
+                        key={product.id}
+                        className="w-full text-left px-3 py-2.5 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 text-sm flex items-center justify-between gap-2 transition-colors"
+                        onClick={() => handleProductClick(product)}
+                        data-testid={`button-add-product-${product.id}`}
+                      >
+                        <span className="font-medium">{product.name}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {(product.variants || []).length > 1
+                            ? `${(product.variants || []).length} options →`
+                            : `$${parseFloat((product.variants?.[0]?.unitPrice || product.unitPrice || "0")).toFixed(2)}`}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {selectedCategory && productsInCategory.length === 0 && (
+                  <p className="mt-3 text-sm text-muted-foreground text-center">No products in this category</p>
+                )}
+              </>
+            ) : (
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Select filling / weight for <span className="font-medium text-foreground">{(allProducts || []).find((p: any) => p.id === addingVariant.productId)?.name}</span>:
+                </p>
+                <div className="space-y-1 max-h-56 overflow-y-auto">
                   {addingVariant.variants.map((v: any, i: number) => {
                     const prod = (allProducts || []).find((p: any) => p.id === addingVariant.productId);
                     return (
                       <button
                         key={i}
-                        className="w-full text-left px-3 py-2 rounded-md hover:bg-muted/60 text-sm flex items-center justify-between"
+                        className="w-full text-left px-3 py-2.5 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 text-sm flex items-center justify-between transition-colors"
                         onClick={() => prod && addProduct(prod, v)}
                         data-testid={`button-select-variant-${i}`}
                       >
@@ -2433,14 +2444,8 @@ function PortalRecurring({ onNavigate }: { onNavigate: (page: string) => void })
                     );
                   })}
                 </div>
-                <Button variant="ghost" size="sm" className="mt-1 h-7 text-xs" onClick={() => setAddingVariant(null)}>← Back</Button>
+                <Button variant="ghost" size="sm" className="mt-2 h-7 text-xs" onClick={() => setAddingVariant(null)}>← Back to products</Button>
               </div>
-            )}
-            {productSearch.length >= 2 && searchResults.length === 0 && !addingVariant && (
-              <p className="mt-2 text-xs text-muted-foreground text-center">No products found for "{productSearch}"</p>
-            )}
-            {productSearch.length < 2 && !addingVariant && (
-              <p className="mt-2 text-xs text-muted-foreground">Type at least 2 characters to search</p>
             )}
           </CardContent>
         </Card>
