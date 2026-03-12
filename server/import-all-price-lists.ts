@@ -379,7 +379,7 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
 }
 
 export async function importAllPriceLists(): Promise<void> {
-  console.log("Starting price list import for all 18 lists...");
+  console.log("Starting price list import for all 19 lists...");
   for (const config of PRICE_LISTS) {
     try {
       await importOnePriceList(config);
