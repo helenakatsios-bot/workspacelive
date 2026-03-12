@@ -493,6 +493,7 @@ export const portalUsers = pgTable("portal_users", {
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   lastLogin: timestamp("last_login"),
+  notes: text("notes"),
   recurringItems: jsonb("recurring_items").$type<{
     productId: string;
     productName: string;
