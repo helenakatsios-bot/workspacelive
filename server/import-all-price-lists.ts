@@ -332,10 +332,12 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
         newProductCount++;
       }
 
-      // RULE: Never import HIGHGATE INSERTS products into any price list other than "Highgate Inserts"
+      // RULE: Never import any product with "HIGHGATE" in its category or SKU (HG##) into any price list other than "Highgate Inserts"
+      const prodCatUpper = (product.category || "").toUpperCase();
+      const prodSkuUpper = (product.sku || "").toUpperCase();
       if (
-        product.category === "HIGHGATE INSERTS" &&
-        config.name.toLowerCase() !== "highgate inserts"
+        config.name.toLowerCase() !== "highgate inserts" &&
+        (prodCatUpper.includes("HIGHGATE") || /^HG\d+$/.test(prodSkuUpper))
       ) {
         skippedCount += groupRows.length;
         continue;

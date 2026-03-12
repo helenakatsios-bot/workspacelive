@@ -1294,10 +1294,18 @@ export async function registerRoutes(
       if (isNaN(unitPrice) || unitPrice < 0) {
         return res.status(400).json({ message: "Invalid price" });
       }
-      // Find or create the product
-      let productId: string;
+      // GUARD: Never allow Highgate products to be added to any non-Highgate price list
       const skuUpper = sku ? sku.trim().toUpperCase() : null;
       const catUpper = (category || "").trim().toUpperCase();
+      const isHighgatePL = await pool.query(`SELECT name FROM price_lists WHERE id = $1 LIMIT 1`, [priceListId]);
+      const plName = (isHighgatePL.rows[0]?.name || "").toLowerCase();
+      if (plName !== "highgate inserts") {
+        if (catUpper.includes("HIGHGATE") || (skuUpper && /^HG\d+$/.test(skuUpper))) {
+          return res.status(400).json({ message: "Highgate Inserts products cannot be added to other price lists." });
+        }
+      }
+      // Find or create the product
+      let productId: string;
       // Try by SKU first
       if (skuUpper) {
         const bySkuResult = await pool.query("SELECT id FROM products WHERE sku = $1 LIMIT 1", [skuUpper]);

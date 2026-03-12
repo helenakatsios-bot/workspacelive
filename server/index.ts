@@ -961,18 +961,30 @@ async function runStartupTasks() {
     console.error("100 Plus Inserts setup error:", err.message);
   }
 
-  // GLOBAL RULE: Remove HIGHGATE INSERTS products from any price list that is NOT "Highgate Inserts"
+  // GLOBAL RULE: Remove ANY product whose name or category references "HIGHGATE" from every price list except "Highgate Inserts"
   try {
     const highgateList = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'highgate inserts' LIMIT 1`);
-    const highgateListId = highgateList.rows[0]?.id || null;
-    const removed = await pool.query(
+    const highgateListId: string | null = highgateList.rows[0]?.id || null;
+
+    // Remove by product category (case-insensitive)
+    const byCat = await pool.query(
       `DELETE FROM price_list_prices
-       WHERE product_id IN (SELECT id FROM products WHERE category = 'HIGHGATE INSERTS')
-       ${highgateListId ? `AND price_list_id != $1` : ''}`,
-      highgateListId ? [highgateListId] : []
+       WHERE product_id IN (SELECT id FROM products WHERE UPPER(COALESCE(category,'')) LIKE '%HIGHGATE%')
+       AND price_list_id != COALESCE($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
+      [highgateListId]
     );
-    if (removed.rowCount && removed.rowCount > 0) {
-      console.log(`GLOBAL GUARD: Removed ${removed.rowCount} HIGHGATE INSERTS entries from non-Highgate price lists`);
+
+    // Also remove by product SKU pattern (HG1–HG14)
+    const bySku = await pool.query(
+      `DELETE FROM price_list_prices
+       WHERE product_id IN (SELECT id FROM products WHERE sku ~ '^HG[0-9]+$')
+       AND price_list_id != COALESCE($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
+      [highgateListId]
+    );
+
+    const total = (byCat.rowCount || 0) + (bySku.rowCount || 0);
+    if (total > 0) {
+      console.log(`GLOBAL GUARD: Removed ${total} Highgate entries from non-Highgate price lists (${byCat.rowCount} by category, ${bySku.rowCount} by SKU)`);
     }
   } catch (err: any) {
     console.error("HIGHGATE INSERTS global guard error:", err.message);
