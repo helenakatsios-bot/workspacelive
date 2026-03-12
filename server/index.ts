@@ -887,11 +887,19 @@ async function runStartupTasks() {
       if (inserted > 0) console.log(`100 Plus Inserts: inserted ${inserted} price entries`);
     }
 
-    // Assign to Decor Lux if not already set
+    // Always set Decor Lux's main price list to "100 Plus Inserts" and clear additional price lists
     const decorLux = await pool.query(`SELECT id, price_list_id FROM companies WHERE trading_name ILIKE '%DECOR LUX%' OR legal_name ILIKE '%DECOR LUX%' LIMIT 1`);
-    if (decorLux.rows.length > 0 && decorLux.rows[0].price_list_id !== hundredPlusId) {
-      await pool.query(`UPDATE companies SET price_list_id = $1 WHERE id = $2`, [hundredPlusId, decorLux.rows[0].id]);
-      console.log(`100 Plus Inserts: assigned to Decor Lux`);
+    if (decorLux.rows.length > 0) {
+      const dlId = decorLux.rows[0].id;
+      if (decorLux.rows[0].price_list_id !== hundredPlusId) {
+        await pool.query(`UPDATE companies SET price_list_id = $1 WHERE id = $2`, [hundredPlusId, dlId]);
+        console.log(`100 Plus Inserts: set as main price list for Decor Lux`);
+      }
+      // Remove all additional price lists from Decor Lux (they cause unwanted products to appear in the portal)
+      const removed = await pool.query(`DELETE FROM company_additional_price_lists WHERE company_id = $1`, [dlId]);
+      if (removed.rowCount && removed.rowCount > 0) {
+        console.log(`100 Plus Inserts: removed ${removed.rowCount} additional price list(s) from Decor Lux`);
+      }
     }
   } catch (err: any) {
     console.error("100 Plus Inserts setup error:", err.message);
