@@ -970,7 +970,7 @@ async function runStartupTasks() {
     const byCat = await pool.query(
       `DELETE FROM price_list_prices
        WHERE product_id IN (SELECT id FROM products WHERE UPPER(COALESCE(category,'')) LIKE '%HIGHGATE%')
-       AND price_list_id != COALESCE($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
+       AND ($1::text IS NULL OR price_list_id::text != $1::text)`,
       [highgateListId]
     );
 
@@ -978,7 +978,7 @@ async function runStartupTasks() {
     const bySku = await pool.query(
       `DELETE FROM price_list_prices
        WHERE product_id IN (SELECT id FROM products WHERE sku ~ '^HG[0-9]+$')
-       AND price_list_id != COALESCE($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
+       AND ($1::text IS NULL OR price_list_id::text != $1::text)`,
       [highgateListId]
     );
 
@@ -1250,6 +1250,72 @@ async function runStartupTasks() {
     }
   } catch (err: any) {
     console.error("Payment status backfill error:", err.message);
+  }
+
+  // --- SHEERTEX PRICE LIST REBUILD ---
+  // Fix incorrect product links: SHEER1 was linked to a HIGHGATE INSERTS product,
+  // SHEER12-16 to "80% HUNGARIAN GOOSE" products. Rebuild with correct SHEER SKUs + categories.
+  try {
+    const sheertexPL = await pool.query(`SELECT id FROM price_lists WHERE UPPER(name) = 'SHEERTEX PRICES' OR UPPER(name) = 'SHEERTEX' LIMIT 1`);
+    if (sheertexPL.rows.length > 0) {
+      const sheertexId = sheertexPL.rows[0].id;
+      const sheertexItems = [
+        { sku: 'SHEER1',  name: '50X50CM',                          category: 'INSERTS',           filling: '100% Feather', weight: 'Normal',     price: '11.00' },
+        { sku: 'SHEER2',  name: 'SINGLE - 4 SEASONS 80% DUCK DOWN', category: '4 SEASONS FILLED',  filling: 'Duck',         weight: null,          price: '86.00' },
+        { sku: 'SHEER3',  name: 'DOUBLE - 4 SEASONS 80% DUCK DOWN', category: '4 SEASONS FILLED',  filling: 'Duck',         weight: null,          price: '104.00' },
+        { sku: 'SHEER4',  name: 'QUEEN - 4 SEASONS 80% DUCK DOWN',  category: '4 SEASONS FILLED',  filling: 'Duck',         weight: null,          price: '129.00' },
+        { sku: 'SHEER5',  name: 'KING - 4 SEASONS 80% DUCK DOWN',   category: '4 SEASONS FILLED',  filling: 'Duck',         weight: null,          price: '148.00' },
+        { sku: 'SHEER6',  name: 'SUPER KING - 4 SEASONS 80% DUCK DOWN', category: '4 SEASONS FILLED', filling: 'Duck',      weight: null,          price: '195.00' },
+        { sku: 'SHEER7',  name: 'SINGLE - 50% DUCK DOWN MID WARM',  category: '50% MID WARM FILLED', filling: 'Duck',       weight: null,          price: '60.00' },
+        { sku: 'SHEER8',  name: 'DOUBLE - 50% DUCK DOWN MID WARM',  category: '50% MID WARM FILLED', filling: 'Duck',       weight: null,          price: '68.00' },
+        { sku: 'SHEER9',  name: 'QUEEN - 50% DUCK DOWN MID WARM',   category: '50% MID WARM FILLED', filling: 'Duck',       weight: null,          price: '80.00' },
+        { sku: 'SHEER10', name: 'KING - 50% DUCK DOWN MID WARM',    category: '50% MID WARM FILLED', filling: 'Duck',       weight: null,          price: '90.00' },
+        { sku: 'SHEER11', name: 'SUPER KING - 50% DUCK DOWN MID WARM', category: '50% MID WARM FILLED', filling: 'Duck',    weight: null,          price: '125.00' },
+        { sku: 'SHEER12', name: 'SINGLE - 80% GOOSE DOWN MID WARM', category: '80% MID WARM FILLED', filling: 'Goose',      weight: null,          price: '118.75' },
+        { sku: 'SHEER13', name: 'DOUBLE - 80% GOOSE DOWN MID WARM', category: '80% MID WARM FILLED', filling: 'Goose',      weight: null,          price: '139.50' },
+        { sku: 'SHEER14', name: 'QUEEN - 80% GOOSE DOWN MID WARM',  category: '80% MID WARM FILLED', filling: 'Goose',      weight: null,          price: '166.00' },
+        { sku: 'SHEER15', name: 'KING - 80% GOOSE DOWN MID WARM',   category: '80% MID WARM FILLED', filling: 'Goose',      weight: null,          price: '188.20' },
+        { sku: 'SHEER16', name: 'SUPER KING - 80% GOOSE DOWN MID WARM', category: '80% MID WARM FILLED', filling: 'Goose', weight: null,          price: '275.00' },
+      ];
+      // Remove all existing Sheertex entries so we can re-link cleanly
+      await pool.query(`DELETE FROM price_list_prices WHERE price_list_id = $1`, [sheertexId]);
+      for (const item of sheertexItems) {
+        // Ensure product exists with SHEER SKU and correct category
+        let prodRes = await pool.query(`SELECT id FROM products WHERE sku = $1 LIMIT 1`, [item.sku]);
+        let productId: string;
+        if (prodRes.rows.length > 0) {
+          productId = prodRes.rows[0].id;
+          // Ensure category is correct
+          await pool.query(`UPDATE products SET category = $1, name = $2 WHERE id = $3`, [item.category, item.name, productId]);
+        } else {
+          // Check by name + category (safe: same name different category = different product)
+          const byName = await pool.query(
+            `SELECT id FROM products WHERE UPPER(name) = $1 AND UPPER(COALESCE(category,'')) = $2 LIMIT 1`,
+            [item.name.toUpperCase(), item.category.toUpperCase()]
+          );
+          if (byName.rows.length > 0) {
+            productId = byName.rows[0].id;
+            await pool.query(`UPDATE products SET sku = $1 WHERE id = $2 AND sku IS NULL`, [item.sku, productId]);
+          } else {
+            const newProd = await pool.query(
+              `INSERT INTO products (id, sku, name, category, unit_price, active)
+               VALUES (gen_random_uuid(), $1, $2, $3, $4, true) RETURNING id`,
+              [item.sku, item.name, item.category, item.price]
+            );
+            productId = newProd.rows[0].id;
+          }
+        }
+        await pool.query(
+          `INSERT INTO price_list_prices (id, price_list_id, product_id, filling, weight, unit_price)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+           ON CONFLICT DO NOTHING`,
+          [sheertexId, productId, item.filling || null, item.weight || null, item.price]
+        );
+      }
+      console.log(`[Sheertex] Rebuilt ${sheertexItems.length} entries with correct product categories`);
+    }
+  } catch (err: any) {
+    console.error("[Sheertex rebuild] Error:", err.message);
   }
 
   console.log("All startup tasks completed");
