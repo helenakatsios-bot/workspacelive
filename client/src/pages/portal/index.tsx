@@ -988,9 +988,9 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
   }, [products, search]);
 
   const PORTAL_CATEGORY_ORDER = [
+    'INSERTS',
     'HIGHGATE INSERTS',
     '100 PLUS INSERTS',
-    'INSERTS',
     'CUSTOM INSERTS',
     'Custom Inserts',
     'WINTER 80% DOWN',
