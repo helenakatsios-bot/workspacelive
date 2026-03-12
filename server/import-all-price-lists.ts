@@ -184,6 +184,12 @@ const PRICE_LISTS: PriceListConfig[] = [
     csvStartRow: 2,
     swapSkuCategory: true,
   },
+  {
+    name: "Highgate Inserts",
+    description: "Highgate Inserts pricing",
+    isDefault: false,
+    csvFiles: ["HIGHGATE_INSERTS_OFFICAL__1773274327476.csv"],
+  },
 ];
 
 function parseCsvLine(line: string): string[] {
