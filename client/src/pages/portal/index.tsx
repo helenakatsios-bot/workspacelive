@@ -1050,6 +1050,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
   }, [products, search]);
 
   const PORTAL_CATEGORY_ORDER = [
+    'WALTER G INSERT',
     'INSERTS',
     'HIGHGATE INSERTS',
     '100 PLUS INSERTS',
