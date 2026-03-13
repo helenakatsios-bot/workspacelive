@@ -34,6 +34,7 @@ import {
   MapPin,
   RefreshCw,
   CheckCircle2,
+  CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -648,7 +649,14 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
                 {filtered.map((order: any) => (
                   <TableRow key={order.id} className="cursor-pointer" onClick={() => onNavigate(`order-${order.id}`)} data-testid={`row-order-${order.id}`}>
                     <TableCell>
-                      <p className="font-medium">{order.orderNumber}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium">{order.orderNumber}</p>
+                        {(order.customerNotes || "").toLowerCase().includes("recurring order") && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5 whitespace-nowrap" data-testid={`badge-recurring-${order.id}`}>
+                            <RefreshCw className="w-2.5 h-2.5" /> Recurring
+                          </span>
+                        )}
+                      </div>
                       {order.customerName && <p className="text-xs text-muted-foreground">{order.customerName}</p>}
                     </TableCell>
                     <TableCell>{order.orderDate ? format(new Date(order.orderDate), "MMM d, yyyy") : "-"}</TableCell>
@@ -2728,28 +2736,40 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-base truncate" data-testid={`text-template-name-${tmpl.id}`}>{tmpl.name}</p>
-                        {isDue ? (
+                      <div className="flex items-center gap-2 flex-wrap mb-2">
+                        <p className="font-semibold text-base" data-testid={`text-template-name-${tmpl.id}`}>{tmpl.name}</p>
+                        {isDue && (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-700 rounded-full px-2 py-0.5">⏰ Due now</span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">every {iw === 1 ? "week" : `${iw} weeks`}</span>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        {(tmpl.items || []).length} item{(tmpl.items || []).length !== 1 ? "s" : ""} · ${total.toFixed(2)} per order
-                        {lastPlaced ? ` · Next: ${nextDueDate.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}` : ""}
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {(tmpl.items || []).length} item{(tmpl.items || []).length !== 1 ? "s" : ""} · ${total.toFixed(2)} per order · repeats every {iw === 1 ? "week" : `${iw} weeks`}
                       </p>
+                      {/* Prominent next order date */}
+                      <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium ${
+                        isDue
+                          ? "bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-700 text-amber-800 dark:text-amber-300"
+                          : "bg-muted/60 border border-border text-foreground"
+                      }`} data-testid={`text-next-date-${tmpl.id}`}>
+                        <CalendarClock className="w-4 h-4 shrink-0" />
+                        {isDue
+                          ? "Order due now — place when ready"
+                          : lastPlaced
+                            ? `Next order: ${nextDueDate.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`
+                            : `Schedule set — every ${iw === 1 ? "week" : `${iw} weeks`}`}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button variant="outline" size="sm" onClick={() => openEdit(tmpl)} data-testid={`button-edit-template-${tmpl.id}`}>
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" disabled={deleting === tmpl.id}
-                        onClick={() => { if (confirm(`Delete "${tmpl.name}"?`)) deleteTemplate(tmpl.id); }} data-testid={`button-delete-template-${tmpl.id}`}>
-                        {deleting === tmpl.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
-                      </Button>
-                      <Button size="sm" onClick={() => openPlace(tmpl)} data-testid={`button-place-template-${tmpl.id}`}>
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <Button variant="outline" size="sm" onClick={() => openEdit(tmpl)} data-testid={`button-edit-template-${tmpl.id}`}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" disabled={deleting === tmpl.id}
+                          onClick={() => { if (confirm(`Delete "${tmpl.name}"?`)) deleteTemplate(tmpl.id); }} data-testid={`button-delete-template-${tmpl.id}`}>
+                          {deleting === tmpl.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                        </Button>
+                      </div>
+                      <Button onClick={() => openPlace(tmpl)} data-testid={`button-place-template-${tmpl.id}`}>
                         <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Place Order
                       </Button>
                     </div>
