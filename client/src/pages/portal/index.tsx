@@ -2299,7 +2299,7 @@ function PortalAccount() {
 function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string) => void; minQty?: number }) {
   const { toast } = useToast();
 
-  const { data: recurringItemsRaw, isLoading, refetch: refetchRecurring } = useQuery<any[]>({
+  const { data: recurringData, isLoading, refetch: refetchRecurring } = useQuery<{ items: any[]; intervalWeeks: number; lastPlaced: string | null }>({
     queryKey: ["/api/portal/recurring-items"],
   });
 
@@ -2315,8 +2315,43 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
   const [submitted, setSubmitted] = useState(false);
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [addingVariant, setAddingVariant] = useState<{ productId: string; variants: any[] } | null>(null);
+  const [intervalWeeks, setIntervalWeeks] = useState<number>(2);
+  const [savingInterval, setSavingInterval] = useState(false);
 
-  const savedItems = recurringItemsRaw || [];
+  const savedItems = recurringData?.items || [];
+  const lastPlaced = recurringData?.lastPlaced || null;
+
+  useEffect(() => {
+    if (recurringData?.intervalWeeks) {
+      setIntervalWeeks(recurringData.intervalWeeks);
+    }
+  }, [recurringData?.intervalWeeks]);
+
+  const nextDueDate = lastPlaced
+    ? new Date(new Date(lastPlaced).getTime() + intervalWeeks * 7 * 24 * 60 * 60 * 1000)
+    : null;
+
+  const daysUntilDue = nextDueDate
+    ? Math.ceil((nextDueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
+
+  async function saveInterval(weeks: number) {
+    setSavingInterval(true);
+    try {
+      await fetch("/api/portal/recurring-interval", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intervalWeeks: weeks }),
+        credentials: "include",
+      });
+      setIntervalWeeks(weeks);
+      portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/recurring-items"] });
+    } catch {
+      toast({ title: "Failed to save schedule", variant: "destructive" });
+    } finally {
+      setSavingInterval(false);
+    }
+  }
 
   const enterEditMode = () => {
     setEditItems(savedItems.map((i: any) => ({ ...i })));
@@ -2423,6 +2458,7 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
       if (!res.ok) throw new Error((await res.json()).message || "Failed to place order");
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/orders"] });
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/dashboard"] });
+      portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/recurring-items"] });
       setSubmitted(true);
       toast({ title: "Order submitted!", description: "Your recurring order has been submitted for review." });
     } catch (err: any) {
@@ -2611,6 +2647,42 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
       </div>
       <p className="text-sm text-muted-foreground mb-4">Adjust quantities as needed, then place your order.</p>
 
+      {/* Recurrence frequency selector */}
+      <Card className="mb-4">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <RefreshCw className="w-4 h-4 text-primary" />
+              Repeats every
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {[1, 2, 3, 4, 6, 8, 12].map((w) => (
+                <button
+                  key={w}
+                  onClick={() => saveInterval(w)}
+                  disabled={savingInterval}
+                  data-testid={`button-interval-${w}`}
+                  className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
+                    intervalWeeks === w
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-muted-foreground border-border hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  {w === 1 ? "1 week" : `${w} weeks`}
+                </button>
+              ))}
+            </div>
+            {lastPlaced && nextDueDate && (
+              <span className={`ml-auto text-sm ${daysUntilDue !== null && daysUntilDue <= 0 ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground"}`}>
+                {daysUntilDue !== null && daysUntilDue <= 0
+                  ? "⏰ Order due now"
+                  : `Next order due: ${nextDueDate.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}`}
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardContent className="p-0">
           <table className="w-full text-sm">
@@ -2687,12 +2759,12 @@ function PortalLayout() {
     enabled: !!user,
   });
 
-  const { data: recurringItems } = useQuery<any[]>({
+  const { data: recurringData2 } = useQuery<{ items: any[]; intervalWeeks: number; lastPlaced: string | null }>({
     queryKey: ["/api/portal/recurring-items"],
     enabled: !!user,
   });
 
-  const hasRecurring = !!(recurringItems && recurringItems.length > 0);
+  const hasRecurring = !!(recurringData2?.items && recurringData2.items.length > 0);
   const minQty = (company?.priceListName || "").toLowerCase().includes("100 plus") ? 100 : 1;
 
   const portalTitle = company?.tradingName || company?.legalName || "Customer Portal";

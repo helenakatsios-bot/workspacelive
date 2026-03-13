@@ -6539,12 +6539,33 @@ Rules:
   app.get("/api/portal/recurring-items", requirePortalAuth, async (req, res) => {
     try {
       const result = await pool.query(
-        `SELECT recurring_items FROM portal_users WHERE id = $1`,
+        `SELECT recurring_items, recurring_interval_weeks, recurring_last_placed FROM portal_users WHERE id = $1`,
         [req.session.portalUserId]
       );
-      res.json(result.rows[0]?.recurring_items || []);
+      const row = result.rows[0] || {};
+      res.json({
+        items: row.recurring_items || [],
+        intervalWeeks: row.recurring_interval_weeks ?? 2,
+        lastPlaced: row.recurring_last_placed || null,
+      });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch recurring items" });
+    }
+  });
+
+  // Save recurring interval (weeks)
+  app.patch("/api/portal/recurring-interval", requirePortalAuth, async (req, res) => {
+    try {
+      const { intervalWeeks } = req.body;
+      const weeks = parseInt(intervalWeeks);
+      if (isNaN(weeks) || weeks < 1 || weeks > 52) return res.status(400).json({ message: "Invalid interval" });
+      await pool.query(
+        `UPDATE portal_users SET recurring_interval_weeks = $1 WHERE id = $2`,
+        [weeks, req.session.portalUserId]
+      );
+      res.json({ success: true, intervalWeeks: weeks });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save interval" });
     }
   });
 
@@ -6947,6 +6968,14 @@ Rules:
         convertedOrderId: null,
         reviewedBy: null,
       });
+
+      // If this is a recurring order, stamp the last-placed timestamp
+      if ((customerNotes || "").toLowerCase().includes("recurring order")) {
+        await pool.query(
+          `UPDATE portal_users SET recurring_last_placed = NOW() WHERE id = $1`,
+          [req.session.portalUserId]
+        );
+      }
 
       res.json({ success: true, id: orderRequest.id, message: "Your order has been submitted for review. We will process it shortly." });
     } catch (error) {

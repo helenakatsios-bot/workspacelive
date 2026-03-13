@@ -620,6 +620,8 @@ async function runStartupTasks() {
     await pool.query(`ALTER TABLE attachments ADD COLUMN IF NOT EXISTS file_data bytea`);
     await pool.query(`ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS recurring_items JSONB`);
     await pool.query(`ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS notes TEXT`);
+    await pool.query(`ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS recurring_interval_weeks INTEGER DEFAULT 2`);
+    await pool.query(`ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS recurring_last_placed TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE customer_order_requests ADD COLUMN IF NOT EXISTS shopify_order_id text`);
     await pool.query(`ALTER TABLE customer_order_requests ADD COLUMN IF NOT EXISTS shopify_order_number text`);
     await pool.query(`ALTER TABLE customer_order_requests ADD COLUMN IF NOT EXISTS payment_status text`);
