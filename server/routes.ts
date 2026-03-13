@@ -7642,6 +7642,98 @@ Rules:
     }
   });
 
+  // ============ PORTAL CATEGORY ORDER ============
+
+  const DEFAULT_CATEGORY_ORDER = [
+    'CUSTOM INSERTS', '15 % INSERTS', 'WALTER G INSERT', 'INSERTS', 'HIGHGATE INSERTS', '100 PLUS INSERTS',
+    'WINTER 80% DOWN', '80% WINTER FILLED', '80% DUCK WINTER FILLED', '80% MID WARM FILLED',
+    '50% DUCK WINTER FILLED', '50% MID WARM FILLED', '50% GOOSE DOWN', 'HUNGARIAN WINTER STRIP',
+    'HUNGARIAN ALL SEASONS', 'HUNGARIAN LIGHT FILL', '4 SEASONS FILLED', '80% DUCK SUMMER FILLED',
+    '80% GOOSE SUMMER FILLED', '80% GOOSE SUMMER', '80% DUCK COT FILLED', '80% GOOSE DOWN',
+    '80% HUNGARIAN GOOSE', 'MATTRESS TOPPER FILLED', 'MATTRESS TOPPER', 'PIPED PILLOWS', 'PILLOW',
+    'CHAMBER PILLOW', 'HUNGARIAN PILLOW', 'HUNGARIAN PILLOWS', 'HUNGARIAN', 'MICROSOFT', 'MICROSFT',
+    'BLANKETS', 'JACKETS', 'CASES', 'BULK LOOSE FILLING', 'BULK', 'RAW MATERIAL',
+  ];
+
+  // Get portal category order for current portal user (user-specific, falls back to global default)
+  app.get("/api/portal/category-order", requirePortalAuth, async (req, res) => {
+    try {
+      const userId = req.session.portalUserId!;
+      const userRow = await pool.query(`SELECT category_order FROM portal_users WHERE id = $1`, [userId]);
+      const userOrder: string[] | null = userRow.rows[0]?.category_order;
+      if (userOrder && Array.isArray(userOrder) && userOrder.length > 0) {
+        return res.json({ order: userOrder, source: "user" });
+      }
+      const globalRow = await pool.query(`SELECT value FROM crm_settings WHERE key = 'portal_category_order' LIMIT 1`);
+      if (globalRow.rows[0]?.value) {
+        try {
+          const parsed = JSON.parse(globalRow.rows[0].value);
+          if (Array.isArray(parsed)) return res.json({ order: parsed, source: "global" });
+        } catch {}
+      }
+      res.json({ order: DEFAULT_CATEGORY_ORDER, source: "default" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch category order" });
+    }
+  });
+
+  // Save portal category order for current portal user
+  app.post("/api/portal/category-order", requirePortalAuth, async (req, res) => {
+    try {
+      const userId = req.session.portalUserId!;
+      const { order } = req.body;
+      if (!Array.isArray(order)) return res.status(400).json({ message: "order must be an array" });
+      await pool.query(`UPDATE portal_users SET category_order = $1 WHERE id = $2`, [JSON.stringify(order), userId]);
+      res.json({ success: true, order });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save category order" });
+    }
+  });
+
+  // Reset portal user's category order to global default
+  app.delete("/api/portal/category-order", requirePortalAuth, async (req, res) => {
+    try {
+      const userId = req.session.portalUserId!;
+      await pool.query(`UPDATE portal_users SET category_order = NULL WHERE id = $1`, [userId]);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to reset category order" });
+    }
+  });
+
+  // Get global default category order (admin)
+  app.get("/api/admin/portal-category-order", requireAuth, async (req, res) => {
+    try {
+      const row = await pool.query(`SELECT value FROM crm_settings WHERE key = 'portal_category_order' LIMIT 1`);
+      if (row.rows[0]?.value) {
+        try {
+          const parsed = JSON.parse(row.rows[0].value);
+          if (Array.isArray(parsed)) return res.json({ order: parsed, source: "global" });
+        } catch {}
+      }
+      res.json({ order: DEFAULT_CATEGORY_ORDER, source: "default" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch global category order" });
+    }
+  });
+
+  // Save global default category order (admin)
+  app.post("/api/admin/portal-category-order", requireAdmin, async (req, res) => {
+    try {
+      const { order } = req.body;
+      if (!Array.isArray(order)) return res.status(400).json({ message: "order must be an array" });
+      const existing = await pool.query(`SELECT id FROM crm_settings WHERE key = 'portal_category_order' LIMIT 1`);
+      if (existing.rows.length > 0) {
+        await pool.query(`UPDATE crm_settings SET value = $1, updated_at = NOW() WHERE key = 'portal_category_order'`, [JSON.stringify(order)]);
+      } else {
+        await pool.query(`INSERT INTO crm_settings (id, key, value, created_at, updated_at) VALUES (gen_random_uuid(), 'portal_category_order', $1, NOW(), NOW())`, [JSON.stringify(order)]);
+      }
+      res.json({ success: true, order });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save global category order" });
+    }
+  });
+
   // ============ ADMIN: PORTAL USER MANAGEMENT ============
 
   app.get("/api/companies/:id/portal-users", requireAdmin, async (req, res) => {

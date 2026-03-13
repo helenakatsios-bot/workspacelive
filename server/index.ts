@@ -1390,6 +1390,13 @@ async function runStartupTasks() {
     console.error("[15% Duck Down Inserts cleanup] Error:", err.message);
   }
 
+  // Add category_order column to portal_users for per-customer category ordering
+  try {
+    await pool.query(`ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS category_order JSONB`);
+  } catch (err: any) {
+    console.error("portal_users category_order migration error:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 

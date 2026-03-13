@@ -1280,7 +1280,8 @@ export default function AdminPage() {
           <OrderFormSettings />
         </TabsContent>
 
-        <TabsContent value="portal" className="mt-6">
+        <TabsContent value="portal" className="mt-6 space-y-6">
+          <AdminCategoryOrder />
           <PortalUsersManagement />
         </TabsContent>
 
@@ -1816,6 +1817,79 @@ function OrderFormSettings() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function AdminCategoryOrder() {
+  const { toast } = useToast();
+  const [draft, setDraft] = useState<string[]>([]);
+  const [initialized, setInitialized] = useState(false);
+
+  const { data, isLoading } = useQuery<{ order: string[]; source: string }>({
+    queryKey: ["/api/admin/portal-category-order"],
+  });
+
+  useEffect(() => {
+    if (data?.order && !initialized) {
+      setDraft(data.order);
+      setInitialized(true);
+    }
+  }, [data, initialized]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (order: string[]) => {
+      const res = await apiRequest("POST", "/api/admin/portal-category-order", { order });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-category-order"] });
+      toast({ title: "Category order saved", description: "Default portal category order updated." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save category order", variant: "destructive" }),
+  });
+
+  const moveUp = (idx: number) => {
+    const next = [...draft];
+    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+    setDraft(next);
+  };
+  const moveDown = (idx: number) => {
+    const next = [...draft];
+    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+    setDraft(next);
+  };
+
+  if (isLoading) return <div className="text-sm text-muted-foreground">Loading category order…</div>;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Default Portal Category Order</CardTitle>
+        <CardDescription>Set the default order categories appear in for all portal customers. Individual customers can override this in their own New Order page.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-1 mb-4 max-h-[500px] overflow-y-auto pr-1">
+          {draft.map((cat, idx) => (
+            <div key={cat} className="flex items-center gap-2 bg-muted/40 rounded-md px-3 py-2">
+              <span className="w-6 text-xs text-muted-foreground text-right shrink-0">{idx + 1}.</span>
+              <span className="flex-1 text-sm font-medium">{cat}</span>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={idx === 0} onClick={() => moveUp(idx)} data-testid={`button-admin-move-up-${idx}`}>
+                  <ChevronRight className="w-4 h-4 -rotate-90" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={idx === draft.length - 1} onClick={() => moveDown(idx)} data-testid={`button-admin-move-down-${idx}`}>
+                  <ChevronRight className="w-4 h-4 rotate-90" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <Button onClick={() => saveMutation.mutate(draft)} disabled={saveMutation.isPending} data-testid="button-save-admin-category-order">
+          {saveMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+          Save Category Order
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 

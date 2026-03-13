@@ -35,9 +35,14 @@ import {
   RefreshCw,
   CheckCircle2,
   CalendarClock,
+  ChevronUp,
+  GripVertical,
+  ListOrdered,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -962,6 +967,44 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
   const [sizeGroupFillings, setSizeGroupFillings] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [editLoaded, setEditLoaded] = useState(false);
+  const [showReorderModal, setShowReorderModal] = useState(false);
+  const [reorderDraft, setReorderDraft] = useState<string[]>([]);
+
+  const { data: categoryOrderData } = useQuery<{ order: string[]; source: string }>({
+    queryKey: ["/api/portal/category-order"],
+  });
+
+  const saveOrderMutation = useMutation({
+    mutationFn: async (order: string[]) => {
+      const res = await fetch("/api/portal/category-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ order }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      return res.json();
+    },
+    onSuccess: () => {
+      portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/category-order"] });
+      toast({ title: "Category order saved", description: "Your preferred order has been saved." });
+      setShowReorderModal(false);
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save category order", variant: "destructive" }),
+  });
+
+  const resetOrderMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/portal/category-order", { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error("Failed to reset");
+      return res.json();
+    },
+    onSuccess: () => {
+      portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/category-order"] });
+      toast({ title: "Reset to default", description: "Category order has been reset." });
+      setShowReorderModal(false);
+    },
+  });
 
   // Reset all cart state whenever the edit request ID changes (new edit session)
   useEffect(() => {
@@ -1110,12 +1153,13 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
   }, [products, search]);
 
   const PORTAL_CATEGORY_ORDER = [
+    'CUSTOM INSERTS',
+    'Custom Inserts',
+    '15 % INSERTS',
     'WALTER G INSERT',
     'INSERTS',
     'HIGHGATE INSERTS',
     '100 PLUS INSERTS',
-    'CUSTOM INSERTS',
-    'Custom Inserts',
     'WINTER 80% DOWN',
     '80% WINTER FILLED',
     '80% DUCK WINTER FILLED',
@@ -1168,6 +1212,8 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
     });
   };
 
+  const activeCategoryOrder = categoryOrderData?.order || PORTAL_CATEGORY_ORDER;
+
   const grouped = useMemo(() => {
     const groups: Record<string, any[]> = {};
     for (const p of filteredProducts) {
@@ -1177,7 +1223,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
       groups[cat].push(p);
     }
     const sorted: Record<string, any[]> = {};
-    for (const cat of PORTAL_CATEGORY_ORDER) {
+    for (const cat of activeCategoryOrder) {
       if (groups[cat]) {
         sorted[cat] = groups[cat];
       }
@@ -1188,7 +1234,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
       }
     }
     return sorted;
-  }, [filteredProducts]);
+  }, [filteredProducts, activeCategoryOrder]);
 
   const PILLOW_SIZES = ['STANDARD', 'KING', 'QUEEN', 'EURO'];
 
@@ -1500,15 +1546,30 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search products..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10"
-              data-testid="input-search-products"
-            />
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search products..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10"
+                data-testid="input-search-products"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-2"
+              onClick={() => {
+                setReorderDraft(Object.keys(grouped));
+                setShowReorderModal(true);
+              }}
+              data-testid="button-reorder-categories"
+            >
+              <ListOrdered className="w-4 h-4" />
+              Reorder
+            </Button>
           </div>
 
           {Object.entries(grouped).map(([category, prods]) => {
@@ -2134,6 +2195,82 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
           </Card>
         </div>
       </div>
+
+      {/* Category Reorder Modal */}
+      <Dialog open={showReorderModal} onOpenChange={setShowReorderModal}>
+        <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ListOrdered className="w-5 h-5" />
+              Reorder Categories
+            </DialogTitle>
+            <DialogDescription>
+              Move categories up or down to set your preferred order. Saved just for you.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-1 py-2">
+            {reorderDraft.map((cat, idx) => (
+              <div key={cat} className="flex items-center gap-2 bg-muted/40 rounded-md px-3 py-2">
+                <GripVertical className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="flex-1 text-sm font-medium">{cat}</span>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    disabled={idx === 0}
+                    onClick={() => {
+                      const next = [...reorderDraft];
+                      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                      setReorderDraft(next);
+                    }}
+                    data-testid={`button-move-up-${cat}`}
+                  >
+                    <ChevronUp className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    disabled={idx === reorderDraft.length - 1}
+                    onClick={() => {
+                      const next = [...reorderDraft];
+                      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                      setReorderDraft(next);
+                    }}
+                    data-testid={`button-move-down-${cat}`}
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2 pt-2 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => resetOrderMutation.mutate()}
+              disabled={resetOrderMutation.isPending}
+              data-testid="button-reset-category-order"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset to Default
+            </Button>
+            <div className="flex-1" />
+            <Button variant="outline" size="sm" onClick={() => setShowReorderModal(false)}>Cancel</Button>
+            <Button
+              size="sm"
+              onClick={() => saveOrderMutation.mutate(reorderDraft)}
+              disabled={saveOrderMutation.isPending}
+              data-testid="button-save-category-order"
+            >
+              {saveOrderMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Order"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2865,6 +3002,7 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
           })}
         </div>
       )}
+
     </div>
   );
 }
