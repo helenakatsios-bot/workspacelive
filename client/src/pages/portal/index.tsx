@@ -2766,11 +2766,17 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
         </Button>
       </div>
 
+      {templates.length > 0 && (
+        <div className="flex items-start gap-2.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-4 py-3 text-sm text-emerald-800 dark:text-emerald-300">
+          <span className="text-base shrink-0">⚡</span>
+          <span><strong>Orders are placed automatically</strong> — on the scheduled date, your order is sent to our team without you needing to do anything. You can still place an order early using the button on any template.</span>
+        </div>
+      )}
       {templates.length === 0 ? (
         <div className="p-8 text-center text-muted-foreground">
           <RefreshCw className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="font-medium text-foreground">No recurring orders set up yet</p>
-          <p className="text-sm mt-1 mb-4">Create a template for your regular orders and place them with one click.</p>
+          <p className="text-sm mt-1 mb-4">Create a template and your orders will be placed automatically on schedule — no action needed from you.</p>
           <Button onClick={openCreate} data-testid="button-create-first-template"><Plus className="w-4 h-4 mr-2" /> Create Template</Button>
         </div>
       ) : (
@@ -2825,7 +2831,7 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
                               : "bg-muted/60 border border-border text-foreground"
                           }`} data-testid={`text-next-date-${tmpl.id}`}>
                             <CalendarClock className="w-4 h-4 shrink-0" />
-                            {isDue ? "Order due now — place when ready" : `Next order: ${nextDueDate.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`}
+                            {isDue ? "⚡ Auto-placing today — or place manually now" : `Auto-placed on: ${nextDueDate.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`}
                           </div>
                         )}
                         {!lastPlaced && (
@@ -2843,8 +2849,13 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
                           {deleting === tmpl.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
                         </Button>
                       </div>
-                      <Button onClick={() => openPlace(tmpl)} data-testid={`button-place-template-${tmpl.id}`}>
-                        <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Place Order
+                      <Button
+                        variant={isDue ? "default" : "outline"}
+                        onClick={() => openPlace(tmpl)}
+                        data-testid={`button-place-template-${tmpl.id}`}
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                        {isDue ? "Place Now" : "Place Early"}
                       </Button>
                     </div>
                   </div>
