@@ -2299,37 +2299,33 @@ function PortalAccount() {
 function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string) => void; minQty?: number }) {
   const { toast } = useToast();
 
-  const { data: recurringData, isLoading, refetch: refetchRecurring } = useQuery<{ items: any[]; intervalWeeks: number; lastPlaced: string | null }>({
+  const { data: recurringData, isLoading, refetch: refetchRecurring } = useQuery<{ templates: any[] }>({
     queryKey: ["/api/portal/recurring-items"],
   });
-
-  const { data: allProducts } = useQuery<any[]>({
-    queryKey: ["/api/portal/products"],
-  });
-
-  const [editMode, setEditMode] = useState(false);
-  const [editItems, setEditItems] = useState<any[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [saving, setSaving] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [quantities, setQuantities] = useState<Record<number, number>>({});
-  const [addingVariant, setAddingVariant] = useState<{ productId: string; variants: any[] } | null>(null);
-  const [intervalWeeks, setIntervalWeeks] = useState<number>(2);
-  const [savingInterval, setSavingInterval] = useState(false);
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [requestedDate, setRequestedDate] = useState("");
-
+  const { data: allProducts } = useQuery<any[]>({ queryKey: ["/api/portal/products"] });
   const { data: portalCompany } = useQuery<any>({ queryKey: ["/api/portal/company"] });
 
-  const savedItems = recurringData?.items || [];
-  const lastPlaced = recurringData?.lastPlaced || null;
+  const templates = recurringData?.templates || [];
 
-  useEffect(() => {
-    if (recurringData?.intervalWeeks) {
-      setIntervalWeeks(recurringData.intervalWeeks);
-    }
-  }, [recurringData?.intervalWeeks]);
+  type Mode = "list" | "edit" | "place";
+  const [mode, setMode] = useState<Mode>("list");
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
+  const activeTemplate = templates.find(t => t.id === activeTemplateId) || null;
+
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("Regular Order");
+  const [editItems, setEditItems] = useState<any[]>([]);
+  const [editIntervalWeeks, setEditIntervalWeeks] = useState(2);
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [addingVariant, setAddingVariant] = useState<{ productId: string; variants: any[] } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const [quantities, setQuantities] = useState<Record<number, number>>({});
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [requestedDate, setRequestedDate] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
     if (portalCompany?.shippingAddress && !deliveryAddress) {
@@ -2337,133 +2333,106 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
     }
   }, [portalCompany?.shippingAddress]);
 
-  const baseDate = lastPlaced ? new Date(lastPlaced) : new Date();
-  const nextDueDate = new Date(baseDate.getTime() + intervalWeeks * 7 * 24 * 60 * 60 * 1000);
-  const daysUntilDue = Math.ceil((nextDueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  useEffect(() => {
+    if (mode === "place") { setQuantities({}); setRequestedDate(""); }
+  }, [mode, activeTemplateId]);
 
-  async function saveInterval(weeks: number) {
-    setSavingInterval(true);
-    try {
-      await fetch("/api/portal/recurring-interval", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intervalWeeks: weeks }),
-        credentials: "include",
-      });
-      setIntervalWeeks(weeks);
-      portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/recurring-items"] });
-    } catch {
-      toast({ title: "Failed to save schedule", variant: "destructive" });
-    } finally {
-      setSavingInterval(false);
-    }
+  const productCategories = Array.from(new Set((allProducts || []).map((p: any) => p.category || "Other"))).sort();
+  const productsInCategory = selectedCategory ? (allProducts || []).filter((p: any) => (p.category || "Other") === selectedCategory) : [];
+
+  function openCreate() {
+    setEditId(null); setEditName(""); setEditItems([]); setEditIntervalWeeks(2);
+    setSelectedCategory(""); setAddingVariant(null); setMode("edit");
   }
 
-  const enterEditMode = () => {
-    setEditItems(savedItems.map((i: any) => ({ ...i })));
-    setEditMode(true);
-    setSelectedCategory("");
-    setAddingVariant(null);
-  };
+  function openEdit(tmpl: any) {
+    setEditId(tmpl.id); setEditName(tmpl.name); setEditItems(tmpl.items.map((i: any) => ({ ...i })));
+    setEditIntervalWeeks(tmpl.intervalWeeks ?? 2); setSelectedCategory(""); setAddingVariant(null); setMode("edit");
+  }
 
-  const cancelEdit = () => {
-    setEditMode(false);
-    setEditItems([]);
-    setSelectedCategory("");
-    setAddingVariant(null);
-  };
+  function openPlace(tmpl: any) {
+    setActiveTemplateId(tmpl.id); setMode("place");
+  }
 
-  const saveTemplate = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch("/api/portal/recurring-items", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: editItems }),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to save");
-      await refetchRecurring();
-      portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/recurring-items"] });
-      setEditMode(false);
-      setEditItems([]);
-      toast({ title: "Template saved!", description: "Your recurring order template has been updated." });
-    } catch {
-      toast({ title: "Error", description: "Failed to save template.", variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
+  function cancelEdit() { setMode("list"); setEditId(null); }
 
   const removeEditItem = (i: number) => setEditItems(prev => prev.filter((_, idx) => idx !== i));
-
-  const updateEditQty = (i: number, qty: number) => {
-    setEditItems(prev => prev.map((item, idx) => idx === i ? { ...item, quantity: Math.max(minQty, qty) } : item));
-  };
+  const updateEditQty = (i: number, qty: number) => setEditItems(prev => prev.map((item, idx) => idx === i ? { ...item, quantity: Math.max(minQty, qty) } : item));
 
   const addProduct = (product: any, variant?: any) => {
     const filling = variant?.filling || product.filling || "";
     const weight = variant?.weight || product.weight || "";
     const unitPrice = variant?.unitPrice || product.unitPrice || product.price || "0";
-    const newItem = {
-      productId: product.id,
-      productName: product.name,
-      category: product.category || "",
-      filling: filling || undefined,
-      weight: weight || undefined,
-      unitPrice: String(unitPrice),
-      quantity: minQty,
-    };
-    setEditItems(prev => [...prev, newItem]);
+    setEditItems(prev => [...prev, { productId: product.id, productName: product.name, category: product.category || "", filling: filling || undefined, weight: weight || undefined, unitPrice: String(unitPrice), quantity: minQty }]);
     setAddingVariant(null);
   };
 
   const handleProductClick = (product: any) => {
     const variants = product.variants || [];
-    if (variants.length > 1) {
-      setAddingVariant({ productId: product.id, variants });
-    } else {
-      addProduct(product, variants[0]);
-    }
+    if (variants.length > 1) setAddingVariant({ productId: product.id, variants });
+    else addProduct(product, variants[0]);
   };
 
-  const getOrderQty = (i: number) => quantities[i] ?? savedItems[i]?.quantity ?? 0;
-  const orderTotal = savedItems.reduce((sum: number, item: any, i: number) =>
-    sum + getOrderQty(i) * parseFloat(item.unitPrice || "0"), 0);
+  const saveTemplate = async () => {
+    if (!editName.trim()) { toast({ title: "Please enter a template name", variant: "destructive" }); return; }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/portal/recurring-items", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({ template: { id: editId || undefined, name: editName.trim(), items: editItems, intervalWeeks: editIntervalWeeks } }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      await refetchRecurring();
+      portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/recurring-items"] });
+      setMode("list");
+      toast({ title: "Template saved!" });
+    } catch { toast({ title: "Error saving template", variant: "destructive" }); }
+    finally { setSaving(false); }
+  };
 
-  const productCategories = Array.from(new Set((allProducts || []).map((p: any) => p.category || "Other"))).sort();
-  const productsInCategory = selectedCategory
-    ? (allProducts || []).filter((p: any) => (p.category || "Other") === selectedCategory)
-    : [];
+  const deleteTemplate = async (id: string) => {
+    setDeleting(id);
+    try {
+      await fetch(`/api/portal/recurring-items/${id}`, { method: "DELETE", credentials: "include" });
+      await refetchRecurring();
+      portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/recurring-items"] });
+      toast({ title: "Template deleted" });
+    } catch { toast({ title: "Error deleting template", variant: "destructive" }); }
+    finally { setDeleting(null); }
+  };
+
+  const saveInterval = async (templateId: string, weeks: number) => {
+    await fetch("/api/portal/recurring-interval", {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include",
+      body: JSON.stringify({ templateId, intervalWeeks: weeks }),
+    });
+    await refetchRecurring();
+    portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/recurring-items"] });
+  };
+
+  const getOrderQty = (i: number, tmpl: any) => quantities[i] ?? (tmpl?.items[i]?.quantity ?? 0);
+  const orderTotal = (activeTemplate?.items || []).reduce((sum: number, item: any, i: number) =>
+    sum + getOrderQty(i, activeTemplate) * parseFloat(item.unitPrice || "0"), 0);
 
   const handlePlaceOrder = async () => {
-    const orderItems = savedItems.map((item: any, i: number) => ({ ...item, qty: getOrderQty(i) })).filter((item: any) => item.qty > 0);
-    if (orderItems.length === 0) {
-      toast({ title: "No items", description: "Please set at least one quantity above zero.", variant: "destructive" });
-      return;
-    }
+    if (!activeTemplate) return;
+    const orderItems = activeTemplate.items.map((item: any, i: number) => ({ ...item, qty: getOrderQty(i, activeTemplate) })).filter((item: any) => item.qty > 0);
+    if (orderItems.length === 0) { toast({ title: "No items", description: "Please set at least one quantity above zero.", variant: "destructive" }); return; }
     setSubmitting(true);
     try {
       const res = await fetch("/api/portal/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
         body: JSON.stringify({
+          templateId: activeTemplate.id,
           items: orderItems.map((item: any) => ({
-            productId: item.productId,
-            productName: item.productName,
-            quantity: item.qty,
-            filling: item.filling || undefined,
-            weight: item.weight || undefined,
+            productId: item.productId, productName: item.productName, quantity: item.qty,
+            filling: item.filling || undefined, weight: item.weight || undefined,
             unitPrice: parseFloat(item.unitPrice || "0"),
             lineTotal: Math.round(item.qty * parseFloat(item.unitPrice || "0") * 100) / 100,
           })),
           shippingAddress: deliveryAddress || undefined,
-          customerNotes: [
-            "Recurring order",
-            requestedDate ? `Requested delivery: ${new Date(requestedDate + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}` : "",
-          ].filter(Boolean).join("\n"),
+          customerNotes: ["Recurring order" + (activeTemplate.name ? ` — ${activeTemplate.name}` : ""), requestedDate ? `Requested delivery: ${new Date(requestedDate + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}` : ""].filter(Boolean).join("\n"),
         }),
-        credentials: "include",
       });
       if (!res.ok) throw new Error((await res.json()).message || "Failed to place order");
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/orders"] });
@@ -2471,16 +2440,11 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/recurring-items"] });
       setSubmitted(true);
       toast({ title: "Order submitted!", description: "Your recurring order has been submitted for review." });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    } finally {
-      setSubmitting(false);
-    }
+    } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); }
+    finally { setSubmitting(false); }
   };
 
-  if (isLoading) {
-    return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
-  }
+  if (isLoading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
   if (submitted) {
     return (
@@ -2488,25 +2452,50 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
         <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
         <p className="text-lg font-semibold">Order submitted!</p>
         <p className="text-muted-foreground text-sm mt-1 mb-4">Your recurring order is pending review.</p>
-        <Button onClick={() => { setSubmitted(false); onNavigate("orders"); }} data-testid="button-view-orders-after-recurring">View My Orders</Button>
+        <div className="flex gap-2 justify-center">
+          <Button variant="outline" onClick={() => { setSubmitted(false); setMode("list"); }} data-testid="button-back-to-recurring">Back to Recurring</Button>
+          <Button onClick={() => { setSubmitted(false); onNavigate("orders"); }} data-testid="button-view-orders-after-recurring">View My Orders</Button>
+        </div>
       </div>
     );
   }
 
-  if (editMode) {
+  // ── EDIT / CREATE MODE ────────────────────────────────────────────────────
+  if (mode === "edit") {
     return (
       <div className="p-4 md:p-6 max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <RefreshCw className="w-5 h-5 text-primary" />
-            <h1 className="text-xl font-semibold">Edit Recurring Template</h1>
-          </div>
+          <button onClick={cancelEdit} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="button-back-from-edit">
+            ← Back
+          </button>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={cancelEdit} data-testid="button-cancel-edit">Cancel</Button>
             <Button size="sm" onClick={saveTemplate} disabled={saving} data-testid="button-save-template">
-              {saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-              Save Template
+              {saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null} Save Template
             </Button>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Template Name</label>
+          <input
+            className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 font-medium"
+            placeholder="e.g. Weekly Inserts, Monthly Pillows…"
+            value={editName}
+            onChange={e => setEditName(e.target.value)}
+            data-testid="input-template-name"
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Repeats every</label>
+          <div className="flex flex-wrap gap-1.5">
+            {[1, 2, 3, 4, 6, 8, 12].map(w => (
+              <button key={w} onClick={() => setEditIntervalWeeks(w)} data-testid={`button-edit-interval-${w}`}
+                className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${editIntervalWeeks === w ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:border-primary hover:text-primary"}`}>
+                {w === 1 ? "1 week" : `${w} weeks`}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -2514,22 +2503,18 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
           <Card className="mb-4">
             <CardContent className="p-0">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/30">
-                    <th className="text-left p-3 font-medium">Product</th>
-                    <th className="text-center p-3 font-medium w-24">Qty</th>
-                    <th className="text-right p-3 font-medium w-24">Each</th>
-                    <th className="w-10"></th>
-                  </tr>
-                </thead>
+                <thead><tr className="border-b bg-muted/30">
+                  <th className="text-left p-3 font-medium">Product</th>
+                  <th className="text-center p-3 font-medium w-24">Qty</th>
+                  <th className="text-right p-3 font-medium w-24">Each</th>
+                  <th className="w-10"></th>
+                </tr></thead>
                 <tbody>
                   {editItems.map((item: any, i: number) => (
                     <tr key={i} className="border-b last:border-0">
                       <td className="p-3">
                         <p className="font-medium">{item.productName}</p>
-                        {(item.filling || item.weight) && (
-                          <p className="text-xs text-muted-foreground">{[item.filling, item.weight].filter(Boolean).join(" · ")}</p>
-                        )}
+                        {(item.filling || item.weight) && <p className="text-xs text-muted-foreground">{[item.filling, item.weight].filter(Boolean).join(" · ")}</p>}
                       </td>
                       <td className="p-3">
                         <div className="flex items-center justify-center gap-1">
@@ -2540,9 +2525,7 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
                       </td>
                       <td className="p-3 text-right text-muted-foreground">${parseFloat(item.unitPrice || "0").toFixed(2)}</td>
                       <td className="p-2 text-center">
-                        <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => removeEditItem(i)} data-testid={`button-remove-item-${i}`}>
-                          <X className="w-3 h-3" />
-                        </Button>
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => removeEditItem(i)} data-testid={`button-remove-item-${i}`}><X className="w-3 h-3" /></Button>
                       </td>
                     </tr>
                   ))}
@@ -2559,63 +2542,34 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
         <Card>
           <CardContent className="p-4">
             <p className="text-sm font-medium mb-3">Add products</p>
-
             {!addingVariant ? (
               <>
-                <Select
-                  value={selectedCategory}
-                  onValueChange={(val) => { setSelectedCategory(val); setAddingVariant(null); }}
-                  data-testid="select-category"
-                >
-                  <SelectTrigger className="w-full" data-testid="trigger-category">
-                    <SelectValue placeholder="Select a category…" />
-                  </SelectTrigger>
+                <Select value={selectedCategory} onValueChange={val => { setSelectedCategory(val); setAddingVariant(null); }} data-testid="select-category">
+                  <SelectTrigger className="w-full" data-testid="trigger-category"><SelectValue placeholder="Select a category…" /></SelectTrigger>
                   <SelectContent>
-                    {productCategories.map((cat: string) => (
-                      <SelectItem key={cat} value={cat} data-testid={`option-category-${cat}`}>{cat}</SelectItem>
-                    ))}
+                    {productCategories.map((cat: string) => <SelectItem key={cat} value={cat} data-testid={`option-category-${cat}`}>{cat}</SelectItem>)}
                   </SelectContent>
                 </Select>
-
                 {selectedCategory && productsInCategory.length > 0 && (
                   <div className="mt-3 space-y-1 max-h-64 overflow-y-auto">
                     {productsInCategory.map((product: any) => (
-                      <button
-                        key={product.id}
-                        className="w-full text-left px-3 py-2.5 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 text-sm flex items-center justify-between gap-2 transition-colors"
-                        onClick={() => handleProductClick(product)}
-                        data-testid={`button-add-product-${product.id}`}
-                      >
+                      <button key={product.id} className="w-full text-left px-3 py-2.5 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 text-sm flex items-center justify-between gap-2 transition-colors" onClick={() => handleProductClick(product)} data-testid={`button-add-product-${product.id}`}>
                         <span className="font-medium">{product.name}</span>
-                        <span className="text-xs text-muted-foreground shrink-0">
-                          {(product.variants || []).length > 1
-                            ? `${(product.variants || []).length} options →`
-                            : `$${parseFloat((product.variants?.[0]?.unitPrice || product.unitPrice || "0")).toFixed(2)}`}
-                        </span>
+                        <span className="text-xs text-muted-foreground shrink-0">{(product.variants || []).length > 1 ? `${(product.variants || []).length} options →` : `$${parseFloat((product.variants?.[0]?.unitPrice || product.unitPrice || "0")).toFixed(2)}`}</span>
                       </button>
                     ))}
                   </div>
                 )}
-
-                {selectedCategory && productsInCategory.length === 0 && (
-                  <p className="mt-3 text-sm text-muted-foreground text-center">No products in this category</p>
-                )}
+                {selectedCategory && productsInCategory.length === 0 && <p className="mt-3 text-sm text-muted-foreground text-center">No products in this category</p>}
               </>
             ) : (
               <div>
-                <p className="text-sm text-muted-foreground mb-2">
-                  Select filling / weight for <span className="font-medium text-foreground">{(allProducts || []).find((p: any) => p.id === addingVariant.productId)?.name}</span>:
-                </p>
+                <p className="text-sm text-muted-foreground mb-2">Select filling / weight for <span className="font-medium text-foreground">{(allProducts || []).find((p: any) => p.id === addingVariant.productId)?.name}</span>:</p>
                 <div className="space-y-1 max-h-56 overflow-y-auto">
                   {addingVariant.variants.map((v: any, i: number) => {
                     const prod = (allProducts || []).find((p: any) => p.id === addingVariant.productId);
                     return (
-                      <button
-                        key={i}
-                        className="w-full text-left px-3 py-2.5 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 text-sm flex items-center justify-between transition-colors"
-                        onClick={() => prod && addProduct(prod, v)}
-                        data-testid={`button-select-variant-${i}`}
-                      >
+                      <button key={i} className="w-full text-left px-3 py-2.5 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 text-sm flex items-center justify-between transition-colors" onClick={() => prod && addProduct(prod, v)} data-testid={`button-select-variant-${i}`}>
                         <span>{[v.filling, v.weight].filter(Boolean).join(" · ") || "Default"}</span>
                         <span className="text-xs text-muted-foreground">${parseFloat(v.unitPrice || "0").toFixed(2)}</span>
                       </button>
@@ -2631,163 +2585,181 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
     );
   }
 
-  if (savedItems.length === 0) {
+  // ── PLACE ORDER MODE ──────────────────────────────────────────────────────
+  if (mode === "place" && activeTemplate) {
+    const tmplItems = activeTemplate.items || [];
+    const lastPlaced = activeTemplate.lastPlaced || null;
+    const iw = activeTemplate.intervalWeeks ?? 2;
+    const baseDate = lastPlaced ? new Date(lastPlaced) : new Date();
+    const nextDueDate = new Date(baseDate.getTime() + iw * 7 * 24 * 60 * 60 * 1000);
+    const daysUntilDue = Math.ceil((nextDueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+
     return (
-      <div className="p-8 text-center text-muted-foreground">
-        <RefreshCw className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p className="font-medium text-foreground">No recurring order set up yet</p>
-        <p className="text-sm mt-1 mb-4">Build your standard order once, then reorder it anytime with one click.</p>
-        <Button onClick={enterEditMode} data-testid="button-create-template">
-          <Plus className="w-4 h-4 mr-2" /> Create Template
-        </Button>
+      <div className="p-4 md:p-6 max-w-3xl mx-auto">
+        <div className="flex items-center justify-between mb-1">
+          <button onClick={() => setMode("list")} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="button-back-from-place">← All templates</button>
+          <Button variant="outline" size="sm" onClick={() => openEdit(activeTemplate)} data-testid="button-edit-from-place"><Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit Template</Button>
+        </div>
+        <div className="flex items-center gap-2 mt-2 mb-1">
+          <RefreshCw className="w-5 h-5 text-primary" />
+          <h1 className="text-xl font-semibold">{activeTemplate.name}</h1>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">Adjust quantities as needed, then place your order.</p>
+
+        <Card className="mb-4">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 text-sm font-medium"><RefreshCw className="w-4 h-4 text-primary" /> Repeats every</div>
+              <div className="flex flex-wrap gap-1.5">
+                {[1, 2, 3, 4, 6, 8, 12].map(w => (
+                  <button key={w} onClick={() => saveInterval(activeTemplate.id, w)} data-testid={`button-interval-${w}`}
+                    className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${iw === w ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:border-primary hover:text-primary"}`}>
+                    {w === 1 ? "1 week" : `${w} weeks`}
+                  </button>
+                ))}
+              </div>
+              <span className={`ml-auto text-sm font-medium ${daysUntilDue <= 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                {daysUntilDue <= 0 ? "⏰ Order due now" : lastPlaced ? `Next: ${nextDueDate.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}` : `Every ${iw === 1 ? "week" : `${iw} weeks`}`}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-0">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b bg-muted/30">
+                <th className="text-left p-3 font-medium">Product</th>
+                <th className="text-center p-3 font-medium w-28">Quantity</th>
+                <th className="text-right p-3 font-medium w-28">Line Total</th>
+              </tr></thead>
+              <tbody>
+                {tmplItems.map((item: any, i: number) => {
+                  const qty = getOrderQty(i, activeTemplate);
+                  return (
+                    <tr key={i} className="border-b last:border-0">
+                      <td className="p-3">
+                        <p className="font-medium">{item.productName}</p>
+                        {(item.filling || item.weight) && <p className="text-xs text-muted-foreground">{[item.filling, item.weight].filter(Boolean).join(" · ")}</p>}
+                        <p className="text-xs text-muted-foreground">${parseFloat(item.unitPrice || "0").toFixed(2)} each</p>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="flex items-center justify-center gap-1">
+                            <Button size="icon" variant="outline" className="h-7 w-7" data-testid={`button-dec-qty-${i}`} onClick={() => setQuantities(prev => { const cur = prev[i] ?? item.quantity; const next = cur - 1; return { ...prev, [i]: next < minQty ? 0 : next }; })}><Minus className="w-3 h-3" /></Button>
+                            <span className="w-10 text-center font-medium" data-testid={`text-qty-${i}`}>{qty}</span>
+                            <Button size="icon" variant="outline" className="h-7 w-7" data-testid={`button-inc-qty-${i}`} onClick={() => setQuantities(prev => { const cur = prev[i] ?? item.quantity; return { ...prev, [i]: cur === 0 ? minQty : cur + 1 }; })}><Plus className="w-3 h-3" /></Button>
+                          </div>
+                          {minQty > 1 && <span className="text-[10px] text-muted-foreground">Min {minQty}</span>}
+                        </div>
+                      </td>
+                      <td className="p-3 text-right font-medium">${(qty * parseFloat(item.unitPrice || "0")).toFixed(2)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-4">
+          <CardContent className="p-4 space-y-4">
+            <h2 className="text-sm font-semibold flex items-center gap-2"><Truck className="w-4 h-4 text-primary" /> Delivery Details</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Delivery Address</label>
+                <textarea rows={2} className="w-full text-sm border rounded-md px-3 py-2 bg-background resize-none focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="Enter delivery address..." value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} data-testid="input-delivery-address" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Requested Delivery Date <span className="text-muted-foreground/60">(optional)</span></label>
+                <input type="date" className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40" value={requestedDate} onChange={e => setRequestedDate(e.target.value)} min={new Date().toISOString().split("T")[0]} data-testid="input-requested-date" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="mt-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm text-muted-foreground">Order Total</p>
+            <p className="text-xl font-bold" data-testid="text-recurring-total">${orderTotal.toFixed(2)}</p>
+          </div>
+          <Button size="lg" onClick={handlePlaceOrder} disabled={submitting} data-testid="button-place-recurring-order">
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            Place Recurring Order
+          </Button>
+        </div>
       </div>
     );
   }
 
+  // ── LIST MODE ─────────────────────────────────────────────────────────────
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <RefreshCw className="w-5 h-5 text-primary" />
-          <h1 className="text-xl font-semibold">Recurring Order</h1>
+          <h1 className="text-xl font-semibold">Recurring Orders</h1>
         </div>
-        <Button variant="outline" size="sm" onClick={enterEditMode} data-testid="button-edit-template">
-          <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit Template
+        <Button size="sm" onClick={openCreate} data-testid="button-create-template">
+          <Plus className="w-4 h-4 mr-1.5" /> New Template
         </Button>
       </div>
-      <p className="text-sm text-muted-foreground mb-4">Adjust quantities as needed, then place your order.</p>
 
-      {/* Recurrence frequency selector */}
-      <Card className="mb-4">
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <RefreshCw className="w-4 h-4 text-primary" />
-              Repeats every
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {[1, 2, 3, 4, 6, 8, 12].map((w) => (
-                <button
-                  key={w}
-                  onClick={() => saveInterval(w)}
-                  disabled={savingInterval}
-                  data-testid={`button-interval-${w}`}
-                  className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
-                    intervalWeeks === w
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-background text-muted-foreground border-border hover:border-primary hover:text-primary"
-                  }`}
-                >
-                  {w === 1 ? "1 week" : `${w} weeks`}
-                </button>
-              ))}
-            </div>
-            <span className={`ml-auto text-sm font-medium ${daysUntilDue <= 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
-              {daysUntilDue <= 0
-                ? "⏰ Order due now"
-                : lastPlaced
-                  ? `Next order due: ${nextDueDate.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}`
-                  : `Schedule: every ${intervalWeeks === 1 ? "week" : `${intervalWeeks} weeks`}`}
-            </span>
-          </div>
-        </CardContent>
-      </Card>
+      {templates.length === 0 ? (
+        <div className="p-8 text-center text-muted-foreground">
+          <RefreshCw className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="font-medium text-foreground">No recurring orders set up yet</p>
+          <p className="text-sm mt-1 mb-4">Create a template for your regular orders and place them with one click.</p>
+          <Button onClick={openCreate} data-testid="button-create-first-template"><Plus className="w-4 h-4 mr-2" /> Create Template</Button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {templates.map((tmpl: any) => {
+            const lastPlaced = tmpl.lastPlaced || null;
+            const iw = tmpl.intervalWeeks ?? 2;
+            const baseDate = lastPlaced ? new Date(lastPlaced) : new Date();
+            const nextDueDate = new Date(baseDate.getTime() + iw * 7 * 24 * 60 * 60 * 1000);
+            const daysUntilDue = Math.ceil((nextDueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+            const isDue = daysUntilDue <= 0;
+            const total = (tmpl.items || []).reduce((s: number, it: any) => s + it.quantity * parseFloat(it.unitPrice || "0"), 0);
 
-      <Card>
-        <CardContent className="p-0">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/30">
-                <th className="text-left p-3 font-medium">Product</th>
-                <th className="text-center p-3 font-medium w-28">Quantity</th>
-                <th className="text-right p-3 font-medium w-28">Line Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {savedItems.map((item: any, i: number) => {
-                const qty = getOrderQty(i);
-                return (
-                  <tr key={i} className="border-b last:border-0">
-                    <td className="p-3">
-                      <p className="font-medium">{item.productName}</p>
-                      {(item.filling || item.weight) && (
-                        <p className="text-xs text-muted-foreground">{[item.filling, item.weight].filter(Boolean).join(" · ")}</p>
-                      )}
-                      <p className="text-xs text-muted-foreground">${parseFloat(item.unitPrice || "0").toFixed(2)} each</p>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex flex-col items-center gap-0.5">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button size="icon" variant="outline" className="h-7 w-7" data-testid={`button-dec-qty-${i}`} onClick={() => setQuantities(prev => {
-                            const cur = prev[i] ?? item.quantity;
-                            const next = cur - 1;
-                            return { ...prev, [i]: next < minQty ? 0 : next };
-                          })}>
-                            <Minus className="w-3 h-3" />
-                          </Button>
-                          <span className="w-10 text-center font-medium" data-testid={`text-qty-${i}`}>{qty}</span>
-                          <Button size="icon" variant="outline" className="h-7 w-7" data-testid={`button-inc-qty-${i}`} onClick={() => setQuantities(prev => {
-                            const cur = prev[i] ?? item.quantity;
-                            return { ...prev, [i]: cur === 0 ? minQty : cur + 1 };
-                          })}>
-                            <Plus className="w-3 h-3" />
-                          </Button>
-                        </div>
-                        {minQty > 1 && <span className="text-[10px] text-muted-foreground">Min {minQty}</span>}
+            return (
+              <Card key={tmpl.id} className={`transition-shadow hover:shadow-md ${isDue ? "border-amber-400 dark:border-amber-600" : ""}`}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-base truncate" data-testid={`text-template-name-${tmpl.id}`}>{tmpl.name}</p>
+                        {isDue ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-700 rounded-full px-2 py-0.5">⏰ Due now</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">every {iw === 1 ? "week" : `${iw} weeks`}</span>
+                        )}
                       </div>
-                    </td>
-                    <td className="p-3 text-right font-medium">${(qty * parseFloat(item.unitPrice || "0")).toFixed(2)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-
-      {/* Delivery section */}
-      <Card className="mt-4">
-        <CardContent className="p-4 space-y-4">
-          <h2 className="text-sm font-semibold flex items-center gap-2">
-            <Truck className="w-4 h-4 text-primary" /> Delivery Details
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Delivery Address</label>
-              <textarea
-                rows={2}
-                className="w-full text-sm border rounded-md px-3 py-2 bg-background resize-none focus:outline-none focus:ring-2 focus:ring-primary/40"
-                placeholder="Enter delivery address..."
-                value={deliveryAddress}
-                onChange={e => setDeliveryAddress(e.target.value)}
-                data-testid="input-delivery-address"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Requested Delivery Date <span className="text-muted-foreground/60">(optional)</span></label>
-              <input
-                type="date"
-                className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
-                value={requestedDate}
-                onChange={e => setRequestedDate(e.target.value)}
-                min={new Date().toISOString().split("T")[0]}
-                data-testid="input-requested-date"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="mt-4 flex items-center justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">Order Total</p>
-          <p className="text-xl font-bold" data-testid="text-recurring-total">${orderTotal.toFixed(2)}</p>
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        {(tmpl.items || []).length} item{(tmpl.items || []).length !== 1 ? "s" : ""} · ${total.toFixed(2)} per order
+                        {lastPlaced ? ` · Next: ${nextDueDate.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button variant="outline" size="sm" onClick={() => openEdit(tmpl)} data-testid={`button-edit-template-${tmpl.id}`}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" disabled={deleting === tmpl.id}
+                        onClick={() => { if (confirm(`Delete "${tmpl.name}"?`)) deleteTemplate(tmpl.id); }} data-testid={`button-delete-template-${tmpl.id}`}>
+                        {deleting === tmpl.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                      </Button>
+                      <Button size="sm" onClick={() => openPlace(tmpl)} data-testid={`button-place-template-${tmpl.id}`}>
+                        <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Place Order
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
-        <Button size="lg" onClick={handlePlaceOrder} disabled={submitting} data-testid="button-place-recurring-order">
-          {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-          Place Recurring Order
-        </Button>
-      </div>
+      )}
     </div>
   );
 }
@@ -2802,12 +2774,12 @@ function PortalLayout() {
     enabled: !!user,
   });
 
-  const { data: recurringData2 } = useQuery<{ items: any[]; intervalWeeks: number; lastPlaced: string | null }>({
+  const { data: recurringData2 } = useQuery<{ templates: any[] }>({
     queryKey: ["/api/portal/recurring-items"],
     enabled: !!user,
   });
 
-  const hasRecurring = !!(recurringData2?.items && recurringData2.items.length > 0);
+  const hasRecurring = !!(recurringData2?.templates && recurringData2.templates.length > 0);
   const minQty = (company?.priceListName || "").toLowerCase().includes("100 plus") ? 100 : 1;
 
   const portalTitle = company?.tradingName || company?.legalName || "Customer Portal";

@@ -6536,6 +6536,17 @@ Rules:
     }
   });
 
+  // Helper: parse recurring_items JSONB into multi-template format (migrates old flat-array format)
+  function parseTemplates(raw: any, legacyWeeks?: number, legacyLastPlaced?: string | null): any[] {
+    if (!raw) return [];
+    const arr = Array.isArray(raw) ? raw : [];
+    if (arr.length === 0) return [];
+    if (arr[0] && 'productId' in arr[0]) {
+      return [{ id: 'default', name: 'Regular Order', intervalWeeks: legacyWeeks ?? 2, lastPlaced: legacyLastPlaced || null, items: arr }];
+    }
+    return arr;
+  }
+
   app.get("/api/portal/recurring-items", requirePortalAuth, async (req, res) => {
     try {
       const result = await pool.query(
@@ -6543,43 +6554,80 @@ Rules:
         [req.session.portalUserId]
       );
       const row = result.rows[0] || {};
-      res.json({
-        items: row.recurring_items || [],
-        intervalWeeks: row.recurring_interval_weeks ?? 2,
-        lastPlaced: row.recurring_last_placed || null,
-      });
+      const templates = parseTemplates(row.recurring_items, row.recurring_interval_weeks, row.recurring_last_placed);
+      res.json({ templates });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch recurring items" });
     }
   });
 
-  // Save recurring interval (weeks)
-  app.patch("/api/portal/recurring-interval", requirePortalAuth, async (req, res) => {
+  // Upsert a recurring template (create or update by id)
+  app.put("/api/portal/recurring-items", requirePortalAuth, async (req, res) => {
     try {
-      const { intervalWeeks } = req.body;
-      const weeks = parseInt(intervalWeeks);
-      if (isNaN(weeks) || weeks < 1 || weeks > 52) return res.status(400).json({ message: "Invalid interval" });
-      await pool.query(
-        `UPDATE portal_users SET recurring_interval_weeks = $1 WHERE id = $2`,
-        [weeks, req.session.portalUserId]
+      const { template } = req.body;
+      if (!template || !Array.isArray(template.items)) return res.status(400).json({ message: "template with items required" });
+      const result = await pool.query(
+        `SELECT recurring_items, recurring_interval_weeks, recurring_last_placed FROM portal_users WHERE id = $1`,
+        [req.session.portalUserId]
       );
-      res.json({ success: true, intervalWeeks: weeks });
+      const row = result.rows[0] || {};
+      let templates = parseTemplates(row.recurring_items, row.recurring_interval_weeks, row.recurring_last_placed);
+      const id = template.id || crypto.randomUUID();
+      const idx = templates.findIndex((t: any) => t.id === id);
+      const upserted = {
+        id,
+        name: template.name || 'Regular Order',
+        intervalWeeks: template.intervalWeeks ?? 2,
+        lastPlaced: templates[idx]?.lastPlaced || null,
+        items: template.items,
+      };
+      if (idx >= 0) templates[idx] = upserted;
+      else templates.push(upserted);
+      await pool.query(`UPDATE portal_users SET recurring_items = $1 WHERE id = $2`, [JSON.stringify(templates), req.session.portalUserId]);
+      res.json({ success: true, template: upserted });
     } catch (error) {
-      res.status(500).json({ message: "Failed to save interval" });
+      res.status(500).json({ message: "Failed to save recurring template" });
     }
   });
 
-  app.put("/api/portal/recurring-items", requirePortalAuth, async (req, res) => {
+  // Delete a recurring template
+  app.delete("/api/portal/recurring-items/:templateId", requirePortalAuth, async (req, res) => {
     try {
-      const { items } = req.body;
-      if (!Array.isArray(items)) return res.status(400).json({ message: "items must be an array" });
-      await pool.query(
-        `UPDATE portal_users SET recurring_items = $1 WHERE id = $2`,
-        [JSON.stringify(items), req.session.portalUserId]
+      const { templateId } = req.params;
+      const result = await pool.query(
+        `SELECT recurring_items, recurring_interval_weeks, recurring_last_placed FROM portal_users WHERE id = $1`,
+        [req.session.portalUserId]
       );
+      const row = result.rows[0] || {};
+      let templates = parseTemplates(row.recurring_items, row.recurring_interval_weeks, row.recurring_last_placed);
+      templates = templates.filter((t: any) => t.id !== templateId);
+      await pool.query(`UPDATE portal_users SET recurring_items = $1 WHERE id = $2`, [JSON.stringify(templates), req.session.portalUserId]);
       res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ message: "Failed to save recurring items" });
+      res.status(500).json({ message: "Failed to delete recurring template" });
+    }
+  });
+
+  // Update interval for a specific template
+  app.patch("/api/portal/recurring-interval", requirePortalAuth, async (req, res) => {
+    try {
+      const { templateId, intervalWeeks } = req.body;
+      const weeks = parseInt(intervalWeeks);
+      if (isNaN(weeks) || weeks < 1 || weeks > 52) return res.status(400).json({ message: "Invalid interval" });
+      const result = await pool.query(
+        `SELECT recurring_items, recurring_interval_weeks, recurring_last_placed FROM portal_users WHERE id = $1`,
+        [req.session.portalUserId]
+      );
+      const row = result.rows[0] || {};
+      let templates = parseTemplates(row.recurring_items, row.recurring_interval_weeks, row.recurring_last_placed);
+      const idx = templates.findIndex((t: any) => t.id === templateId);
+      if (idx >= 0) {
+        templates[idx] = { ...templates[idx], intervalWeeks: weeks };
+        await pool.query(`UPDATE portal_users SET recurring_items = $1 WHERE id = $2`, [JSON.stringify(templates), req.session.portalUserId]);
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save interval" });
     }
   });
 
@@ -6871,7 +6919,7 @@ Rules:
 
   app.post("/api/portal/orders", requirePortalAuth, async (req, res) => {
     try {
-      const { items, customItems, customQuiltItems, customerNotes, customerName: submittedCustomerName, shippingAddress: deliveryAddress, customerOrderNumber } = req.body;
+      const { items, customItems, customQuiltItems, customerNotes, customerName: submittedCustomerName, shippingAddress: deliveryAddress, customerOrderNumber, templateId } = req.body;
       const hasItems = items && Array.isArray(items) && items.length > 0;
       const hasCustomItems = customItems && Array.isArray(customItems) && customItems.length > 0;
       const hasCustomQuiltItems = customQuiltItems && Array.isArray(customQuiltItems) && customQuiltItems.length > 0;
@@ -6969,12 +7017,19 @@ Rules:
         reviewedBy: null,
       });
 
-      // If this is a recurring order, stamp the last-placed timestamp
-      if ((customerNotes || "").toLowerCase().includes("recurring order")) {
-        await pool.query(
-          `UPDATE portal_users SET recurring_last_placed = NOW() WHERE id = $1`,
+      // If this is a recurring order, stamp last-placed per-template
+      if ((customerNotes || "").toLowerCase().includes("recurring order") && templateId) {
+        const puResult = await pool.query(
+          `SELECT recurring_items, recurring_interval_weeks, recurring_last_placed FROM portal_users WHERE id = $1`,
           [req.session.portalUserId]
         );
+        const puRow = puResult.rows[0] || {};
+        let tpls = parseTemplates(puRow.recurring_items, puRow.recurring_interval_weeks, puRow.recurring_last_placed);
+        const tIdx = tpls.findIndex((t: any) => t.id === templateId);
+        if (tIdx >= 0) {
+          tpls[tIdx] = { ...tpls[tIdx], lastPlaced: new Date().toISOString() };
+          await pool.query(`UPDATE portal_users SET recurring_items = $1 WHERE id = $2`, [JSON.stringify(tpls), req.session.portalUserId]);
+        }
       }
 
       res.json({ success: true, id: orderRequest.id, message: "Your order has been submitted for review. We will process it shortly." });
@@ -7412,13 +7467,43 @@ Rules:
     }
   });
 
+  // Admin: delete a specific template for a company
+  app.delete("/api/companies/:id/portal-recurring-items/:templateId", requireAdmin, async (req, res) => {
+    try {
+      const { id: companyId, templateId } = req.params;
+      const result = await pool.query(
+        `SELECT recurring_items, recurring_interval_weeks, recurring_last_placed FROM portal_users WHERE company_id = $1 LIMIT 1`,
+        [companyId]
+      );
+      const row = result.rows[0] || {};
+      let templates = parseTemplates(row.recurring_items, row.recurring_interval_weeks, row.recurring_last_placed);
+      templates = templates.filter((t: any) => t.id !== templateId);
+      await pool.query(`UPDATE portal_users SET recurring_items = $1 WHERE company_id = $2`, [JSON.stringify(templates), companyId]);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete template" });
+    }
+  });
+
+  // Admin: clear all recurring templates for a company
+  app.delete("/api/companies/:id/portal-recurring-items", requireAdmin, async (req, res) => {
+    try {
+      await pool.query(`UPDATE portal_users SET recurring_items = '[]'::jsonb WHERE company_id = $1`, [req.params.id]);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to clear recurring templates" });
+    }
+  });
+
   app.get("/api/companies/:id/portal-recurring-items", requireAdmin, async (req, res) => {
     try {
       const result = await pool.query(
-        `SELECT recurring_items FROM portal_users WHERE company_id = $1 LIMIT 1`,
+        `SELECT recurring_items, recurring_interval_weeks, recurring_last_placed FROM portal_users WHERE company_id = $1 LIMIT 1`,
         [req.params.id]
       );
-      res.json(result.rows[0]?.recurring_items || []);
+      const row = result.rows[0] || {};
+      const templates = parseTemplates(row.recurring_items, row.recurring_interval_weeks, row.recurring_last_placed);
+      res.json({ templates });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch recurring items" });
     }
@@ -7426,11 +7511,20 @@ Rules:
 
   app.put("/api/companies/:id/portal-recurring-items", requireAdmin, async (req, res) => {
     try {
-      const { items } = req.body;
-      await pool.query(
-        `UPDATE portal_users SET recurring_items = $1 WHERE company_id = $2`,
-        [JSON.stringify(items), req.params.id]
+      const { template } = req.body;
+      if (!template || !Array.isArray(template.items)) return res.status(400).json({ message: "template with items required" });
+      const result = await pool.query(
+        `SELECT recurring_items, recurring_interval_weeks, recurring_last_placed FROM portal_users WHERE company_id = $1 LIMIT 1`,
+        [req.params.id]
       );
+      const row = result.rows[0] || {};
+      let templates = parseTemplates(row.recurring_items, row.recurring_interval_weeks, row.recurring_last_placed);
+      const id = template.id || crypto.randomUUID();
+      const idx = templates.findIndex((t: any) => t.id === id);
+      const upserted = { id, name: template.name || 'Regular Order', intervalWeeks: template.intervalWeeks ?? 2, lastPlaced: templates[idx]?.lastPlaced || null, items: template.items };
+      if (idx >= 0) templates[idx] = upserted;
+      else templates.push(upserted);
+      await pool.query(`UPDATE portal_users SET recurring_items = $1 WHERE company_id = $2`, [JSON.stringify(templates), req.params.id]);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: "Failed to save recurring items" });
@@ -7440,6 +7534,7 @@ Rules:
   app.post("/api/companies/:id/portal-recurring-items/from-order/:orderId", requireAdmin, async (req, res) => {
     try {
       const { orderId, id: companyId } = req.params;
+      const { templateName } = req.body;
       const orderResult = await pool.query(
         `SELECT ol.product_id, ol.product_name, ol.quantity, ol.filling, ol.weight, ol.unit_price, p.category
          FROM order_lines ol
@@ -7457,10 +7552,16 @@ Rules:
         unitPrice: r.unit_price,
         quantity: r.quantity,
       }));
-      await pool.query(
-        `UPDATE portal_users SET recurring_items = $1 WHERE company_id = $2`,
-        [JSON.stringify(items), companyId]
+      // Add as a new template (preserve existing ones)
+      const result = await pool.query(
+        `SELECT recurring_items, recurring_interval_weeks, recurring_last_placed FROM portal_users WHERE company_id = $1 LIMIT 1`,
+        [companyId]
       );
+      const row = result.rows[0] || {};
+      let templates = parseTemplates(row.recurring_items, row.recurring_interval_weeks, row.recurring_last_placed);
+      const newTemplate = { id: crypto.randomUUID(), name: templateName || 'Regular Order', intervalWeeks: 2, lastPlaced: null, items };
+      templates.push(newTemplate);
+      await pool.query(`UPDATE portal_users SET recurring_items = $1 WHERE company_id = $2`, [JSON.stringify(templates), companyId]);
       res.json({ success: true, itemCount: items.length });
     } catch (error) {
       res.status(500).json({ message: "Failed to copy order as recurring template" });

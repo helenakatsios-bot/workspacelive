@@ -215,15 +215,16 @@ export default function CompanyDetailPage() {
     enabled: !!params?.id && isAdmin,
   });
 
-  const { data: recurringItems, refetch: refetchRecurringItems } = useQuery<any[]>({
+  const { data: recurringData, refetch: refetchRecurringItems } = useQuery<{ templates: any[] }>({
     queryKey: ["/api/companies", params?.id, "portal-recurring-items"],
     queryFn: async () => {
       const res = await fetch(`/api/companies/${params?.id}/portal-recurring-items`, { credentials: "include" });
-      if (!res.ok) return [];
+      if (!res.ok) return { templates: [] };
       return res.json();
     },
     enabled: !!params?.id && isAdmin,
   });
+  const recurringTemplates = recurringData?.templates || [];
 
   const [copyOrderDialogOpen, setCopyOrderDialogOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState("");
@@ -244,14 +245,26 @@ export default function CompanyDetailPage() {
 
   const clearRecurringItemsMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("PUT", `/api/companies/${params?.id}/portal-recurring-items`, { items: [] });
+      const res = await apiRequest("DELETE", `/api/companies/${params?.id}/portal-recurring-items`);
       return res.json();
     },
     onSuccess: () => {
       refetchRecurringItems();
-      toast({ title: "Recurring template cleared" });
+      toast({ title: "All recurring templates cleared" });
     },
-    onError: () => toast({ title: "Error", description: "Failed to clear template.", variant: "destructive" }),
+    onError: () => toast({ title: "Error", description: "Failed to clear templates.", variant: "destructive" }),
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: async (templateId: string) => {
+      const res = await apiRequest("DELETE", `/api/companies/${params?.id}/portal-recurring-items/${templateId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchRecurringItems();
+      toast({ title: "Template deleted" });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to delete template.", variant: "destructive" }),
   });
 
   const createPortalUserMutation = useMutation({
@@ -979,47 +992,63 @@ export default function CompanyDetailPage() {
                         >
                           <Copy className="w-3 h-3 mr-1" /> Copy from Order
                         </Button>
-                        {recurringItems && recurringItems.length > 0 && (
+                        {recurringTemplates.length > 0 && (
                           <Button
                             size="sm"
                             variant="ghost"
                             className="h-6 text-xs px-2 text-destructive hover:text-destructive"
                             data-testid="button-clear-recurring"
-                            onClick={() => { if (confirm("Clear recurring template?")) clearRecurringItemsMutation.mutate(); }}
+                            onClick={() => { if (confirm("Clear ALL recurring templates for this customer?")) clearRecurringItemsMutation.mutate(); }}
                           >
-                            Clear
+                            Clear All
                           </Button>
                         )}
                       </div>
                     </div>
-                    {recurringItems && recurringItems.length > 0 ? (
-                      <div className="rounded-md border overflow-hidden">
-                        <table className="w-full text-xs">
-                          <thead className="bg-muted/50">
-                            <tr>
-                              <th className="text-left p-1.5 pl-2 font-medium">Product</th>
-                              <th className="text-center p-1.5 font-medium">Qty</th>
-                              <th className="text-right p-1.5 pr-2 font-medium">Unit Price</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {recurringItems.map((item: any, i: number) => (
-                              <tr key={i} className="border-t">
-                                <td className="p-1.5 pl-2">
-                                  <p className="font-medium">{item.productName}</p>
-                                  {(item.filling || item.weight) && (
-                                    <p className="text-muted-foreground text-xs">{[item.filling, item.weight].filter(Boolean).join(" · ")}</p>
-                                  )}
-                                </td>
-                                <td className="p-1.5 text-center">{item.quantity}</td>
-                                <td className="p-1.5 pr-2 text-right">${parseFloat(item.unitPrice || "0").toFixed(2)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                    {recurringTemplates.length > 0 ? (
+                      <div className="space-y-2">
+                        {recurringTemplates.map((tmpl: any) => (
+                          <div key={tmpl.id} className="rounded-md border overflow-hidden">
+                            <div className="flex items-center justify-between px-2 py-1.5 bg-muted/30 border-b">
+                              <span className="text-xs font-semibold">{tmpl.name}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">{(tmpl.items || []).length} item{(tmpl.items || []).length !== 1 ? "s" : ""} · every {tmpl.intervalWeeks === 1 ? "week" : `${tmpl.intervalWeeks} weeks`}</span>
+                                <button
+                                  className="text-destructive hover:text-destructive/80 text-xs"
+                                  onClick={() => { if (confirm(`Delete template "${tmpl.name}"?`)) deleteTemplateMutation.mutate(tmpl.id); }}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            </div>
+                            <table className="w-full text-xs">
+                              <thead className="bg-muted/50">
+                                <tr>
+                                  <th className="text-left p-1.5 pl-2 font-medium">Product</th>
+                                  <th className="text-center p-1.5 font-medium">Qty</th>
+                                  <th className="text-right p-1.5 pr-2 font-medium">Unit Price</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(tmpl.items || []).map((item: any, i: number) => (
+                                  <tr key={i} className="border-t">
+                                    <td className="p-1.5 pl-2">
+                                      <p className="font-medium">{item.productName}</p>
+                                      {(item.filling || item.weight) && (
+                                        <p className="text-muted-foreground text-xs">{[item.filling, item.weight].filter(Boolean).join(" · ")}</p>
+                                      )}
+                                    </td>
+                                    <td className="p-1.5 text-center">{item.quantity}</td>
+                                    <td className="p-1.5 pr-2 text-right">${parseFloat(item.unitPrice || "0").toFixed(2)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground/60 italic">No recurring template set. Copy from an order to get started.</p>
+                      <p className="text-xs text-muted-foreground/60 italic">No recurring templates set. Copy from an order to get started.</p>
                     )}
                     {copyOrderDialogOpen && (
                       <div className="mt-2 p-2 rounded-md border bg-muted/30">
