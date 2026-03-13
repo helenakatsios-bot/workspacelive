@@ -2317,6 +2317,10 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
   const [addingVariant, setAddingVariant] = useState<{ productId: string; variants: any[] } | null>(null);
   const [intervalWeeks, setIntervalWeeks] = useState<number>(2);
   const [savingInterval, setSavingInterval] = useState(false);
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [requestedDate, setRequestedDate] = useState("");
+
+  const { data: portalCompany } = useQuery<any>({ queryKey: ["/api/portal/company"] });
 
   const savedItems = recurringData?.items || [];
   const lastPlaced = recurringData?.lastPlaced || null;
@@ -2327,13 +2331,15 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
     }
   }, [recurringData?.intervalWeeks]);
 
-  const nextDueDate = lastPlaced
-    ? new Date(new Date(lastPlaced).getTime() + intervalWeeks * 7 * 24 * 60 * 60 * 1000)
-    : null;
+  useEffect(() => {
+    if (portalCompany?.shippingAddress && !deliveryAddress) {
+      setDeliveryAddress(portalCompany.shippingAddress);
+    }
+  }, [portalCompany?.shippingAddress]);
 
-  const daysUntilDue = nextDueDate
-    ? Math.ceil((nextDueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    : null;
+  const baseDate = lastPlaced ? new Date(lastPlaced) : new Date();
+  const nextDueDate = new Date(baseDate.getTime() + intervalWeeks * 7 * 24 * 60 * 60 * 1000);
+  const daysUntilDue = Math.ceil((nextDueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
   async function saveInterval(weeks: number) {
     setSavingInterval(true);
@@ -2451,7 +2457,11 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
             unitPrice: parseFloat(item.unitPrice || "0"),
             lineTotal: Math.round(item.qty * parseFloat(item.unitPrice || "0") * 100) / 100,
           })),
-          customerNotes: "Recurring order",
+          shippingAddress: deliveryAddress || undefined,
+          customerNotes: [
+            "Recurring order",
+            requestedDate ? `Requested delivery: ${new Date(requestedDate + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}` : "",
+          ].filter(Boolean).join("\n"),
         }),
         credentials: "include",
       });
@@ -2672,13 +2682,13 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
                 </button>
               ))}
             </div>
-            {lastPlaced && nextDueDate && (
-              <span className={`ml-auto text-sm ${daysUntilDue !== null && daysUntilDue <= 0 ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground"}`}>
-                {daysUntilDue !== null && daysUntilDue <= 0
-                  ? "⏰ Order due now"
-                  : `Next order due: ${nextDueDate.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}`}
-              </span>
-            )}
+            <span className={`ml-auto text-sm font-medium ${daysUntilDue <= 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+              {daysUntilDue <= 0
+                ? "⏰ Order due now"
+                : lastPlaced
+                  ? `Next order due: ${nextDueDate.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}`
+                  : `Schedule: every ${intervalWeeks === 1 ? "week" : `${intervalWeeks} weeks`}`}
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -2732,6 +2742,39 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
               })}
             </tbody>
           </table>
+        </CardContent>
+      </Card>
+
+      {/* Delivery section */}
+      <Card className="mt-4">
+        <CardContent className="p-4 space-y-4">
+          <h2 className="text-sm font-semibold flex items-center gap-2">
+            <Truck className="w-4 h-4 text-primary" /> Delivery Details
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Delivery Address</label>
+              <textarea
+                rows={2}
+                className="w-full text-sm border rounded-md px-3 py-2 bg-background resize-none focus:outline-none focus:ring-2 focus:ring-primary/40"
+                placeholder="Enter delivery address..."
+                value={deliveryAddress}
+                onChange={e => setDeliveryAddress(e.target.value)}
+                data-testid="input-delivery-address"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Requested Delivery Date <span className="text-muted-foreground/60">(optional)</span></label>
+              <input
+                type="date"
+                className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={requestedDate}
+                onChange={e => setRequestedDate(e.target.value)}
+                min={new Date().toISOString().split("T")[0]}
+                data-testid="input-requested-date"
+              />
+            </div>
+          </div>
         </CardContent>
       </Card>
 
