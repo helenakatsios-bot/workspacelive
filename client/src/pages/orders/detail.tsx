@@ -604,6 +604,22 @@ export default function OrderDetailPage() {
     },
   });
 
+  const recalculatePricesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/orders/${params?.id}/recalculate-prices`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", params?.id] });
+      toast({ title: "Prices recalculated", description: data.message });
+    },
+    onError: async (error: any) => {
+      let msg = "Failed to recalculate prices.";
+      try { if (error?.message) msg = error.message; } catch {}
+      toast({ title: "Recalculate failed", description: msg, variant: "destructive" });
+    },
+  });
+
   const handleAddNote = async () => {
     if (!newNote.trim()) return;
     setIsSubmittingNote(true);
@@ -1192,6 +1208,22 @@ export default function OrderDetailPage() {
                 <Edit className="w-4 h-4 mr-2" />
                 Edit
               </Button>
+              {canViewPricing && order.orderItems?.some((item: any) => Number(item.unitPrice) === 0 && item.productId) && (
+                <Button
+                  variant="outline"
+                  onClick={() => recalculatePricesMutation.mutate()}
+                  disabled={recalculatePricesMutation.isPending}
+                  data-testid="button-recalculate-prices"
+                  className="text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950"
+                >
+                  {recalculatePricesMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                  )}
+                  {recalculatePricesMutation.isPending ? "Recalculating..." : "Fix $0 Prices"}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={() => {

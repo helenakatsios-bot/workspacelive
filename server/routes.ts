@@ -6117,24 +6117,36 @@ Rules:
 
       const items = (orderRequest.items as any[]) || [];
 
+      // Build convertPriceMap: load ALL price_list_prices as base, override with company's list
       const convertPriceMap = new Map<string, number>();
-      if (company.priceListId) {
+      const allConvertPrices = await client.query(
+        `SELECT product_id, filling, weight, unit_price FROM price_list_prices ORDER BY price_list_id`
+      );
+      for (const row of allConvertPrices.rows) {
+        const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
+        if (!convertPriceMap.has(key)) convertPriceMap.set(key, parseFloat(row.unit_price));
+        if (!convertPriceMap.has(row.product_id)) convertPriceMap.set(row.product_id, parseFloat(row.unit_price));
+      }
+      let convertEffectivePriceListId = company.priceListId;
+      if (!convertEffectivePriceListId) {
+        const stdList = await client.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
+        if (stdList.rows.length > 0) convertEffectivePriceListId = stdList.rows[0].id;
+      }
+      if (convertEffectivePriceListId) {
         const priceRows = await client.query(
           `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`,
-          [company.priceListId]
+          [convertEffectivePriceListId]
         );
         for (const row of priceRows.rows) {
           const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
           convertPriceMap.set(key, parseFloat(row.unit_price));
-          if (!convertPriceMap.has(row.product_id)) {
-            convertPriceMap.set(row.product_id, parseFloat(row.unit_price));
-          }
+          convertPriceMap.set(row.product_id, parseFloat(row.unit_price));
         }
       }
 
       const resolvedItems = items.map((item: any) => {
         let unitPrice = Number(item.unitPrice) || 0;
-        if (unitPrice === 0 && item.productId && convertPriceMap.size > 0) {
+        if (unitPrice === 0 && item.productId) {
           const variantKey = `${item.productId}|${item.filling || ''}|${item.weight || ''}`;
           unitPrice = convertPriceMap.get(variantKey) ?? convertPriceMap.get(item.productId) ?? 0;
         }
@@ -6265,6 +6277,68 @@ Rules:
     } catch (error) {
       console.error("Delete order request error:", error);
       res.status(500).json({ message: "Failed to delete order request" });
+    }
+  });
+
+  app.post("/api/orders/:id/recalculate-prices", requireEdit, async (req, res) => {
+    try {
+      const orderResult = await pool.query(
+        `SELECT o.*, c.price_list_id FROM orders o LEFT JOIN companies c ON c.id = o.company_id WHERE o.id = $1`,
+        [req.params.id]
+      );
+      if (orderResult.rows.length === 0) return res.status(404).json({ message: "Order not found" });
+      const order = orderResult.rows[0];
+      const items: any[] = order.order_items || [];
+
+      // Build priceMap: all price lists as base, company's assigned list on top
+      const priceMap = new Map<string, number>();
+      const allPrices = await pool.query(`SELECT product_id, filling, weight, unit_price FROM price_list_prices ORDER BY price_list_id`);
+      for (const row of allPrices.rows) {
+        const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
+        if (!priceMap.has(key)) priceMap.set(key, parseFloat(row.unit_price));
+        if (!priceMap.has(row.product_id)) priceMap.set(row.product_id, parseFloat(row.unit_price));
+      }
+      let effectivePl = order.price_list_id;
+      if (!effectivePl) {
+        const stdList = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
+        if (stdList.rows.length > 0) effectivePl = stdList.rows[0].id;
+      }
+      if (effectivePl) {
+        const plPrices = await pool.query(`SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`, [effectivePl]);
+        for (const row of plPrices.rows) {
+          const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
+          priceMap.set(key, parseFloat(row.unit_price));
+          priceMap.set(row.product_id, parseFloat(row.unit_price));
+        }
+      }
+
+      let updated = 0;
+      const updatedItems = items.map((item: any) => {
+        if (item.productId && (Number(item.unitPrice) === 0 || !item.unitPrice)) {
+          const variantKey = `${item.productId}|${item.filling || ''}|${item.weight || ''}`;
+          const newPrice = priceMap.get(variantKey) ?? priceMap.get(item.productId);
+          if (newPrice && newPrice > 0) {
+            const qty = item.quantity || 1;
+            updated++;
+            return { ...item, unitPrice: newPrice.toFixed(2), lineTotal: (Math.round(qty * newPrice * 100) / 100).toFixed(2) };
+          }
+        }
+        return item;
+      });
+
+      const subtotal = updatedItems.reduce((sum: number, item: any) => sum + (Number(item.lineTotal) || 0), 0);
+      const tax = Math.round(subtotal * 0.1 * 100) / 100;
+      const total = Math.round((subtotal + tax) * 100) / 100;
+
+      await pool.query(
+        `UPDATE orders SET order_items = $1, subtotal = $2, tax = $3, total = $4, updated_at = NOW() WHERE id = $5`,
+        [JSON.stringify(updatedItems), subtotal.toFixed(2), tax.toFixed(2), total.toFixed(2), req.params.id]
+      );
+
+      res.json({ message: `Prices recalculated — ${updated} item(s) updated`, updated });
+    } catch (error) {
+      console.error("Recalculate prices error:", error);
+      res.status(500).json({ message: "Failed to recalculate prices" });
     }
   });
 
@@ -6941,14 +7015,28 @@ Rules:
       const resolvedShippingAddress = deliveryAddress || companyRow?.shipping_address || companyRow?.billing_address || null;
       const resolvedPhone = companyRow?.phone || null;
 
-      // Resolve effective price list: company's assigned list, else Standard
+      // Build priceMap: load ALL price_list_prices as base (lowest priority),
+      // then overlay company's assigned price list (highest priority)
+      const priceMap = new Map<string, number>();
+
+      // Step 1: Load all prices from every price list as a fallback base
+      const allPriceRows = await pool.query(
+        `SELECT product_id, filling, weight, unit_price FROM price_list_prices ORDER BY price_list_id`
+      );
+      for (const row of allPriceRows.rows) {
+        const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
+        if (!priceMap.has(key)) priceMap.set(key, parseFloat(row.unit_price));
+        if (!priceMap.has(row.product_id)) priceMap.set(row.product_id, parseFloat(row.unit_price));
+      }
+
+      // Step 2: Determine effective price list (company's assigned, else Standard)
       let effectivePriceListId = companyPriceListId;
       if (!effectivePriceListId) {
         const stdList = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
         if (stdList.rows.length > 0) effectivePriceListId = stdList.rows[0].id;
       }
 
-      const priceMap = new Map<string, number>();
+      // Step 3: Override with company-specific prices (highest priority)
       if (effectivePriceListId) {
         const priceRows = await pool.query(
           `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`,
@@ -6957,9 +7045,7 @@ Rules:
         for (const row of priceRows.rows) {
           const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
           priceMap.set(key, parseFloat(row.unit_price));
-          if (!priceMap.has(row.product_id)) {
-            priceMap.set(row.product_id, parseFloat(row.unit_price));
-          }
+          priceMap.set(row.product_id, parseFloat(row.unit_price));
         }
       }
 
@@ -7226,18 +7312,30 @@ Rules:
       const [portalUser] = await db.select().from(portalUsers).where(eq(portalUsers.id, req.session.portalUserId!));
       const contactName = submittedCustomerName || portalUser?.name || existing.rows[0].contact_name;
 
+      // Build priceMap: load ALL price_list_prices as base, override with company's list
       const priceMap = new Map<string, number>();
-      if (companyPriceListId) {
+      const allPriceRowsEdit = await pool.query(
+        `SELECT product_id, filling, weight, unit_price FROM price_list_prices ORDER BY price_list_id`
+      );
+      for (const row of allPriceRowsEdit.rows) {
+        const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
+        if (!priceMap.has(key)) priceMap.set(key, parseFloat(row.unit_price));
+        if (!priceMap.has(row.product_id)) priceMap.set(row.product_id, parseFloat(row.unit_price));
+      }
+      let effectivePlId = companyPriceListId;
+      if (!effectivePlId) {
+        const stdList = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
+        if (stdList.rows.length > 0) effectivePlId = stdList.rows[0].id;
+      }
+      if (effectivePlId) {
         const priceRows = await pool.query(
           `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`,
-          [companyPriceListId]
+          [effectivePlId]
         );
         for (const row of priceRows.rows) {
           const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
           priceMap.set(key, parseFloat(row.unit_price));
-          if (!priceMap.has(row.product_id)) {
-            priceMap.set(row.product_id, parseFloat(row.unit_price));
-          }
+          priceMap.set(row.product_id, parseFloat(row.unit_price));
         }
       }
 
