@@ -254,36 +254,49 @@ function PortalDashboard({ onNavigate }: { onNavigate: (page: string) => void })
   const { data: dashboard, isLoading } = useQuery<any>({
     queryKey: ["/api/portal/dashboard"],
   });
-  const { data: notesData } = useQuery<{ notes: string }>({
+  const { data: notesData } = useQuery<{ notes: any[] }>({
     queryKey: ["/api/portal/notes"],
   });
-  const [notes, setNotes] = useState("");
-  const [notesSaved, setNotesSaved] = useState(false);
+  const [newNote, setNewNote] = useState("");
   const [notesSaving, setNotesSaving] = useState(false);
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (notesData?.notes !== undefined) {
-      setNotes(notesData.notes);
-    }
-  }, [notesData]);
+  const savedNotes: any[] = notesData?.notes || [];
 
-  async function saveNotes() {
+  async function addNote() {
+    if (!newNote.trim()) return;
     setNotesSaving(true);
     try {
       const res = await fetch("/api/portal/notes", {
-        method: "PATCH",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ notes }),
+        body: JSON.stringify({ content: newNote }),
       });
       if (!res.ok) throw new Error();
-      setNotesSaved(true);
-      setTimeout(() => setNotesSaved(false), 2000);
+      setNewNote("");
+      portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/notes"] });
     } catch {
-      toast({ title: "Failed to save notes", variant: "destructive" });
+      toast({ title: "Failed to save note", variant: "destructive" });
     } finally {
       setNotesSaving(false);
+    }
+  }
+
+  async function deleteNote(noteId: string) {
+    setDeletingNoteId(noteId);
+    try {
+      const res = await fetch(`/api/portal/notes/${noteId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error();
+      portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/notes"] });
+    } catch {
+      toast({ title: "Failed to delete note", variant: "destructive" });
+    } finally {
+      setDeletingNoteId(null);
     }
   }
 
@@ -402,32 +415,71 @@ function PortalDashboard({ onNavigate }: { onNavigate: (page: string) => void })
       </Card>
 
       <Card data-testid="card-portal-notes">
-        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+        <CardHeader className="pb-3">
           <CardTitle className="text-base">My Notes</CardTitle>
-          <Button
-            size="sm"
-            onClick={saveNotes}
-            disabled={notesSaving}
-            data-testid="button-save-notes"
-            className={notesSaved ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}
-          >
-            {notesSaving ? (
-              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Saving…</>
-            ) : notesSaved ? (
-              <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Saved</>
-            ) : (
-              "Save"
-            )}
-          </Button>
         </CardHeader>
-        <CardContent>
-          <Textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Add any notes, reminders, or messages here…"
-            className="min-h-[120px] resize-y"
-            data-testid="textarea-portal-notes"
-          />
+        <CardContent className="space-y-4">
+          {/* New note input */}
+          <div className="space-y-2">
+            <Textarea
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              placeholder="Write a new note…"
+              className="min-h-[80px] resize-y"
+              data-testid="textarea-portal-notes"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) addNote();
+              }}
+            />
+            <Button
+              size="sm"
+              onClick={addNote}
+              disabled={notesSaving || !newNote.trim()}
+              data-testid="button-save-notes"
+            >
+              {notesSaving ? (
+                <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Saving…</>
+              ) : (
+                <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Save Note</>
+              )}
+            </Button>
+          </div>
+
+          {/* Saved notes list */}
+          {savedNotes.length > 0 && (
+            <div className="space-y-3 pt-2 border-t">
+              {savedNotes.map((note: any) => (
+                <div
+                  key={note.id}
+                  className="rounded-md border bg-muted/40 p-3 text-sm relative group"
+                  data-testid={`card-note-${note.id}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      {new Date(note.createdAt).toLocaleString("en-AU", {
+                        day: "2-digit", month: "short", year: "numeric",
+                        hour: "2-digit", minute: "2-digit",
+                      })}
+                    </p>
+                    <button
+                      onClick={() => deleteNote(note.id)}
+                      disabled={deletingNoteId === note.id}
+                      className="text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                      data-testid={`button-delete-note-${note.id}`}
+                      title="Delete note"
+                    >
+                      {deletingNoteId === note.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <X className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+                  <p className="whitespace-pre-wrap leading-relaxed">{note.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
