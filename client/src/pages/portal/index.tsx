@@ -2329,6 +2329,7 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
   const [addingVariant, setAddingVariant] = useState<{ productId: string; variants: any[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [savingDate, setSavingDate] = useState<string | null>(null);
 
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [deliveryAddress, setDeliveryAddress] = useState("");
@@ -2410,6 +2411,34 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
       toast({ title: "Template deleted" });
     } catch { toast({ title: "Error deleting template", variant: "destructive" }); }
     finally { setDeleting(null); }
+  };
+
+  const saveInlineDate = async (tmpl: any, dateStr: string) => {
+    if (!dateStr) return;
+    setSavingDate(tmpl.id);
+    try {
+      await fetch("/api/portal/recurring-items", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          template: {
+            id: tmpl.id,
+            name: tmpl.name,
+            intervalWeeks: tmpl.intervalWeeks ?? 2,
+            lastPlaced: dateStr,
+            items: tmpl.items,
+          },
+        }),
+      });
+      await refetchRecurring();
+      portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/recurring-items"] });
+      toast({ title: "Start date saved", description: `Next order scheduled based on ${new Date(dateStr).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}` });
+    } catch {
+      toast({ title: "Error saving date", variant: "destructive" });
+    } finally {
+      setSavingDate(null);
+    }
   };
 
   const saveInterval = async (templateId: string, weeks: number) => {
@@ -2769,18 +2798,39 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
                       <p className="text-xs text-muted-foreground mb-2">
                         {(tmpl.items || []).length} item{(tmpl.items || []).length !== 1 ? "s" : ""} · ${total.toFixed(2)} per order · repeats every {iw === 1 ? "week" : `${iw} weeks`}
                       </p>
-                      {/* Prominent next order date */}
-                      <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium ${
-                        isDue
-                          ? "bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-700 text-amber-800 dark:text-amber-300"
-                          : "bg-muted/60 border border-border text-foreground"
-                      }`} data-testid={`text-next-date-${tmpl.id}`}>
-                        <CalendarClock className="w-4 h-4 shrink-0" />
-                        {isDue
-                          ? "Order due now — place when ready"
-                          : lastPlaced
-                            ? `Next order: ${nextDueDate.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`
-                            : `Schedule set — every ${iw === 1 ? "week" : `${iw} weeks`}`}
+                      {/* Inline date picker + next order date */}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <label className="text-xs text-muted-foreground font-medium whitespace-nowrap">Schedule from:</label>
+                          <div className="relative flex items-center">
+                            <input
+                              type="date"
+                              data-testid={`input-last-placed-${tmpl.id}`}
+                              defaultValue={lastPlaced ? lastPlaced.slice(0, 10) : ""}
+                              onChange={e => {
+                                if (e.target.value) saveInlineDate(tmpl, e.target.value);
+                              }}
+                              className="border border-border rounded-md px-2 py-1 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 pr-7"
+                              style={{ colorScheme: "auto" }}
+                            />
+                            {savingDate === tmpl.id && (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin absolute right-2 text-muted-foreground" />
+                            )}
+                          </div>
+                        </div>
+                        {lastPlaced && (
+                          <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium w-fit ${
+                            isDue
+                              ? "bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-700 text-amber-800 dark:text-amber-300"
+                              : "bg-muted/60 border border-border text-foreground"
+                          }`} data-testid={`text-next-date-${tmpl.id}`}>
+                            <CalendarClock className="w-4 h-4 shrink-0" />
+                            {isDue ? "Order due now — place when ready" : `Next order: ${nextDueDate.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`}
+                          </div>
+                        )}
+                        {!lastPlaced && (
+                          <p className="text-xs text-muted-foreground">Pick a date above to set the next order schedule</p>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2 shrink-0">
