@@ -7035,6 +7035,86 @@ Rules:
         }
       }
 
+      // Send email notification to staff
+      try {
+        const notificationEmailSetting = await storage.getSetting("notification_email");
+        if (notificationEmailSetting) {
+          const recipientEmails = notificationEmailSetting
+            .split(",")
+            .map((e: string) => e.trim())
+            .filter((e: string) => e.length > 0 && e.includes("@"));
+
+          if (recipientEmails.length > 0) {
+            const host = req.headers.host || "localhost:5000";
+            const protocol = req.headers["x-forwarded-proto"] || (host.includes("localhost") ? "http" : "https");
+            const redirectUri = `${protocol}://${host}/api/outlook/callback`;
+
+            const isRecurring = (notesWithPO || "").toLowerCase().includes("recurring order");
+            const allUsers = await storage.getAllUsers();
+            let emailSent = false;
+            for (const user of allUsers) {
+              if (emailSent) break;
+              try {
+                const accessToken = await refreshOutlookTokenIfNeeded(user.id, redirectUri);
+                if (accessToken) {
+                  const itemsList = orderItems.map((item: any) =>
+                    `<tr>
+                      <td style="padding:8px;border:1px solid #ddd;">${item.quantity}</td>
+                      <td style="padding:8px;border:1px solid #ddd;">${item.productName}</td>
+                      <td style="padding:8px;border:1px solid #ddd;">$${parseFloat(item.unitPrice || "0").toFixed(2)}</td>
+                      <td style="padding:8px;border:1px solid #ddd;text-align:right;">$${parseFloat(item.lineTotal || "0").toFixed(2)}</td>
+                    </tr>`
+                  ).join("");
+
+                  const subtotal = orderItems.reduce((s: number, i: any) => s + parseFloat(i.lineTotal || "0"), 0);
+                  const recurringBanner = isRecurring
+                    ? `<div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+                        <strong style="color:#92400e;">🔁 Recurring Order</strong>
+                        <p style="margin:4px 0 0;color:#78350f;font-size:0.9em;">This order was placed from a recurring template. Please review and send to Purax (Milo) promptly.</p>
+                       </div>`
+                    : "";
+
+                  const emailBody = `
+                    ${recurringBanner}
+                    <h2 style="color:#1e293b;">New Portal Order from ${companyName}</h2>
+                    <p><strong>Contact:</strong> ${contactName}${contactEmail ? ` &lt;${contactEmail}&gt;` : ""}</p>
+                    ${resolvedShippingAddress ? `<p><strong>Delivery Address:</strong> ${resolvedShippingAddress}</p>` : ""}
+                    ${notesWithPO ? `<p><strong>Notes:</strong> ${notesWithPO.replace(/\n/g, "<br>")}</p>` : ""}
+                    <h3>Items:</h3>
+                    <table style="border-collapse:collapse;width:100%;">
+                      <tr>
+                        <th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Qty</th>
+                        <th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Product</th>
+                        <th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;">Unit Price</th>
+                        <th style="padding:8px;border:1px solid #ddd;background:#f5f5f5;text-align:right;">Total</th>
+                      </tr>
+                      ${itemsList}
+                    </table>
+                    <p style="margin-top:12px;text-align:right;font-size:1.1em;"><strong>Order Total: $${subtotal.toFixed(2)}</strong></p>
+                    <p style="margin-top:16px;color:#64748b;font-size:0.9em;">Log in to the CRM to review and send this order to Purax (Milo).</p>
+                  `;
+
+                  const subject = isRecurring
+                    ? `🔁 Recurring Order from ${companyName} — Action Required`
+                    : `New Portal Order from ${companyName}`;
+
+                  await sendEmail(accessToken, recipientEmails, subject, emailBody);
+                  emailSent = true;
+                  console.log(`[PORTAL-ORDER] Notification sent to ${recipientEmails.join(", ")} for ${isRecurring ? "recurring " : ""}order from ${companyName}`);
+                }
+              } catch (tokenErr) {
+                console.error("[PORTAL-ORDER] Notification email token error:", tokenErr);
+              }
+            }
+            if (!emailSent) {
+              console.log(`[PORTAL-ORDER] No Outlook token available — notification not sent for order from ${companyName}`);
+            }
+          }
+        }
+      } catch (emailErr) {
+        console.error("[PORTAL-ORDER] Failed to send notification email:", emailErr);
+      }
+
       res.json({ success: true, id: orderRequest.id, message: "Your order has been submitted for review. We will process it shortly." });
     } catch (error) {
       console.error("Portal create order error:", error);
