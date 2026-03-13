@@ -6574,11 +6574,14 @@ Rules:
       let templates = parseTemplates(row.recurring_items, row.recurring_interval_weeks, row.recurring_last_placed);
       const id = template.id || crypto.randomUUID();
       const idx = templates.findIndex((t: any) => t.id === id);
+      // Allow manually setting lastPlaced; fall back to existing value
+      const existingLastPlaced = templates[idx]?.lastPlaced || null;
+      const incomingLastPlaced = template.lastPlaced !== undefined ? template.lastPlaced : existingLastPlaced;
       const upserted = {
         id,
         name: template.name || 'Regular Order',
         intervalWeeks: template.intervalWeeks ?? 2,
-        lastPlaced: templates[idx]?.lastPlaced || null,
+        lastPlaced: incomingLastPlaced,
         items: template.items,
       };
       if (idx >= 0) templates[idx] = upserted;

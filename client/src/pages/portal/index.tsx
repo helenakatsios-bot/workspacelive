@@ -2324,6 +2324,7 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
   const [editName, setEditName] = useState("Regular Order");
   const [editItems, setEditItems] = useState<any[]>([]);
   const [editIntervalWeeks, setEditIntervalWeeks] = useState(2);
+  const [editLastPlaced, setEditLastPlaced] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [addingVariant, setAddingVariant] = useState<{ productId: string; variants: any[] } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -2349,13 +2350,15 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
   const productsInCategory = selectedCategory ? (allProducts || []).filter((p: any) => (p.category || "Other") === selectedCategory) : [];
 
   function openCreate() {
-    setEditId(null); setEditName(""); setEditItems([]); setEditIntervalWeeks(2);
+    setEditId(null); setEditName(""); setEditItems([]); setEditIntervalWeeks(2); setEditLastPlaced("");
     setSelectedCategory(""); setAddingVariant(null); setMode("edit");
   }
 
   function openEdit(tmpl: any) {
     setEditId(tmpl.id); setEditName(tmpl.name); setEditItems(tmpl.items.map((i: any) => ({ ...i })));
-    setEditIntervalWeeks(tmpl.intervalWeeks ?? 2); setSelectedCategory(""); setAddingVariant(null); setMode("edit");
+    setEditIntervalWeeks(tmpl.intervalWeeks ?? 2);
+    setEditLastPlaced(tmpl.lastPlaced ? new Date(tmpl.lastPlaced).toISOString().split("T")[0] : "");
+    setSelectedCategory(""); setAddingVariant(null); setMode("edit");
   }
 
   function openPlace(tmpl: any) {
@@ -2387,7 +2390,7 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
     try {
       const res = await fetch("/api/portal/recurring-items", {
         method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include",
-        body: JSON.stringify({ template: { id: editId || undefined, name: editName.trim(), items: editItems, intervalWeeks: editIntervalWeeks } }),
+        body: JSON.stringify({ template: { id: editId || undefined, name: editName.trim(), items: editItems, intervalWeeks: editIntervalWeeks, lastPlaced: editLastPlaced ? new Date(editLastPlaced + "T12:00:00").toISOString() : null } }),
       });
       if (!res.ok) throw new Error("Failed to save");
       await refetchRecurring();
@@ -2505,6 +2508,27 @@ function PortalRecurring({ onNavigate, minQty = 1 }: { onNavigate: (page: string
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Last order placed <span className="text-muted-foreground/60">(sets the start date for the schedule)</span>
+          </label>
+          <input
+            type="date"
+            className="w-full sm:w-64 text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+            value={editLastPlaced}
+            onChange={e => setEditLastPlaced(e.target.value)}
+            data-testid="input-edit-last-placed"
+          />
+          {editLastPlaced && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Next order due: <span className="font-medium text-foreground">
+                {new Date(new Date(editLastPlaced + "T12:00:00").getTime() + editIntervalWeeks * 7 * 24 * 60 * 60 * 1000)
+                  .toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+              </span>
+            </p>
+          )}
         </div>
 
         {editItems.length > 0 ? (
