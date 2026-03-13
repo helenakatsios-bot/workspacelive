@@ -6941,11 +6941,18 @@ Rules:
       const resolvedShippingAddress = deliveryAddress || companyRow?.shipping_address || companyRow?.billing_address || null;
       const resolvedPhone = companyRow?.phone || null;
 
+      // Resolve effective price list: company's assigned list, else Standard
+      let effectivePriceListId = companyPriceListId;
+      if (!effectivePriceListId) {
+        const stdList = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
+        if (stdList.rows.length > 0) effectivePriceListId = stdList.rows[0].id;
+      }
+
       const priceMap = new Map<string, number>();
-      if (companyPriceListId) {
+      if (effectivePriceListId) {
         const priceRows = await pool.query(
           `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`,
-          [companyPriceListId]
+          [effectivePriceListId]
         );
         for (const row of priceRows.rows) {
           const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
