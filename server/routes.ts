@@ -6117,25 +6117,27 @@ Rules:
 
       const items = (orderRequest.items as any[]) || [];
 
-      // Build convertPriceMap: load ALL price_list_prices as base, override with company's list
+      // Build convertPriceMap: company's main price list (or Standard fallback) + additional price lists
       const convertPriceMap = new Map<string, number>();
-      const allConvertPrices = await client.query(
-        `SELECT product_id, filling, weight, unit_price FROM price_list_prices ORDER BY price_list_id`
-      );
-      for (const row of allConvertPrices.rows) {
-        const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
-        if (!convertPriceMap.has(key)) convertPriceMap.set(key, parseFloat(row.unit_price));
-        if (!convertPriceMap.has(row.product_id)) convertPriceMap.set(row.product_id, parseFloat(row.unit_price));
-      }
       let convertEffectivePriceListId = company.priceListId;
       if (!convertEffectivePriceListId) {
         const stdList = await client.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
         if (stdList.rows.length > 0) convertEffectivePriceListId = stdList.rows[0].id;
       }
-      if (convertEffectivePriceListId) {
+      const convertPriceListIds: string[] = [];
+      if (convertEffectivePriceListId) convertPriceListIds.push(convertEffectivePriceListId);
+      const convertAdditionalPls = await client.query(
+        `SELECT price_list_id FROM company_additional_price_lists WHERE company_id = $1`,
+        [company.id]
+      );
+      for (const r of convertAdditionalPls.rows) {
+        if (!convertPriceListIds.includes(r.price_list_id)) convertPriceListIds.push(r.price_list_id);
+      }
+      const convertOrderedIds = [...convertPriceListIds.slice(1), ...(convertPriceListIds[0] ? [convertPriceListIds[0]] : [])];
+      for (const plId of convertOrderedIds) {
         const priceRows = await client.query(
           `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`,
-          [convertEffectivePriceListId]
+          [plId]
         );
         for (const row of priceRows.rows) {
           const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
@@ -6290,21 +6292,27 @@ Rules:
       const order = orderResult.rows[0];
       const items: any[] = order.order_items || [];
 
-      // Build priceMap: all price lists as base, company's assigned list on top
+      // Build priceMap: company's main price list (or Standard fallback) + additional price lists
       const priceMap = new Map<string, number>();
-      const allPrices = await pool.query(`SELECT product_id, filling, weight, unit_price FROM price_list_prices ORDER BY price_list_id`);
-      for (const row of allPrices.rows) {
-        const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
-        if (!priceMap.has(key)) priceMap.set(key, parseFloat(row.unit_price));
-        if (!priceMap.has(row.product_id)) priceMap.set(row.product_id, parseFloat(row.unit_price));
-      }
       let effectivePl = order.price_list_id;
       if (!effectivePl) {
         const stdList = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
         if (stdList.rows.length > 0) effectivePl = stdList.rows[0].id;
       }
-      if (effectivePl) {
-        const plPrices = await pool.query(`SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`, [effectivePl]);
+      const recalcPriceListIds: string[] = [];
+      if (effectivePl) recalcPriceListIds.push(effectivePl);
+      if (order.company_id) {
+        const recalcAddl = await pool.query(
+          `SELECT price_list_id FROM company_additional_price_lists WHERE company_id = $1`,
+          [order.company_id]
+        );
+        for (const r of recalcAddl.rows) {
+          if (!recalcPriceListIds.includes(r.price_list_id)) recalcPriceListIds.push(r.price_list_id);
+        }
+      }
+      const recalcOrdered = [...recalcPriceListIds.slice(1), ...(recalcPriceListIds[0] ? [recalcPriceListIds[0]] : [])];
+      for (const plId of recalcOrdered) {
+        const plPrices = await pool.query(`SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`, [plId]);
         for (const row of plPrices.rows) {
           const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
           priceMap.set(key, parseFloat(row.unit_price));
@@ -7015,32 +7023,33 @@ Rules:
       const resolvedShippingAddress = deliveryAddress || companyRow?.shipping_address || companyRow?.billing_address || null;
       const resolvedPhone = companyRow?.phone || null;
 
-      // Build priceMap: load ALL price_list_prices as base (lowest priority),
-      // then overlay company's assigned price list (highest priority)
+      // Build priceMap: company's main price list (or Standard fallback) + additional price lists
       const priceMap = new Map<string, number>();
 
-      // Step 1: Load all prices from every price list as a fallback base
-      const allPriceRows = await pool.query(
-        `SELECT product_id, filling, weight, unit_price FROM price_list_prices ORDER BY price_list_id`
-      );
-      for (const row of allPriceRows.rows) {
-        const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
-        if (!priceMap.has(key)) priceMap.set(key, parseFloat(row.unit_price));
-        if (!priceMap.has(row.product_id)) priceMap.set(row.product_id, parseFloat(row.unit_price));
-      }
-
-      // Step 2: Determine effective price list (company's assigned, else Standard)
+      // Determine effective main price list (company's assigned, else Standard)
       let effectivePriceListId = companyPriceListId;
       if (!effectivePriceListId) {
         const stdList = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
         if (stdList.rows.length > 0) effectivePriceListId = stdList.rows[0].id;
       }
 
-      // Step 3: Override with company-specific prices (highest priority)
-      if (effectivePriceListId) {
+      // Load price list IDs to use: main + additional
+      const priceListIds: string[] = [];
+      if (effectivePriceListId) priceListIds.push(effectivePriceListId);
+      const additionalPls = await pool.query(
+        `SELECT price_list_id FROM company_additional_price_lists WHERE company_id = $1`,
+        [companyId]
+      );
+      for (const r of additionalPls.rows) {
+        if (!priceListIds.includes(r.price_list_id)) priceListIds.push(r.price_list_id);
+      }
+
+      // Load prices: additional lists first (lower priority), then main list (overrides)
+      const orderedIds = [...priceListIds.slice(1), ...(priceListIds[0] ? [priceListIds[0]] : [])];
+      for (const plId of orderedIds) {
         const priceRows = await pool.query(
           `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`,
-          [effectivePriceListId]
+          [plId]
         );
         for (const row of priceRows.rows) {
           const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
@@ -7312,25 +7321,27 @@ Rules:
       const [portalUser] = await db.select().from(portalUsers).where(eq(portalUsers.id, req.session.portalUserId!));
       const contactName = submittedCustomerName || portalUser?.name || existing.rows[0].contact_name;
 
-      // Build priceMap: load ALL price_list_prices as base, override with company's list
+      // Build priceMap: company's main price list (or Standard fallback) + additional price lists
       const priceMap = new Map<string, number>();
-      const allPriceRowsEdit = await pool.query(
-        `SELECT product_id, filling, weight, unit_price FROM price_list_prices ORDER BY price_list_id`
-      );
-      for (const row of allPriceRowsEdit.rows) {
-        const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;
-        if (!priceMap.has(key)) priceMap.set(key, parseFloat(row.unit_price));
-        if (!priceMap.has(row.product_id)) priceMap.set(row.product_id, parseFloat(row.unit_price));
-      }
       let effectivePlId = companyPriceListId;
       if (!effectivePlId) {
         const stdList = await pool.query(`SELECT id FROM price_lists WHERE LOWER(name) = 'standard' LIMIT 1`);
         if (stdList.rows.length > 0) effectivePlId = stdList.rows[0].id;
       }
-      if (effectivePlId) {
+      const editPriceListIds: string[] = [];
+      if (effectivePlId) editPriceListIds.push(effectivePlId);
+      const editAdditionalPls = await pool.query(
+        `SELECT price_list_id FROM company_additional_price_lists WHERE company_id = $1`,
+        [companyId]
+      );
+      for (const r of editAdditionalPls.rows) {
+        if (!editPriceListIds.includes(r.price_list_id)) editPriceListIds.push(r.price_list_id);
+      }
+      const editOrderedIds = [...editPriceListIds.slice(1), ...(editPriceListIds[0] ? [editPriceListIds[0]] : [])];
+      for (const plId of editOrderedIds) {
         const priceRows = await pool.query(
           `SELECT product_id, filling, weight, unit_price FROM price_list_prices WHERE price_list_id = $1`,
-          [effectivePlId]
+          [plId]
         );
         for (const row of priceRows.rows) {
           const key = `${row.product_id}|${row.filling || ''}|${row.weight || ''}`;

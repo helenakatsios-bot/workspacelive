@@ -1076,11 +1076,11 @@ async function runStartupTasks() {
     }
     if (customInsertsResult.rows.length > 0) {
       const customInsertsId = customInsertsResult.rows[0].id;
-      // Get all companies whose main price list is Interiors or Standard
+      // Get all companies whose main price list is Interiors, Standard, or NULL (no price list assigned)
       const companiesResult = await pool.query(`
         SELECT c.id FROM companies c
-        JOIN price_lists pl ON pl.id = c.price_list_id
-        WHERE pl.name IN ('Interiors', 'Standard')
+        LEFT JOIN price_lists pl ON pl.id = c.price_list_id
+        WHERE pl.name IN ('Interiors', 'Standard') OR c.price_list_id IS NULL
       `);
       let added = 0;
       for (const row of companiesResult.rows) {
@@ -1096,7 +1096,7 @@ async function runStartupTasks() {
           added++;
         }
       }
-      console.log(`Custom Inserts assigned to ${added} new companies (${companiesResult.rows.length} total on Interiors/Standard)`);
+      console.log(`Custom Inserts assigned to ${added} new companies (${companiesResult.rows.length} total on Interiors/Standard/no-list)`);
     }
   } catch (err: any) {
     console.error("Custom Inserts bulk assignment error:", err.message);
@@ -1364,6 +1364,30 @@ async function runStartupTasks() {
     }
   } catch (err: any) {
     console.error("[Sheertex fix] Error:", err.message);
+  }
+
+  // Remove INSERTS and HLC182 products from "15% Duck Down Inserts" price list — only "15 % INSERTS" category allowed
+  try {
+    const ddPl = await pool.query(`SELECT id FROM price_lists WHERE name = '15% Duck Down Inserts' LIMIT 1`);
+    if (ddPl.rows.length > 0) {
+      const ddId = ddPl.rows[0].id;
+      const removed = await pool.query(
+        `DELETE FROM price_list_prices
+         WHERE price_list_id = $1
+           AND product_id IN (
+             SELECT id FROM products
+             WHERE UPPER(TRIM(COALESCE(category,''))) NOT IN ('15 % INSERTS', '15% INSERTS', '15 %INSERTS')
+           )`,
+        [ddId]
+      );
+      if ((removed.rowCount || 0) > 0) {
+        console.log(`[15% Duck Down Inserts] Removed ${removed.rowCount} non-"15 % INSERTS" entries (INSERTS/HLC182 etc.)`);
+      } else {
+        console.log(`[15% Duck Down Inserts] No stale entries to remove — price list is clean`);
+      }
+    }
+  } catch (err: any) {
+    console.error("[15% Duck Down Inserts cleanup] Error:", err.message);
   }
 
   console.log("All startup tasks completed");
