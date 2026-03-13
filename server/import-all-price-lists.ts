@@ -19,6 +19,7 @@ interface PriceListConfig {
   categoryNorm?: (cat: string) => string;
   csvStartRow?: number;
   swapSkuCategory?: boolean;
+  allowedCategories?: string[];
 }
 
 const PRICE_LISTS: PriceListConfig[] = [
@@ -200,6 +201,7 @@ const PRICE_LISTS: PriceListConfig[] = [
     description: "15% Duck Down Inserts pricing",
     isDefault: false,
     csvFiles: ["15%_DUCK_DOWN_INSERTS_OFFICAL_1773358738971.csv"],
+    allowedCategories: ["15 % INSERTS"],
   },
 ];
 
@@ -247,7 +249,7 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
   const lines = content.split("\n").filter((l) => l.trim());
 
   const startRow = config.csvStartRow ?? 1;
-  const rows: CsvRow[] = [];
+  let rows: CsvRow[] = [];
   for (let i = startRow; i < lines.length; i++) {
     const fields = parseCsvLine(lines[i]);
     if (fields.length < 6) continue;
@@ -264,6 +266,16 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
   }
 
   console.log(`[${config.name}] Parsed ${rows.length} rows from CSV`);
+
+  // Filter to only allowed categories if specified
+  if (config.allowedCategories && config.allowedCategories.length > 0) {
+    const allowed = new Set(config.allowedCategories.map(c => c.toUpperCase().trim()));
+    const before = rows.length;
+    rows = rows.filter(r => allowed.has(r.category.toUpperCase().trim()));
+    if (rows.length !== before) {
+      console.log(`[${config.name}] Category filter: kept ${rows.length}/${before} rows (allowed: ${config.allowedCategories.join(", ")})`);
+    }
+  }
 
   const client = await pool.connect();
   try {
