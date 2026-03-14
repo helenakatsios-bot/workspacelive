@@ -109,14 +109,6 @@ export default function LoginPage() {
             </form>
           </Form>
 
-          <div className="mt-6 p-4 rounded-lg bg-muted">
-            <p className="text-xs text-muted-foreground mb-2">Demo accounts:</p>
-            <div className="space-y-1 text-xs">
-              <p><span className="font-medium">Admin:</span> admin@company.com / admin123</p>
-              <p><span className="font-medium">Office:</span> office@company.com / office123</p>
-              <p><span className="font-medium">Warehouse:</span> warehouse@company.com / warehouse123</p>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>
