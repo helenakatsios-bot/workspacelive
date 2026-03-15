@@ -567,8 +567,16 @@ export async function registerRoutes(
 
   app.get("/api/activities", requireAuth, async (req, res) => {
     try {
+      const tenantId = req.session.tenantId;
       const result = await pool.query(
-        `SELECT a.*, u.name as user_name FROM activities a LEFT JOIN users u ON a.created_by = u.id ORDER BY a.created_at DESC LIMIT 100`
+        `SELECT a.*, u.name as user_name FROM activities a
+         LEFT JOIN users u ON a.created_by = u.id
+         WHERE u.tenant_id = $1
+            OR (a.entity_type = 'company' AND a.entity_id IN (SELECT id FROM companies WHERE tenant_id = $1))
+            OR (a.entity_type = 'order' AND a.entity_id IN (SELECT id FROM orders WHERE tenant_id = $1))
+            OR (a.entity_type = 'deal' AND a.entity_id IN (SELECT d.id FROM deals d JOIN companies c ON d.company_id = c.id WHERE c.tenant_id = $1))
+         ORDER BY a.created_at DESC LIMIT 100`,
+        [tenantId]
       );
       res.json(result.rows.map((r: any) => ({
         id: r.id,
@@ -2052,7 +2060,16 @@ export async function registerRoutes(
 
   app.get("/api/attachments", requireAuth, async (req, res) => {
     try {
-      const allAttachments = await db.select().from(attachments).orderBy(attachments.uploadedAt);
+      const tenantId = req.session.tenantId;
+      const result = await pool.query(
+        `SELECT a.* FROM attachments a
+         WHERE (a.entity_type = 'order' AND a.entity_id IN (SELECT id FROM orders WHERE tenant_id = $1))
+            OR (a.entity_type = 'company' AND a.entity_id IN (SELECT id FROM companies WHERE tenant_id = $1))
+            OR (a.uploaded_by IN (SELECT id FROM users WHERE tenant_id = $1))
+         ORDER BY a.uploaded_at`,
+        [tenantId]
+      );
+      const allAttachments = result.rows;
       res.json(allAttachments);
     } catch (error) {
       console.error("Get all attachments error:", error);
@@ -2329,14 +2346,14 @@ export async function registerRoutes(
       const order = await storage.getOrder(req.params.id);
       if (!order) return res.status(404).json({ message: "Order not found" });
 
-      const token = await getStoredToken();
+      const token = await getStoredToken(req.session.tenantId || PURAX_TENANT_ID);
       if (!token) return res.status(400).json({ message: "Xero not connected. Go to Settings → Xero to connect your account first." });
 
       // Refresh token if needed — if this returns false the token is expired and can't be refreshed
       const xero = createXeroClient(`${req.protocol}://${req.get("host")}/api/xero/callback`);
       const refreshed = await refreshTokenIfNeeded(xero, token);
       if (!refreshed) return res.status(401).json({ message: "Your Xero connection has expired. Please go to Settings → Xero and reconnect your account." });
-      const freshToken = await getStoredToken();
+      const freshToken = await getStoredToken(req.session.tenantId || PURAX_TENANT_ID);
       if (!freshToken) return res.status(401).json({ message: "Your Xero connection has expired. Please go to Settings → Xero and reconnect your account." });
 
       const accessToken = freshToken.accessToken;
@@ -2555,13 +2572,13 @@ export async function registerRoutes(
       const xeroInvoiceId = (order as any).xeroInvoiceId;
       if (!xeroInvoiceId) return res.status(400).json({ message: "This order has not been sent to Xero yet." });
 
-      const token = await getStoredToken();
+      const token = await getStoredToken(req.session.tenantId || PURAX_TENANT_ID);
       if (!token) return res.status(400).json({ message: "Xero not connected." });
 
       const xero = createXeroClient(`${req.protocol}://${req.get("host")}/api/xero/callback`);
       const refreshed2 = await refreshTokenIfNeeded(xero, token);
       if (!refreshed2) return res.status(401).json({ message: "Your Xero connection has expired. Please go to Settings → Xero and reconnect your account." });
-      const freshToken = await getStoredToken();
+      const freshToken = await getStoredToken(req.session.tenantId || PURAX_TENANT_ID);
       if (!freshToken) return res.status(401).json({ message: "Your Xero connection has expired. Please reconnect." });
 
       const fetchRes = await fetch(`https://api.xero.com/api.xro/2.0/Invoices/${xeroInvoiceId}`, {
@@ -3184,7 +3201,7 @@ export async function registerRoutes(
   // Helper: fire a webhook to Millie (or any configured URL) when an order is invoiced
   async function notifyMillieWebhook(payload: Record<string, any>) {
     try {
-      const millieWebhookUrl = await storage.getSetting("millie_webhook_url");
+      const millieWebhookUrl = await storage.getSetting("millie_webhook_url", PURAX_TENANT_ID);
       if (!millieWebhookUrl) return;
 
       const apiKey = process.env.CRM_API_KEY;
@@ -3615,7 +3632,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/audit-logs", requireAdmin, async (req, res) => {
     try {
-      const logs = await storage.getAuditLogs(100);
+      const logs = await storage.getAuditLogs(100, req.session.tenantId);
       const users = await storage.getAllUsers(req.session.tenantId!);
       const userMap = new Map(users.map(u => [u.id, u]));
       const logsWithUser = logs.map(log => ({
@@ -3634,7 +3651,7 @@ export async function registerRoutes(
   // Get Xero connection status
   app.get("/api/xero/status", requireAdmin, async (req, res) => {
     try {
-      const token = await getStoredToken();
+      const token = await getStoredToken(req.session.tenantId);
       if (token) {
         res.json({
           connected: true,
@@ -3659,12 +3676,15 @@ export async function registerRoutes(
       const state = Math.random().toString(36).substring(2) + Date.now().toString(36);
       req.session.xeroState = state;
       
+      const xeroStateKey = `xero_oauth_state_${state}`;
+      const xeroStateTenantId = req.session.tenantId || PURAX_TENANT_ID;
       await db.insert(crmSettings).values({
-        key: `xero_oauth_state_${state}`,
-        value: JSON.stringify({ userId: req.session.userId, createdAt: Date.now() }),
+        key: xeroStateKey,
+        tenantId: xeroStateTenantId,
+        value: JSON.stringify({ userId: req.session.userId, tenantId: xeroStateTenantId, createdAt: Date.now() }),
       }).onConflictDoUpdate({
-        target: crmSettings.key,
-        set: { value: JSON.stringify({ userId: req.session.userId, createdAt: Date.now() }) },
+        target: [crmSettings.key, crmSettings.tenantId],
+        set: { value: JSON.stringify({ userId: req.session.userId, tenantId: xeroStateTenantId, createdAt: Date.now() }) },
       });
       
       const xero = createXeroClient(redirectUri);
@@ -3773,7 +3793,8 @@ export async function registerRoutes(
           activeTenant.tenantName || "Xero Organisation",
           tokenData.access_token,
           tokenData.refresh_token,
-          new Date(Date.now() + tokenData.expires_in * 1000)
+          new Date(Date.now() + tokenData.expires_in * 1000),
+          user.tenantId || PURAX_TENANT_ID
         );
         
         await storage.createAuditLog({
@@ -3797,7 +3818,7 @@ export async function registerRoutes(
   // Disconnect Xero
   app.post("/api/xero/disconnect", requireAdmin, async (req, res) => {
     try {
-      await deleteXeroToken();
+      await deleteXeroToken(req.session.tenantId || PURAX_TENANT_ID);
       res.json({ success: true });
     } catch (error) {
       console.error("Xero disconnect error:", error);
@@ -3808,7 +3829,7 @@ export async function registerRoutes(
   // Import contacts from Xero
   app.post("/api/xero/import-contacts", requireAdmin, async (req, res) => {
     try {
-      const token = await getStoredToken();
+      const token = await getStoredToken(req.session.tenantId || PURAX_TENANT_ID);
       if (!token) {
         return res.status(400).json({ message: "Xero not connected" });
       }
@@ -3820,7 +3841,7 @@ export async function registerRoutes(
       const refreshed = await refreshTokenIfNeeded(xero, token);
       
       if (!refreshed) {
-        await deleteXeroToken();
+        await deleteXeroToken(req.session.tenantId || PURAX_TENANT_ID);
         return res.status(401).json({ message: "Xero session expired. Please go to Admin > Integrations and reconnect Xero." });
       }
       
@@ -3862,7 +3883,7 @@ export async function registerRoutes(
         return res.json({ message: "Import already in progress", status: "running", progress: xeroImportStatus.progress });
       }
 
-      const token = await getStoredToken();
+      const token = await getStoredToken(req.session.tenantId || PURAX_TENANT_ID);
       if (!token) {
         return res.status(400).json({ message: "Xero not connected" });
       }
@@ -3874,11 +3895,11 @@ export async function registerRoutes(
       const refreshed = await refreshTokenIfNeeded(xero, token);
       
       if (!refreshed) {
-        await deleteXeroToken();
+        await deleteXeroToken(req.session.tenantId || PURAX_TENANT_ID);
         return res.status(401).json({ message: "Xero session expired. Please go to Admin > Integrations and reconnect Xero." });
       }
       
-      const freshToken = await getStoredToken();
+      const freshToken = await getStoredToken(req.session.tenantId || PURAX_TENANT_ID);
       if (!freshToken) {
         return res.status(400).json({ message: "Xero token not found after refresh" });
       }
@@ -3936,7 +3957,7 @@ export async function registerRoutes(
         return res.json({ message: "Repair already in progress", status: "running", progress: xeroRepairStatus.progress });
       }
 
-      const token = await getStoredToken();
+      const token = await getStoredToken(req.session.tenantId || PURAX_TENANT_ID);
       if (!token) {
         return res.status(400).json({ message: "Xero not connected" });
       }
@@ -3947,11 +3968,11 @@ export async function registerRoutes(
       const refreshed = await refreshTokenIfNeeded(xero, token);
 
       if (!refreshed) {
-        await deleteXeroToken();
+        await deleteXeroToken(req.session.tenantId || PURAX_TENANT_ID);
         return res.status(401).json({ message: "Xero session expired. Please reconnect Xero." });
       }
 
-      const freshToken = await getStoredToken();
+      const freshToken = await getStoredToken(req.session.tenantId || PURAX_TENANT_ID);
       if (!freshToken) {
         return res.status(400).json({ message: "Xero token not found after refresh" });
       }
@@ -3983,7 +4004,7 @@ export async function registerRoutes(
   // Sync invoice to Xero
   app.post("/api/xero/sync-invoice/:invoiceId", requireAdmin, async (req, res) => {
     try {
-      const token = await getStoredToken();
+      const token = await getStoredToken(req.session.tenantId || PURAX_TENANT_ID);
       if (!token) {
         return res.status(400).json({ message: "Xero not connected" });
       }
@@ -4005,7 +4026,7 @@ export async function registerRoutes(
       const refreshed = await refreshTokenIfNeeded(xero, token);
       
       if (!refreshed) {
-        await deleteXeroToken();
+        await deleteXeroToken(req.session.tenantId || PURAX_TENANT_ID);
         return res.status(401).json({ message: "Xero session expired. Please go to Admin > Integrations and reconnect Xero." });
       }
       
@@ -5488,7 +5509,7 @@ Rules:
 
       // Send email notification
       try {
-        const notificationEmailSetting = await storage.getSetting("notification_email");
+        const notificationEmailSetting = await storage.getSetting("notification_email", PURAX_TENANT_ID);
         if (notificationEmailSetting) {
           const recipientEmails = notificationEmailSetting
             .split(",")
@@ -5825,7 +5846,7 @@ Rules:
       }
 
       const authHeader = req.headers["x-webhook-secret"] || req.headers["authorization"];
-      const webhookSecret = await storage.getSetting("email_order_webhook_secret");
+      const webhookSecret = await storage.getSetting("email_order_webhook_secret", PURAX_TENANT_ID);
 
       if (!webhookSecret) {
         return res.status(503).json({ message: "Webhook not configured" });
@@ -5897,7 +5918,7 @@ Rules:
     try {
       const { randomBytes } = await import("crypto");
       const secret = randomBytes(32).toString("hex");
-      await storage.setSetting("email_order_webhook_secret", secret);
+      await storage.setSetting("email_order_webhook_secret", secret, req.session.tenantId || PURAX_TENANT_ID);
 
       await storage.createAuditLog({
         userId: req.session.userId,
@@ -6387,7 +6408,7 @@ Rules:
   // ==================== CRM SETTINGS ====================
   app.get("/api/settings/:key", requireAuth, async (req, res) => {
     try {
-      const value = await storage.getSetting(req.params.key);
+      const value = await storage.getSetting(req.params.key, req.session.tenantId || PURAX_TENANT_ID);
       res.json({ key: req.params.key, value: value || "" });
     } catch (error) {
       res.status(500).json({ message: "Failed to load setting" });
@@ -6397,7 +6418,7 @@ Rules:
   app.put("/api/settings/:key", requireAdmin, async (req, res) => {
     try {
       const { value } = req.body;
-      await storage.setSetting(req.params.key, value);
+      await storage.setSetting(req.params.key, value, req.session.tenantId || PURAX_TENANT_ID);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: "Failed to save setting" });
@@ -7031,7 +7052,7 @@ Rules:
       const companyId = req.session.portalCompanyId!;
       const [portalUser] = await db.select().from(portalUsers).where(eq(portalUsers.id, req.session.portalUserId!));
 
-      const companyResult = await pool.query(`SELECT legal_name, trading_name, price_list_id, shipping_address, billing_address, phone FROM companies WHERE id = $1`, [companyId]);
+      const companyResult = await pool.query(`SELECT legal_name, trading_name, price_list_id, shipping_address, billing_address, phone, tenant_id FROM companies WHERE id = $1`, [companyId]);
       const companyRow = companyResult.rows[0];
       const companyName = companyRow?.trading_name || companyRow?.legal_name || "Unknown";
       const companyPriceListId = companyRow?.price_list_id;
@@ -7156,7 +7177,7 @@ Rules:
 
       // Send email notification to staff
       try {
-        const notificationEmailSetting = await storage.getSetting("notification_email");
+        const notificationEmailSetting = await storage.getSetting("notification_email", companyRow?.tenant_id || PURAX_TENANT_ID);
         if (notificationEmailSetting) {
           const recipientEmails = notificationEmailSetting
             .split(",")
@@ -7721,10 +7742,11 @@ Rules:
   // Get global default category order (admin)
   app.get("/api/admin/portal-category-order", requireAuth, async (req, res) => {
     try {
-      const row = await pool.query(`SELECT value FROM crm_settings WHERE key = 'portal_category_order' LIMIT 1`);
-      if (row.rows[0]?.value) {
+      const tenantId = req.session.tenantId || PURAX_TENANT_ID;
+      const value = await storage.getSetting("portal_category_order", tenantId);
+      if (value) {
         try {
-          const parsed = JSON.parse(row.rows[0].value);
+          const parsed = JSON.parse(value);
           if (Array.isArray(parsed)) return res.json({ order: parsed, source: "global" });
         } catch {}
       }
@@ -7739,12 +7761,8 @@ Rules:
     try {
       const { order } = req.body;
       if (!Array.isArray(order)) return res.status(400).json({ message: "order must be an array" });
-      const existing = await pool.query(`SELECT id FROM crm_settings WHERE key = 'portal_category_order' LIMIT 1`);
-      if (existing.rows.length > 0) {
-        await pool.query(`UPDATE crm_settings SET value = $1, updated_at = NOW() WHERE key = 'portal_category_order'`, [JSON.stringify(order)]);
-      } else {
-        await pool.query(`INSERT INTO crm_settings (id, key, value, created_at, updated_at) VALUES (gen_random_uuid(), 'portal_category_order', $1, NOW(), NOW())`, [JSON.stringify(order)]);
-      }
+      const tenantId = req.session.tenantId || PURAX_TENANT_ID;
+      await storage.setSetting("portal_category_order", JSON.stringify(order), tenantId);
       res.json({ success: true, order });
     } catch (error) {
       res.status(500).json({ message: "Failed to save global category order" });
@@ -7878,6 +7896,7 @@ Rules:
 
   app.get("/api/admin/portal-users", requireAdmin, async (req, res) => {
     try {
+      const tenantId = req.session.tenantId!;
       const result = await pool.query(`
         SELECT pu.id, pu.company_id, pu.contact_id, pu.name, pu.email, pu.active, pu.created_at, pu.last_login,
           COALESCE(co.trading_name, co.legal_name, '') as company_name, co.payment_terms,
@@ -7885,8 +7904,9 @@ Rules:
         FROM portal_users pu
         LEFT JOIN companies co ON co.id = pu.company_id
         LEFT JOIN contacts ct ON ct.id = pu.contact_id
+        WHERE pu.tenant_id = $1
         ORDER BY pu.created_at DESC
-      `);
+      `, [tenantId]);
       res.json(result.rows.map((r: any) => ({
         id: r.id,
         companyId: r.company_id,
@@ -7931,13 +7951,15 @@ Rules:
 
   app.get("/api/admin/portal-users/export-csv", requireAdmin, async (req, res) => {
     try {
+      const tenantId = req.session.tenantId!;
       const result = await pool.query(`
         SELECT pu.name, pu.email,
           COALESCE(co.trading_name, co.legal_name, '') as company_name
         FROM portal_users pu
         LEFT JOIN companies co ON co.id = pu.company_id
+        WHERE pu.tenant_id = $1
         ORDER BY pu.name
-      `);
+      `, [tenantId]);
 
       let csv = 'Name,Email (Login),Company\n';
       for (const row of result.rows) {
@@ -8671,10 +8693,12 @@ Rules:
 
   // ==================== SHOPIFY INTEGRATION ====================
 
-  // Helper to get Shopify config from crm_settings
-  async function getShopifyConfig() {
+  // Helper to get Shopify config from crm_settings (tenant-aware)
+  async function getShopifyConfig(tenantId: string = PURAX_TENANT_ID) {
     const keys = ["shopify_store_domain", "shopify_api_token", "shopify_webhook_secret", "shopify_client_id", "shopify_client_secret"];
-    const rows = await db.select().from(crmSettings).where(inArray(crmSettings.key, keys));
+    const rows = await db.select().from(crmSettings).where(
+      and(inArray(crmSettings.key, keys), eq(crmSettings.tenantId, tenantId))
+    );
     const map: Record<string, string> = {};
     for (const r of rows) map[r.key] = r.value;
     return {
@@ -8686,10 +8710,10 @@ Rules:
     };
   }
 
-  // Upsert a crm_setting value
-  async function upsertSetting(key: string, value: string) {
-    await db.insert(crmSettings).values({ key, value }).onConflictDoUpdate({
-      target: crmSettings.key,
+  // Upsert a crm_setting value (tenant-aware)
+  async function upsertSetting(key: string, value: string, tenantId: string = PURAX_TENANT_ID) {
+    await db.insert(crmSettings).values({ key, tenantId, value }).onConflictDoUpdate({
+      target: [crmSettings.key, crmSettings.tenantId],
       set: { value, updatedAt: new Date() },
     });
   }
@@ -8697,7 +8721,7 @@ Rules:
   // GET shopify config (masks tokens)
   app.get("/api/admin/shopify-config", requireAdmin, async (req, res) => {
     try {
-      const config = await getShopifyConfig();
+      const config = await getShopifyConfig(req.session.tenantId || PURAX_TENANT_ID);
       const protocol = req.headers["x-forwarded-proto"] || req.protocol;
       const host = req.headers["x-forwarded-host"] || req.headers.host;
       res.json({
@@ -8720,11 +8744,12 @@ Rules:
   app.put("/api/admin/shopify-config", requireAdmin, async (req, res) => {
     try {
       const { storeDomain, apiToken, webhookSecret, clientId, clientSecret } = req.body;
-      if (storeDomain !== undefined) await upsertSetting("shopify_store_domain", storeDomain.trim().replace(/^https?:\/\//, "").replace(/\/$/, ""));
-      if (apiToken && !apiToken.startsWith("••••")) await upsertSetting("shopify_api_token", apiToken.trim());
-      if (webhookSecret && !webhookSecret.startsWith("••••")) await upsertSetting("shopify_webhook_secret", webhookSecret.trim());
-      if (clientId !== undefined) await upsertSetting("shopify_client_id", clientId.trim());
-      if (clientSecret && !clientSecret.startsWith("••••")) await upsertSetting("shopify_client_secret", clientSecret.trim());
+      const tid = req.session.tenantId || PURAX_TENANT_ID;
+      if (storeDomain !== undefined) await upsertSetting("shopify_store_domain", storeDomain.trim().replace(/^https?:\/\//, "").replace(/\/$/, ""), tid);
+      if (apiToken && !apiToken.startsWith("••••")) await upsertSetting("shopify_api_token", apiToken.trim(), tid);
+      if (webhookSecret && !webhookSecret.startsWith("••••")) await upsertSetting("shopify_webhook_secret", webhookSecret.trim(), tid);
+      if (clientId !== undefined) await upsertSetting("shopify_client_id", clientId.trim(), tid);
+      if (clientSecret && !clientSecret.startsWith("••••")) await upsertSetting("shopify_client_secret", clientSecret.trim(), tid);
       res.json({ message: "Shopify configuration saved" });
     } catch (error) {
       console.error("Save Shopify config error:", error);
@@ -8735,7 +8760,7 @@ Rules:
   // GET start Shopify OAuth — redirects to Shopify authorization page
   app.get("/api/shopify/oauth/start", requireAdmin, async (req, res) => {
     try {
-      const config = await getShopifyConfig();
+      const config = await getShopifyConfig(req.session.tenantId || PURAX_TENANT_ID);
       if (!config.storeDomain || !config.clientId) {
         return res.redirect("/admin?tab=integrations&shopify_error=missing_config#shopify-config");
       }
@@ -8765,7 +8790,7 @@ Rules:
       }
       delete (req.session as any).shopifyOAuthState;
 
-      const config = await getShopifyConfig();
+      const config = await getShopifyConfig(req.session.tenantId || PURAX_TENANT_ID);
       if (!config.clientId || !config.clientSecret) {
         return res.redirect("/admin?tab=integrations&shopify_error=missing_credentials#shopify-config");
       }
@@ -8798,8 +8823,9 @@ Rules:
       }
 
       const tokenData = await tokenRes.json() as { access_token: string; scope: string };
-      await upsertSetting("shopify_api_token", tokenData.access_token);
-      if (shop) await upsertSetting("shopify_store_domain", shop.replace(/^https?:\/\//, "").replace(/\/$/, ""));
+      const oauthTenantId = req.session.tenantId || PURAX_TENANT_ID;
+      await upsertSetting("shopify_api_token", tokenData.access_token, oauthTenantId);
+      if (shop) await upsertSetting("shopify_store_domain", shop.replace(/^https?:\/\//, "").replace(/\/$/, ""), oauthTenantId);
 
       console.log(`[SHOPIFY OAuth] Successfully connected. Scopes: ${tokenData.scope}`);
       res.redirect("/admin?tab=integrations&shopify_success=1#shopify-config");
@@ -8812,7 +8838,7 @@ Rules:
   // DELETE shopify OAuth token (disconnect)
   app.delete("/api/admin/shopify-config/disconnect", requireAdmin, async (req, res) => {
     try {
-      await upsertSetting("shopify_api_token", "");
+      await upsertSetting("shopify_api_token", "", req.session.tenantId || PURAX_TENANT_ID);
       res.json({ message: "Shopify disconnected" });
     } catch (error) {
       res.status(500).json({ message: "Failed to disconnect" });
@@ -8822,7 +8848,7 @@ Rules:
   // POST test Shopify connection
   app.post("/api/admin/shopify-config/test", requireAdmin, async (req, res) => {
     try {
-      const config = await getShopifyConfig();
+      const config = await getShopifyConfig(req.session.tenantId || PURAX_TENANT_ID);
       if (!config.storeDomain || !config.apiToken) {
         return res.status(400).json({ message: "Store domain and API token are required" });
       }
@@ -8843,7 +8869,7 @@ Rules:
   // POST public Shopify webhook — orders/created
   app.post("/api/webhooks/shopify/orders/created", async (req, res) => {
     try {
-      const config = await getShopifyConfig();
+      const config = await getShopifyConfig(PURAX_TENANT_ID);
 
       // Verify HMAC signature if webhook secret is configured
       if (config.webhookSecret) {
@@ -8900,7 +8926,7 @@ Rules:
 
       // Get the configured Shopify company name (Shopify webhook is Purax-specific)
       const allCompanies = await storage.getAllCompanies(PURAX_TENANT_ID);
-      const configuredCompanyId = await storage.getSetting("shopify_company_id");
+      const configuredCompanyId = await storage.getSetting("shopify_company_id", PURAX_TENANT_ID);
       let shopifyCompany = configuredCompanyId
         ? allCompanies.find((c) => c.id === configuredCompanyId)
         : null;
@@ -8975,7 +9001,7 @@ Rules:
       if (!order) return res.status(404).json({ message: "Order not found" });
       if (!(order as any).shopifyOrderId) return res.status(400).json({ message: "This order is not linked to a Shopify order" });
 
-      const config = await getShopifyConfig();
+      const config = await getShopifyConfig(req.session.tenantId || PURAX_TENANT_ID);
       if (!config.storeDomain || !config.apiToken) {
         return res.status(400).json({ message: "Shopify is not configured. Set up the integration in Admin Settings." });
       }

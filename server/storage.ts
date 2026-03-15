@@ -123,7 +123,7 @@ export interface IStorage {
   createActivity(activity: InsertActivity): Promise<Activity>;
 
   // Audit Logs
-  getAuditLogs(limit?: number): Promise<AuditLog[]>;
+  getAuditLogs(limit?: number, tenantId?: string): Promise<AuditLog[]>;
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
 
   // Reports
@@ -140,8 +140,8 @@ export interface IStorage {
   deleteOrder(id: string): Promise<boolean>;
 
   // CRM Settings
-  getSetting(key: string): Promise<string | undefined>;
-  setSetting(key: string, value: string): Promise<void>;
+  getSetting(key: string, tenantId?: string): Promise<string | undefined>;
+  setSetting(key: string, value: string, tenantId?: string): Promise<void>;
 
   // Public
   getActiveProducts(): Promise<Product[]>;
@@ -673,7 +673,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Audit Logs
-  async getAuditLogs(limit: number = 100): Promise<AuditLog[]> {
+  async getAuditLogs(limit: number = 100, tenantId?: string): Promise<AuditLog[]> {
+    if (tenantId) {
+      const rows = await pool.query(
+        `SELECT al.* FROM audit_logs al LEFT JOIN users u ON al.user_id = u.id WHERE u.tenant_id = $1 OR (al.user_id IS NULL AND $2 = $3) ORDER BY al.timestamp DESC LIMIT $4`,
+        [tenantId, tenantId, PURAX_TENANT_ID, limit]
+      );
+      return rows.rows as AuditLog[];
+    }
     return db.select().from(auditLogs).orderBy(desc(auditLogs.timestamp)).limit(limit);
   }
 
@@ -752,15 +759,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   // CRM Settings
-  async getSetting(key: string): Promise<string | undefined> {
-    const [setting] = await db.select().from(crmSettings).where(eq(crmSettings.key, key));
+  async getSetting(key: string, tenantId: string = PURAX_TENANT_ID): Promise<string | undefined> {
+    const [setting] = await db.select().from(crmSettings)
+      .where(and(eq(crmSettings.key, key), eq(crmSettings.tenantId, tenantId)));
     return setting?.value;
   }
 
-  async setSetting(key: string, value: string): Promise<void> {
+  async setSetting(key: string, value: string, tenantId: string = PURAX_TENANT_ID): Promise<void> {
     await db.insert(crmSettings)
-      .values({ key, value, updatedAt: new Date() })
-      .onConflictDoUpdate({ target: crmSettings.key, set: { value, updatedAt: new Date() } });
+      .values({ key, tenantId, value, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: [crmSettings.key, crmSettings.tenantId], set: { value, updatedAt: new Date() } });
   }
 
   // Public

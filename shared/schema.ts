@@ -342,6 +342,7 @@ export const xeroTokens = pgTable("xero_tokens", {
   accessToken: text("access_token").notNull(),
   refreshToken: text("refresh_token").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
+  crmTenantId: varchar("crm_tenant_id", { length: 36 }).notNull().default(PURAX_TENANT_ID),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -450,10 +451,13 @@ export type CustomerOrderRequest = typeof customerOrderRequests.$inferSelect;
 
 // ============ CRM SETTINGS ============
 export const crmSettings = pgTable("crm_settings", {
-  key: text("key").primaryKey(),
+  key: text("key").notNull(),
+  tenantId: varchar("tenant_id", { length: 36 }).notNull().default(PURAX_TENANT_ID),
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => [
+  primaryKey({ columns: [table.key, table.tenantId] }),
+]);
 
 export type CrmSetting = typeof crmSettings.$inferSelect;
 
