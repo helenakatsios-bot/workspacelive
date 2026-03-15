@@ -84,26 +84,16 @@ app.use((req, res, next) => {
 });
 
 async function runStartupTasks() {
-  // PORTAL-FIX: Only set passwords for users with NULL/empty password hashes.
-  // Never wipe custom passwords — use purax2026 as the default for new/blank accounts.
+  // PORTAL-FIX: Set default password purax! for all non-@portal.purax.com.au users.
+  // Custom passwords for specific users are then applied below, overriding this default.
   try {
     const bcryptFirst = await import("bcryptjs");
-    const totalResult = await pool.query(`SELECT COUNT(*) as cnt FROM portal_users`);
-    const total = parseInt(totalResult.rows[0].cnt);
-    if (total > 0) {
-      const nullCheck = await pool.query(`SELECT COUNT(*) as cnt FROM portal_users WHERE password_hash IS NULL OR password_hash = ''`);
-      const nullCnt = parseInt(nullCheck.rows[0].cnt);
-      if (nullCnt > 0) {
-        const freshHash = await bcryptFirst.default.hash('purax2026', 10);
-        const updated = await pool.query(
-          `UPDATE portal_users SET password_hash = $1 WHERE password_hash IS NULL OR password_hash = '' RETURNING id`,
-          [freshHash]
-        );
-        console.log(`[PORTAL-FIX] Set default password (purax2026) for ${updated.rowCount} users with blank passwords`);
-      } else {
-        console.log(`[PORTAL-FIX] Portal passwords verified OK (${total} users)`);
-      }
-    }
+    const defaultHash = await bcryptFirst.default.hash('purax!', 10);
+    const updated = await pool.query(
+      `UPDATE portal_users SET password_hash = $1 WHERE email NOT ILIKE '%@portal.purax.com.au' RETURNING id`,
+      [defaultHash]
+    );
+    console.log(`[PORTAL-FIX] Set default password (purax!) for ${updated.rowCount} non-purax portal users`);
   } catch (err: any) {
     console.error("[PORTAL-FIX] Password reset error:", err.message);
   }
