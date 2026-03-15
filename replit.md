@@ -1,8 +1,8 @@
-# Business CRM - Order Management System
+# Business CRM - Order Management System (Multi-Tenant SaaS)
 
 ## Overview
 
-A professional B2B CRM and order management system designed for wholesale manufacturing businesses. The application provides comprehensive functionality for managing companies, contacts, deals, products, quotes, orders, and invoices with role-based access control. Key capabilities include advanced reporting, sales and marketing sections, a HubSpot-style company profile, client grading, customer-specific and variant pricing, and an AI assistant named "Millie." It also features a public customer order form, PDF attachment order extraction, a customer portal, and an email-to-order webhook to streamline operations. The project aims to provide a robust, beginner-safe UI that prevents data corruption and enhances efficiency for wholesale manufacturing businesses.
+A professional B2B CRM and order management system designed for wholesale manufacturing businesses, now running as a multi-tenant SaaS platform. Each tenant has fully isolated data. The application provides comprehensive functionality for managing companies, contacts, deals, products, quotes, orders, and invoices with role-based access control. Key capabilities include advanced reporting, sales and marketing sections, a HubSpot-style company profile, client grading, customer-specific and variant pricing, and an AI assistant named "Millie." It also features a public customer order form, PDF attachment order extraction, a customer portal, and an email-to-order webhook to streamline operations.
 
 ## User Preferences
 

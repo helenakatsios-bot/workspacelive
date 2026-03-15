@@ -16,25 +16,33 @@ import {
   type CompanyPrice, type InsertCompanyPrice,
   defaultVariantPrices, type DefaultVariantPrice,
   priceLists, type PriceList, type InsertPriceList,
-  priceListPrices, type PriceListPrice, type InsertPriceListPrice
+  priceListPrices, type PriceListPrice, type InsertPriceListPrice,
+  PURAX_TENANT_ID,
+  tenants, type Tenant, type InsertTenant,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 
 export interface IStorage {
+  // Tenants
+  getAllTenants(): Promise<Tenant[]>;
+  getTenant(id: string): Promise<Tenant | undefined>;
+  createTenant(tenant: InsertTenant): Promise<Tenant>;
+  updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined>;
+
   // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<boolean>;
-  getAllUsers(): Promise<User[]>;
+  getAllUsers(tenantId?: string): Promise<User[]>;
 
   // Companies
-  getCompany(id: string): Promise<Company | undefined>;
-  getAllCompanies(): Promise<Company[]>;
+  getCompany(id: string, tenantId?: string): Promise<Company | undefined>;
+  getAllCompanies(tenantId?: string): Promise<Company[]>;
   createCompany(company: InsertCompany): Promise<Company>;
-  updateCompany(id: string, data: Partial<InsertCompany>): Promise<Company | undefined>;
+  updateCompany(id: string, data: Partial<InsertCompany>, tenantId?: string): Promise<Company | undefined>;
   deleteCompany(id: string): Promise<boolean>;
   getCompanyRelatedCounts(id: string): Promise<{ contacts: number; deals: number; orders: number; quotes: number; invoices: number }>;
 
@@ -54,16 +62,16 @@ export interface IStorage {
   updateDeal(id: string, data: Partial<InsertDeal>): Promise<Deal | undefined>;
 
   // Products
-  getProduct(id: string): Promise<Product | undefined>;
-  getAllProducts(): Promise<Product[]>;
+  getProduct(id: string, tenantId?: string): Promise<Product | undefined>;
+  getAllProducts(tenantId?: string): Promise<Product[]>;
   createProduct(product: InsertProduct): Promise<Product>;
-  updateProduct(id: string, data: Partial<InsertProduct>): Promise<Product | undefined>;
-  deleteProduct(id: string): Promise<boolean>;
+  updateProduct(id: string, data: Partial<InsertProduct>, tenantId?: string): Promise<Product | undefined>;
+  deleteProduct(id: string, tenantId?: string): Promise<boolean>;
   getDefaultVariantPricesByProductId(productId: string): Promise<DefaultVariantPrice[]>;
-  getAllDefaultVariantPrices(): Promise<DefaultVariantPrice[]>;
+  getAllDefaultVariantPrices(tenantId?: string): Promise<DefaultVariantPrice[]>;
 
   // Price Lists
-  getAllPriceLists(): Promise<PriceList[]>;
+  getAllPriceLists(tenantId?: string): Promise<PriceList[]>;
   getPriceList(id: string): Promise<PriceList | undefined>;
   createPriceList(data: InsertPriceList): Promise<PriceList>;
   updatePriceList(id: string, data: Partial<InsertPriceList>): Promise<PriceList | undefined>;
@@ -74,22 +82,22 @@ export interface IStorage {
   bulkUpsertPriceListPrices(prices: InsertPriceListPrice[]): Promise<PriceListPrice[]>;
 
   // Quotes
-  getQuote(id: string): Promise<Quote | undefined>;
-  getAllQuotes(): Promise<Quote[]>;
+  getQuote(id: string, tenantId?: string): Promise<Quote | undefined>;
+  getAllQuotes(tenantId?: string): Promise<Quote[]>;
   createQuote(quote: InsertQuote): Promise<Quote>;
-  updateQuote(id: string, data: Partial<InsertQuote>): Promise<Quote | undefined>;
+  updateQuote(id: string, data: Partial<InsertQuote>, tenantId?: string): Promise<Quote | undefined>;
 
   // Quote Lines
   getQuoteLines(quoteId: string): Promise<QuoteLine[]>;
   createQuoteLine(line: InsertQuoteLine): Promise<QuoteLine>;
 
   // Orders
-  getOrder(id: string): Promise<Order | undefined>;
-  getAllOrders(): Promise<Order[]>;
-  getOrdersByCompany(companyId: string): Promise<Order[]>;
-  getOrdersByDateRange(startDate: Date, endDate: Date): Promise<Order[]>;
+  getOrder(id: string, tenantId?: string): Promise<Order | undefined>;
+  getAllOrders(tenantId?: string): Promise<Order[]>;
+  getOrdersByCompany(companyId: string, tenantId?: string): Promise<Order[]>;
+  getOrdersByDateRange(startDate: Date, endDate: Date, tenantId?: string): Promise<Order[]>;
   createOrder(order: InsertOrder): Promise<Order>;
-  updateOrder(id: string, data: Partial<InsertOrder>): Promise<Order | undefined>;
+  updateOrder(id: string, data: Partial<InsertOrder>, tenantId?: string): Promise<Order | undefined>;
 
   // Order Lines
   getOrderLines(orderId: string): Promise<OrderLine[]>;
@@ -99,11 +107,11 @@ export interface IStorage {
   deleteOrderLinesByOrderId(orderId: string): Promise<void>;
 
   // Invoices
-  getInvoice(id: string): Promise<Invoice | undefined>;
-  getAllInvoices(): Promise<Invoice[]>;
-  getCompanyInvoices(companyId: string): Promise<Invoice[]>;
+  getInvoice(id: string, tenantId?: string): Promise<Invoice | undefined>;
+  getAllInvoices(tenantId?: string): Promise<Invoice[]>;
+  getCompanyInvoices(companyId: string, tenantId?: string): Promise<Invoice[]>;
   createInvoice(invoice: InsertInvoice): Promise<Invoice>;
-  updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined>;
+  updateInvoice(id: string, data: Partial<InsertInvoice>, tenantId?: string): Promise<Invoice | undefined>;
 
   // Attachments
   getAttachment(id: string): Promise<Attachment | undefined>;
@@ -122,11 +130,11 @@ export interface IStorage {
   getCompaniesWithOrdersInDateRange(startDate: Date, endDate: Date): Promise<Company[]>;
 
   // Customer Order Requests
-  getCustomerOrderRequest(id: string): Promise<CustomerOrderRequest | undefined>;
-  getAllCustomerOrderRequests(): Promise<CustomerOrderRequest[]>;
+  getCustomerOrderRequest(id: string, tenantId?: string): Promise<CustomerOrderRequest | undefined>;
+  getAllCustomerOrderRequests(tenantId?: string): Promise<CustomerOrderRequest[]>;
   createCustomerOrderRequest(request: InsertCustomerOrderRequest): Promise<CustomerOrderRequest>;
-  updateCustomerOrderRequest(id: string, data: Partial<InsertCustomerOrderRequest>): Promise<CustomerOrderRequest | undefined>;
-  deleteCustomerOrderRequest(id: string): Promise<boolean>;
+  updateCustomerOrderRequest(id: string, data: Partial<InsertCustomerOrderRequest>, tenantId?: string): Promise<CustomerOrderRequest | undefined>;
+  deleteCustomerOrderRequest(id: string, tenantId?: string): Promise<boolean>;
 
   // Orders - delete
   deleteOrder(id: string): Promise<boolean>;
@@ -139,11 +147,11 @@ export interface IStorage {
   getActiveProducts(): Promise<Product[]>;
 
   // Forms
-  getForm(id: string): Promise<Form | undefined>;
-  getAllForms(): Promise<Form[]>;
+  getForm(id: string, tenantId?: string): Promise<Form | undefined>;
+  getAllForms(tenantId?: string): Promise<Form[]>;
   createForm(form: InsertForm): Promise<Form>;
-  updateForm(id: string, data: Partial<InsertForm>): Promise<Form | undefined>;
-  deleteForm(id: string): Promise<boolean>;
+  updateForm(id: string, data: Partial<InsertForm>, tenantId?: string): Promise<Form | undefined>;
+  deleteForm(id: string, tenantId?: string): Promise<boolean>;
 
   // Form Submissions
   getFormSubmission(id: string): Promise<FormSubmission | undefined>;
@@ -173,6 +181,26 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  // Tenants
+  async getAllTenants(): Promise<Tenant[]> {
+    return db.select().from(tenants).orderBy(tenants.name);
+  }
+
+  async getTenant(id: string): Promise<Tenant | undefined> {
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, id));
+    return tenant;
+  }
+
+  async createTenant(tenant: InsertTenant): Promise<Tenant> {
+    const [created] = await db.insert(tenants).values(tenant).returning();
+    return created;
+  }
+
+  async updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined> {
+    const [updated] = await db.update(tenants).set(data).where(eq(tenants.id, id)).returning();
+    return updated;
+  }
+
   // Users
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -200,17 +228,26 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
-  async getAllUsers(): Promise<User[]> {
+  async getAllUsers(tenantId?: string): Promise<User[]> {
+    if (tenantId) {
+      return db.select().from(users).where(eq(users.tenantId, tenantId)).orderBy(users.name);
+    }
     return db.select().from(users).orderBy(users.name);
   }
 
   // Companies
-  async getCompany(id: string): Promise<Company | undefined> {
-    const [company] = await db.select().from(companies).where(eq(companies.id, id));
+  async getCompany(id: string, tenantId?: string): Promise<Company | undefined> {
+    const conditions = tenantId
+      ? and(eq(companies.id, id), eq(companies.tenantId, tenantId))
+      : eq(companies.id, id);
+    const [company] = await db.select().from(companies).where(conditions);
     return company;
   }
 
-  async getAllCompanies(): Promise<Company[]> {
+  async getAllCompanies(tenantId?: string): Promise<Company[]> {
+    if (tenantId) {
+      return db.select().from(companies).where(eq(companies.tenantId, tenantId)).orderBy(desc(companies.createdAt));
+    }
     return db.select().from(companies).orderBy(desc(companies.createdAt));
   }
 
@@ -222,10 +259,13 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateCompany(id: string, data: Partial<InsertCompany>): Promise<Company | undefined> {
+  async updateCompany(id: string, data: Partial<InsertCompany>, tenantId?: string): Promise<Company | undefined> {
+    const conditions = tenantId
+      ? and(eq(companies.id, id), eq(companies.tenantId, tenantId))
+      : eq(companies.id, id);
     const [updated] = await db.update(companies)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(companies.id, id))
+      .where(conditions)
       .returning();
     return updated;
   }
@@ -310,12 +350,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Products
-  async getProduct(id: string): Promise<Product | undefined> {
-    const [product] = await db.select().from(products).where(eq(products.id, id));
+  async getProduct(id: string, tenantId?: string): Promise<Product | undefined> {
+    const conditions = tenantId
+      ? and(eq(products.id, id), eq(products.tenantId, tenantId))
+      : eq(products.id, id);
+    const [product] = await db.select().from(products).where(conditions);
     return product;
   }
 
-  async getAllProducts(): Promise<Product[]> {
+  async getAllProducts(tenantId?: string): Promise<Product[]> {
+    if (tenantId) {
+      return db.select().from(products).where(eq(products.tenantId, tenantId)).orderBy(products.name);
+    }
     return db.select().from(products).orderBy(products.name);
   }
 
@@ -324,13 +370,19 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateProduct(id: string, data: Partial<InsertProduct>): Promise<Product | undefined> {
-    const [updated] = await db.update(products).set(data).where(eq(products.id, id)).returning();
+  async updateProduct(id: string, data: Partial<InsertProduct>, tenantId?: string): Promise<Product | undefined> {
+    const conditions = tenantId
+      ? and(eq(products.id, id), eq(products.tenantId, tenantId))
+      : eq(products.id, id);
+    const [updated] = await db.update(products).set(data).where(conditions).returning();
     return updated;
   }
 
-  async deleteProduct(id: string): Promise<boolean> {
-    const [deleted] = await db.delete(products).where(eq(products.id, id)).returning();
+  async deleteProduct(id: string, tenantId?: string): Promise<boolean> {
+    const conditions = tenantId
+      ? and(eq(products.id, id), eq(products.tenantId, tenantId))
+      : eq(products.id, id);
+    const [deleted] = await db.delete(products).where(conditions).returning();
     return !!deleted;
   }
 
@@ -340,13 +392,16 @@ export class DatabaseStorage implements IStorage {
       .orderBy(defaultVariantPrices.filling, defaultVariantPrices.weight);
   }
 
-  async getAllDefaultVariantPrices(): Promise<DefaultVariantPrice[]> {
+  async getAllDefaultVariantPrices(tenantId?: string): Promise<DefaultVariantPrice[]> {
     return db.select().from(defaultVariantPrices)
       .orderBy(defaultVariantPrices.productId, defaultVariantPrices.filling, defaultVariantPrices.weight);
   }
 
   // Price Lists
-  async getAllPriceLists(): Promise<PriceList[]> {
+  async getAllPriceLists(tenantId?: string): Promise<PriceList[]> {
+    if (tenantId) {
+      return db.select().from(priceLists).where(eq(priceLists.tenantId, tenantId)).orderBy(desc(priceLists.isDefault), priceLists.name);
+    }
     return db.select().from(priceLists).orderBy(desc(priceLists.isDefault), priceLists.name);
   }
 
@@ -421,12 +476,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Quotes
-  async getQuote(id: string): Promise<Quote | undefined> {
-    const [quote] = await db.select().from(quotes).where(eq(quotes.id, id));
+  async getQuote(id: string, tenantId?: string): Promise<Quote | undefined> {
+    const conditions = tenantId
+      ? and(eq(quotes.id, id), eq(quotes.tenantId, tenantId))
+      : eq(quotes.id, id);
+    const [quote] = await db.select().from(quotes).where(conditions);
     return quote;
   }
 
-  async getAllQuotes(): Promise<Quote[]> {
+  async getAllQuotes(tenantId?: string): Promise<Quote[]> {
+    if (tenantId) {
+      return db.select().from(quotes).where(eq(quotes.tenantId, tenantId)).orderBy(desc(quotes.createdAt));
+    }
     return db.select().from(quotes).orderBy(desc(quotes.createdAt));
   }
 
@@ -435,8 +496,11 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateQuote(id: string, data: Partial<InsertQuote>): Promise<Quote | undefined> {
-    const [updated] = await db.update(quotes).set(data).where(eq(quotes.id, id)).returning();
+  async updateQuote(id: string, data: Partial<InsertQuote>, tenantId?: string): Promise<Quote | undefined> {
+    const conditions = tenantId
+      ? and(eq(quotes.id, id), eq(quotes.tenantId, tenantId))
+      : eq(quotes.id, id);
+    const [updated] = await db.update(quotes).set(data).where(conditions).returning();
     return updated;
   }
 
@@ -451,25 +515,38 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Orders
-  async getOrder(id: string): Promise<Order | undefined> {
-    const [order] = await db.select().from(orders).where(eq(orders.id, id));
+  async getOrder(id: string, tenantId?: string): Promise<Order | undefined> {
+    const conditions = tenantId
+      ? and(eq(orders.id, id), eq(orders.tenantId, tenantId))
+      : eq(orders.id, id);
+    const [order] = await db.select().from(orders).where(conditions);
     return order;
   }
 
-  async getAllOrders(): Promise<Order[]> {
+  async getAllOrders(tenantId?: string): Promise<Order[]> {
+    if (tenantId) {
+      return db.select().from(orders).where(eq(orders.tenantId, tenantId)).orderBy(desc(orders.orderDate));
+    }
     return db.select().from(orders).orderBy(desc(orders.orderDate));
   }
 
-  async getOrdersByCompany(companyId: string): Promise<Order[]> {
-    return db.select().from(orders).where(eq(orders.companyId, companyId)).orderBy(desc(orders.orderDate));
+  async getOrdersByCompany(companyId: string, tenantId?: string): Promise<Order[]> {
+    const conditions = tenantId
+      ? and(eq(orders.companyId, companyId), eq(orders.tenantId, tenantId))
+      : eq(orders.companyId, companyId);
+    return db.select().from(orders).where(conditions).orderBy(desc(orders.orderDate));
   }
 
-  async getOrdersByDateRange(startDate: Date, endDate: Date): Promise<Order[]> {
+  async getOrdersByDateRange(startDate: Date, endDate: Date, tenantId?: string): Promise<Order[]> {
+    const dateConditions = and(
+      gte(orders.orderDate, startDate),
+      lte(orders.orderDate, endDate)
+    );
+    const conditions = tenantId
+      ? and(dateConditions, eq(orders.tenantId, tenantId))
+      : dateConditions;
     return db.select().from(orders)
-      .where(and(
-        gte(orders.orderDate, startDate),
-        lte(orders.orderDate, endDate)
-      ))
+      .where(conditions)
       .orderBy(desc(orders.orderDate));
   }
 
@@ -481,10 +558,13 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateOrder(id: string, data: Partial<InsertOrder>): Promise<Order | undefined> {
+  async updateOrder(id: string, data: Partial<InsertOrder>, tenantId?: string): Promise<Order | undefined> {
+    const conditions = tenantId
+      ? and(eq(orders.id, id), eq(orders.tenantId, tenantId))
+      : eq(orders.id, id);
     const [updated] = await db.update(orders)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(orders.id, id))
+      .where(conditions)
       .returning();
     return updated;
   }
@@ -514,17 +594,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Invoices
-  async getInvoice(id: string): Promise<Invoice | undefined> {
-    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
+  async getInvoice(id: string, tenantId?: string): Promise<Invoice | undefined> {
+    const conditions = tenantId
+      ? and(eq(invoices.id, id), eq(invoices.tenantId, tenantId))
+      : eq(invoices.id, id);
+    const [invoice] = await db.select().from(invoices).where(conditions);
     return invoice;
   }
 
-  async getAllInvoices(): Promise<Invoice[]> {
+  async getAllInvoices(tenantId?: string): Promise<Invoice[]> {
+    if (tenantId) {
+      return db.select().from(invoices).where(eq(invoices.tenantId, tenantId)).orderBy(desc(invoices.createdAt));
+    }
     return db.select().from(invoices).orderBy(desc(invoices.createdAt));
   }
 
-  async getCompanyInvoices(companyId: string): Promise<Invoice[]> {
-    return db.select().from(invoices).where(eq(invoices.companyId, companyId)).orderBy(desc(invoices.createdAt));
+  async getCompanyInvoices(companyId: string, tenantId?: string): Promise<Invoice[]> {
+    const conditions = tenantId
+      ? and(eq(invoices.companyId, companyId), eq(invoices.tenantId, tenantId))
+      : eq(invoices.companyId, companyId);
+    return db.select().from(invoices).where(conditions).orderBy(desc(invoices.createdAt));
   }
 
   async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
@@ -532,8 +621,11 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined> {
-    const [updated] = await db.update(invoices).set(data).where(eq(invoices.id, id)).returning();
+  async updateInvoice(id: string, data: Partial<InsertInvoice>, tenantId?: string): Promise<Invoice | undefined> {
+    const conditions = tenantId
+      ? and(eq(invoices.id, id), eq(invoices.tenantId, tenantId))
+      : eq(invoices.id, id);
+    const [updated] = await db.update(invoices).set(data).where(conditions).returning();
     return updated;
   }
 
@@ -598,12 +690,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Customer Order Requests
-  async getCustomerOrderRequest(id: string): Promise<CustomerOrderRequest | undefined> {
-    const [request] = await db.select().from(customerOrderRequests).where(eq(customerOrderRequests.id, id));
+  async getCustomerOrderRequest(id: string, tenantId?: string): Promise<CustomerOrderRequest | undefined> {
+    const conditions = tenantId
+      ? and(eq(customerOrderRequests.id, id), eq(customerOrderRequests.tenantId, tenantId))
+      : eq(customerOrderRequests.id, id);
+    const [request] = await db.select().from(customerOrderRequests).where(conditions);
     return request;
   }
 
-  async getAllCustomerOrderRequests(): Promise<CustomerOrderRequest[]> {
+  async getAllCustomerOrderRequests(tenantId?: string): Promise<CustomerOrderRequest[]> {
+    if (tenantId) {
+      return db.select().from(customerOrderRequests).where(eq(customerOrderRequests.tenantId, tenantId)).orderBy(desc(customerOrderRequests.createdAt));
+    }
     return db.select().from(customerOrderRequests).orderBy(desc(customerOrderRequests.createdAt));
   }
 
@@ -612,16 +710,22 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateCustomerOrderRequest(id: string, data: Partial<InsertCustomerOrderRequest>): Promise<CustomerOrderRequest | undefined> {
+  async updateCustomerOrderRequest(id: string, data: Partial<InsertCustomerOrderRequest>, tenantId?: string): Promise<CustomerOrderRequest | undefined> {
+    const conditions = tenantId
+      ? and(eq(customerOrderRequests.id, id), eq(customerOrderRequests.tenantId, tenantId))
+      : eq(customerOrderRequests.id, id);
     const [updated] = await db.update(customerOrderRequests)
       .set(data)
-      .where(eq(customerOrderRequests.id, id))
+      .where(conditions)
       .returning();
     return updated;
   }
 
-  async deleteCustomerOrderRequest(id: string): Promise<boolean> {
-    const result = await db.delete(customerOrderRequests).where(eq(customerOrderRequests.id, id));
+  async deleteCustomerOrderRequest(id: string, tenantId?: string): Promise<boolean> {
+    const conditions = tenantId
+      ? and(eq(customerOrderRequests.id, id), eq(customerOrderRequests.tenantId, tenantId))
+      : eq(customerOrderRequests.id, id);
+    const result = await db.delete(customerOrderRequests).where(conditions);
     return (result.rowCount ?? 0) > 0;
   }
 
@@ -697,12 +801,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Forms
-  async getForm(id: string): Promise<Form | undefined> {
-    const [form] = await db.select().from(forms).where(eq(forms.id, id));
+  async getForm(id: string, tenantId?: string): Promise<Form | undefined> {
+    const conditions = tenantId
+      ? and(eq(forms.id, id), eq(forms.tenantId, tenantId))
+      : eq(forms.id, id);
+    const [form] = await db.select().from(forms).where(conditions);
     return form;
   }
 
-  async getAllForms(): Promise<Form[]> {
+  async getAllForms(tenantId?: string): Promise<Form[]> {
+    if (tenantId) {
+      return db.select().from(forms).where(eq(forms.tenantId, tenantId)).orderBy(desc(forms.createdAt));
+    }
     return db.select().from(forms).orderBy(desc(forms.createdAt));
   }
 
@@ -711,13 +821,19 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateForm(id: string, data: Partial<InsertForm>): Promise<Form | undefined> {
-    const [updated] = await db.update(forms).set({ ...data, updatedAt: new Date() }).where(eq(forms.id, id)).returning();
+  async updateForm(id: string, data: Partial<InsertForm>, tenantId?: string): Promise<Form | undefined> {
+    const conditions = tenantId
+      ? and(eq(forms.id, id), eq(forms.tenantId, tenantId))
+      : eq(forms.id, id);
+    const [updated] = await db.update(forms).set({ ...data, updatedAt: new Date() }).where(conditions).returning();
     return updated;
   }
 
-  async deleteForm(id: string): Promise<boolean> {
-    const result = await db.delete(forms).where(eq(forms.id, id));
+  async deleteForm(id: string, tenantId?: string): Promise<boolean> {
+    const conditions = tenantId
+      ? and(eq(forms.id, id), eq(forms.tenantId, tenantId))
+      : eq(forms.id, id);
+    const result = await db.delete(forms).where(conditions);
     return (result.rowCount ?? 0) > 0;
   }
 

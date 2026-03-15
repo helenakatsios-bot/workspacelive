@@ -33,6 +33,7 @@ import NewInvoicePage from "@/pages/invoices/new";
 import InvoiceDetailPage from "@/pages/invoices/detail";
 import AdminPage from "@/pages/admin/index";
 import PriceListsPage from "@/pages/admin/price-lists";
+import SuperAdminPage from "@/pages/super-admin/index";
 import ClientsSinceJuly2021Page from "@/pages/reports/clients-since-july-2021";
 import ReportingDashboardsPage from "@/pages/reporting/dashboards";
 import ReportingReportsPage from "@/pages/reporting/reports";
@@ -188,6 +189,7 @@ function AuthenticatedApp() {
         <Route path="/reports/clients-since-july-2021" component={ClientsSinceJuly2021Page} />
         <Route path="/admin" component={AdminPage} />
         <Route path="/admin/price-lists" component={PriceListsPage} />
+        <Route path="/super-admin" component={SuperAdminPage} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>

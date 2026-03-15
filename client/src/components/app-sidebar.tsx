@@ -128,7 +128,7 @@ const reportingItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, isSuperAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
   const { data: pendingRequestCount } = useQuery<{ count: number }>({
@@ -578,6 +578,30 @@ export function AppSidebar() {
                     <Link href="/admin/price-lists" data-testid="nav-price-lists">
                       <ListFilter className="w-4 h-4" />
                       <span>Price Lists</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {isSuperAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1">
+              Platform
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    data-active={isActive("/super-admin")}
+                    className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                  >
+                    <Link href="/super-admin" data-testid="nav-super-admin">
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Super Admin</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
