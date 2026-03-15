@@ -224,13 +224,18 @@ export async function registerRoutes(
       return res.status(404).json({ message: "User not found" });
     }
     const { passwordHash, ...userWithoutPassword } = user;
-    res.json(userWithoutPassword);
+    let tenantName: string | null = null;
+    if (user.tenantId) {
+      const tenant = await storage.getTenant(user.tenantId);
+      tenantName = tenant?.name ?? null;
+    }
+    res.json({ ...userWithoutPassword, tenantName });
   });
 
   // ==================== DASHBOARD ROUTES ====================
   app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
     try {
-      const stats = await storage.getDashboardStats();
+      const stats = await storage.getDashboardStats(req.session.tenantId!);
       res.json(stats);
     } catch (error) {
       console.error("Dashboard stats error:", error);

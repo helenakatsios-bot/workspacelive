@@ -48,7 +48,7 @@ export interface IStorage {
 
   // Contacts
   getContact(id: string): Promise<Contact | undefined>;
-  getAllContacts(): Promise<Contact[]>;
+  getAllContacts(tenantId?: string): Promise<Contact[]>;
   getContactsByCompany(companyId: string): Promise<Contact[]>;
   createContact(contact: InsertContact): Promise<Contact>;
   updateContact(id: string, data: Partial<InsertContact>): Promise<Contact | undefined>;
@@ -56,7 +56,7 @@ export interface IStorage {
 
   // Deals
   getDeal(id: string): Promise<Deal | undefined>;
-  getAllDeals(): Promise<Deal[]>;
+  getAllDeals(tenantId?: string): Promise<Deal[]>;
   getDealsByCompany(companyId: string): Promise<Deal[]>;
   createDeal(deal: InsertDeal): Promise<Deal>;
   updateDeal(id: string, data: Partial<InsertDeal>): Promise<Deal | undefined>;
@@ -296,7 +296,14 @@ export class DatabaseStorage implements IStorage {
     return contact;
   }
 
-  async getAllContacts(): Promise<Contact[]> {
+  async getAllContacts(tenantId?: string): Promise<Contact[]> {
+    if (tenantId) {
+      return db.select({ contact: contacts }).from(contacts)
+        .innerJoin(companies, eq(contacts.companyId, companies.id))
+        .where(eq(companies.tenantId, tenantId))
+        .orderBy(contacts.firstName)
+        .then(rows => rows.map(r => r.contact));
+    }
     return db.select().from(contacts).orderBy(contacts.firstName);
   }
 
@@ -325,7 +332,14 @@ export class DatabaseStorage implements IStorage {
     return deal;
   }
 
-  async getAllDeals(): Promise<Deal[]> {
+  async getAllDeals(tenantId?: string): Promise<Deal[]> {
+    if (tenantId) {
+      return db.select({ deal: deals }).from(deals)
+        .innerJoin(companies, eq(deals.companyId, companies.id))
+        .where(eq(companies.tenantId, tenantId))
+        .orderBy(desc(deals.createdAt))
+        .then(rows => rows.map(r => r.deal));
+    }
     return db.select().from(deals).orderBy(desc(deals.createdAt));
   }
 
@@ -755,31 +769,59 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Dashboard Stats
-  async getDashboardStats() {
-    const [companiesResult] = await db.select({ count: sql<number>`count(*)` }).from(companies);
-    const [contactsResult] = await db.select({ count: sql<number>`count(*)` }).from(contacts);
-    const [ordersResult] = await db.select({ count: sql<number>`count(*)` }).from(orders);
+  async getDashboardStats(tenantId?: string) {
+    const tenantFilter = tenantId ? eq(companies.tenantId, tenantId) : undefined;
+    const ordersTenantFilter = tenantId ? eq(orders.tenantId, tenantId) : undefined;
+    const contactsTenantFilter = tenantId ? eq(contacts.tenantId, tenantId) : undefined;
+    const dealsTenantFilter = tenantId ? eq(deals.tenantId, tenantId) : undefined;
+
+    const [companiesResult] = await db.select({ count: sql<number>`count(*)` }).from(companies)
+      .where(tenantFilter);
+    const [contactsResult] = await db.select({ count: sql<number>`count(*)` }).from(contacts)
+      .where(contactsTenantFilter);
+    const [ordersResult] = await db.select({ count: sql<number>`count(*)` }).from(orders)
+      .where(ordersTenantFilter);
     
     const [revenueResult] = await db.select({ 
       total: sql<number>`COALESCE(SUM(CAST(total AS DECIMAL)), 0)` 
-    }).from(orders).where(eq(orders.status, "completed"));
+    }).from(orders).where(
+      tenantId
+        ? and(eq(orders.status, "completed"), eq(orders.tenantId, tenantId))
+        : eq(orders.status, "completed")
+    );
     
     const [pendingResult] = await db.select({ count: sql<number>`count(*)` }).from(orders)
-      .where(or(eq(orders.status, "new"), eq(orders.status, "confirmed"), eq(orders.status, "in_production")));
+      .where(
+        tenantId
+          ? and(or(eq(orders.status, "new"), eq(orders.status, "confirmed"), eq(orders.status, "in_production")), eq(orders.tenantId, tenantId))
+          : or(eq(orders.status, "new"), eq(orders.status, "confirmed"), eq(orders.status, "in_production"))
+      );
     
     const [dealsResult] = await db.select({ count: sql<number>`count(*)` }).from(deals)
-      .where(or(eq(deals.pipelineStage, "lead"), eq(deals.pipelineStage, "qualified"), eq(deals.pipelineStage, "quote_sent"), eq(deals.pipelineStage, "negotiation")));
+      .where(
+        tenantId
+          ? and(or(eq(deals.pipelineStage, "lead"), eq(deals.pipelineStage, "qualified"), eq(deals.pipelineStage, "quote_sent"), eq(deals.pipelineStage, "negotiation")), eq(deals.tenantId, tenantId))
+          : or(eq(deals.pipelineStage, "lead"), eq(deals.pipelineStage, "qualified"), eq(deals.pipelineStage, "quote_sent"), eq(deals.pipelineStage, "negotiation"))
+      );
     
     const [onHoldResult] = await db.select({ count: sql<number>`count(*)` }).from(companies)
-      .where(eq(companies.creditStatus, "on_hold"));
+      .where(
+        tenantId
+          ? and(eq(companies.creditStatus, "on_hold"), eq(companies.tenantId, tenantId))
+          : eq(companies.creditStatus, "on_hold")
+      );
 
-    const recentOrders = await db.select().from(orders).orderBy(desc(orders.createdAt)).limit(5);
-    const recentCompanies = await db.select().from(companies).orderBy(desc(companies.createdAt)).limit(5);
+    const recentOrders = await db.select().from(orders)
+      .where(ordersTenantFilter)
+      .orderBy(desc(orders.createdAt)).limit(5);
+    const recentCompanies = await db.select().from(companies)
+      .where(tenantFilter)
+      .orderBy(desc(companies.createdAt)).limit(5);
 
     const stageResults = await db.select({
       stage: deals.pipelineStage,
       count: sql<number>`count(*)`
-    }).from(deals).groupBy(deals.pipelineStage);
+    }).from(deals).where(dealsTenantFilter).groupBy(deals.pipelineStage);
 
     const dealsByStage: Record<string, number> = {};
     stageResults.forEach(r => {
