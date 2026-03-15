@@ -3019,15 +3019,22 @@ export async function registerRoutes(
         // Purax API sometimes returns 500 even when the order is successfully created on their side.
         // Treat 500 as "sent with warning" rather than a hard failure so the order isn't stuck.
         if (response.status === 500) {
+          // Still try to extract an order ID from the 500 response body
+          let puraxOrderId500: string | null = null;
+          try {
+            const d = JSON.parse(responseText);
+            puraxOrderId500 = d.orderId || d.id || d.order_id || d.puraxOrderId || null;
+          } catch { /* not JSON */ }
           await storage.updateOrder(order.id, {
             puraxSyncStatus: "sent",
             puraxSyncedAt: now,
+            puraxOrderId: puraxOrderId500,
           });
           await storage.createActivity({
             entityType: "order",
             entityId: order.id,
             activityType: "system",
-            content: `Synced to Purax (Purax returned 500 but order typically goes through — verify in Purax app)`,
+            content: `Synced to Purax (Purax returned 500 but order typically goes through — verify in Purax app)${puraxOrderId500 ? `. Purax Order ID: ${puraxOrderId500}` : ""}`,
             createdBy: req.session.userId,
           });
           await storage.createAuditLog({
@@ -3035,9 +3042,9 @@ export async function registerRoutes(
             action: "update",
             entityType: "order",
             entityId: order.id,
-            afterJson: { puraxSyncStatus: "sent", puraxSyncedAt: now },
+            afterJson: { puraxSyncStatus: "sent", puraxSyncedAt: now, puraxOrderId: puraxOrderId500 },
           });
-          return res.json({ success: true, warning: "Purax returned an error response but the order usually goes through. Please verify in the Purax app." });
+          return res.json({ success: true, puraxOrderId: puraxOrderId500, warning: "Purax returned an error response but the order usually goes through. Please verify in the Purax app." });
         }
         await storage.updateOrder(order.id, {
           puraxSyncStatus: "failed",
@@ -5685,7 +5692,9 @@ Rules:
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const { orderId, orderNumber } = req.body as { orderId?: string; orderNumber?: string };
+      const { orderId, orderNumber, miloOrderId, puraxOrderId: callbackPuraxOrderId } = req.body as {
+        orderId?: string; orderNumber?: string; miloOrderId?: string; puraxOrderId?: string;
+      };
       if (!orderId && !orderNumber) {
         return res.status(400).json({ message: "orderId or orderNumber is required" });
       }
@@ -5705,10 +5714,13 @@ Rules:
         return res.status(404).json({ message: `Order not found (orderId=${orderId}, orderNumber=${orderNumber})` });
       }
 
-      // Mark the order as completed
+      // Capture any Milo/Purax order ID provided in the callback
+      const resolvedPuraxOrderId = miloOrderId || callbackPuraxOrderId || null;
+
+      // Mark the order as completed and save the Purax order ID if provided
       await pool.query(
-        `UPDATE orders SET status = 'completed', updated_at = NOW() WHERE id = $1`,
-        [order.id]
+        `UPDATE orders SET status = 'completed', purax_sync_status = 'sent', purax_order_id = COALESCE($2, purax_order_id), updated_at = NOW() WHERE id = $1`,
+        [order.id, resolvedPuraxOrderId]
       );
 
       // Also mark any linked portal order request as completed
@@ -5723,11 +5735,11 @@ Rules:
         entityType: "order",
         entityId: order.id,
         activityType: "system",
-        content: `Order marked as completed by Milo (Purax app callback)`,
+        content: `Order marked as completed by Milo (Purax app callback)${resolvedPuraxOrderId ? `. Purax Order ID: ${resolvedPuraxOrderId}` : ""}`,
         createdBy: null,
       });
 
-      console.log(`[MILO-CALLBACK] Order ${order.order_number} (${order.id}) marked as completed`);
+      console.log(`[MILO-CALLBACK] Order ${order.order_number} (${order.id}) marked as completed${resolvedPuraxOrderId ? ` | Purax ID: ${resolvedPuraxOrderId}` : ""}`);
       return res.json({ success: true, message: `Order ${order.order_number} marked as completed` });
     } catch (err: any) {
       console.error("[MILO-CALLBACK] Error:", err.message);

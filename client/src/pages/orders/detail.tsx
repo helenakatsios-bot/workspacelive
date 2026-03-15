@@ -1239,7 +1239,17 @@ export default function OrderDetailPage() {
               </Button>
               <Button
                 variant={order.puraxSyncStatus === "sent" ? "outline" : "default"}
-                onClick={() => syncPuraxMutation.mutate()}
+                onClick={() => {
+                  if (order.puraxSyncStatus === "sent") {
+                    const confirmed = window.confirm(
+                      order.puraxOrderId
+                        ? `This order was already confirmed by Milo (ID: ${order.puraxOrderId}). Re-sending may create a duplicate. Are you sure?`
+                        : `This order was already sent to Milo but wasn't confirmed. Re-sending may create a duplicate — check with Milo first.\n\nAre you sure you want to re-send?`
+                    );
+                    if (!confirmed) return;
+                  }
+                  syncPuraxMutation.mutate();
+                }}
                 disabled={syncPuraxMutation.isPending}
                 data-testid="button-sync-purax"
               >
@@ -1404,11 +1414,16 @@ export default function OrderDetailPage() {
                 <Send className="w-4 h-4 text-muted-foreground mt-0.5" />
                 <div>
                   <p className="text-xs text-muted-foreground">Purax Sync</p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    {order.puraxSyncStatus === "sent" ? (
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    {order.puraxSyncStatus === "sent" && order.puraxOrderId ? (
                       <Badge variant="outline" className="gap-1 text-green-600 border-green-300 dark:text-green-400 dark:border-green-700">
                         <CheckCircle className="w-3 h-3" />
-                        Sent
+                        Confirmed by Milo
+                      </Badge>
+                    ) : order.puraxSyncStatus === "sent" ? (
+                      <Badge variant="outline" className="gap-1 text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-700">
+                        <AlertTriangle className="w-3 h-3" />
+                        Sent — verify with Milo
                       </Badge>
                     ) : order.puraxSyncStatus === "failed" ? (
                       <Badge variant="outline" className="gap-1 text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
@@ -1421,8 +1436,13 @@ export default function OrderDetailPage() {
                       </Badge>
                     )}
                   </div>
+                  {order.puraxOrderId && (
+                    <p className="text-xs text-muted-foreground mt-1 font-mono">
+                      Milo ID: {order.puraxOrderId}
+                    </p>
+                  )}
                   {order.puraxSyncedAt && (
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {format(new Date(order.puraxSyncedAt), "MMM d, yyyy 'at' h:mm a")}
                     </p>
                   )}

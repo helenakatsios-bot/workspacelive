@@ -38,6 +38,7 @@ export default function OrdersPage() {
   const { canEdit, canViewPricing } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [puraxFilter, setPuraxFilter] = useState<string>("all");
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
   const [showFilters, setShowFilters] = useState(false);
@@ -65,9 +66,13 @@ export default function OrdersPage() {
       const orderDate = new Date(order.orderDate);
       const matchesStartDate = !startDate || orderDate >= startDate;
       const matchesEndDate = !endDate || orderDate <= endDate;
-      return matchesSearch && matchesStatus && matchesStartDate && matchesEndDate;
+      const matchesPurax = puraxFilter === "all"
+        || (puraxFilter === "sent" && order.puraxSyncStatus === "sent")
+        || (puraxFilter === "not_sent" && (!order.puraxSyncStatus || order.puraxSyncStatus === "not_sent"))
+        || (puraxFilter === "failed" && order.puraxSyncStatus === "failed");
+      return matchesSearch && matchesStatus && matchesStartDate && matchesEndDate && matchesPurax;
     });
-  }, [orders, search, statusFilter, startDate, endDate]);
+  }, [orders, search, statusFilter, puraxFilter, startDate, endDate]);
 
   const uniqueCompanies = useMemo(() => {
     const companyMap = new Map<string, Company>();
@@ -180,6 +185,20 @@ export default function OrdersPage() {
                           {opt.label}
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Sent to Milo</label>
+                  <Select value={puraxFilter} onValueChange={setPuraxFilter}>
+                    <SelectTrigger className="w-44" data-testid="select-purax-filter">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All orders</SelectItem>
+                      <SelectItem value="sent">Sent to Milo</SelectItem>
+                      <SelectItem value="not_sent">Not sent to Milo</SelectItem>
+                      <SelectItem value="failed">Send failed</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -300,9 +319,16 @@ export default function OrdersPage() {
                       {format(new Date(order.orderDate), "MMM d, yyyy")}
                     </TableCell>
                     <TableCell>
-                      <Badge className={getStatusColor(order.status)}>
-                        {order.status.replace("_", " ")}
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge className={getStatusColor(order.status)}>
+                          {order.status.replace("_", " ")}
+                        </Badge>
+                        {order.puraxSyncStatus === "sent" && (
+                          <Badge variant="outline" className={`text-xs gap-1 w-fit ${order.puraxOrderId ? "text-green-600 border-green-300 dark:text-green-400 dark:border-green-700" : "text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-700"}`}>
+                            {order.puraxOrderId ? "✓ Milo" : "⚠ Milo?"}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <Badge className={order.paymentStatus === "paid"
