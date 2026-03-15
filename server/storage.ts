@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db, pool } from "./db";
 import { eq, and, gte, lte, desc, ilike, or, sql } from "drizzle-orm";
 import {
   users, companies, contacts, deals, products, quotes, quoteLines,
@@ -166,7 +166,7 @@ export interface IStorage {
   deleteAllCompanyPrices(companyId: string): Promise<number>;
 
   // Dashboard Stats
-  getDashboardStats(): Promise<{
+  getDashboardStats(tenantId?: string): Promise<{
     totalCompanies: number;
     totalContacts: number;
     totalOrders: number;
@@ -770,77 +770,50 @@ export class DatabaseStorage implements IStorage {
 
   // Dashboard Stats
   async getDashboardStats(tenantId?: string) {
-    const tenantFilter = tenantId ? eq(companies.tenantId, tenantId) : undefined;
-    const ordersTenantFilter = tenantId ? eq(orders.tenantId, tenantId) : undefined;
-    const contactsTenantFilter = tenantId ? eq(contacts.tenantId, tenantId) : undefined;
-    const dealsTenantFilter = tenantId ? eq(deals.tenantId, tenantId) : undefined;
+    const tid = tenantId || null;
+    const tenantClause = tid ? `AND tenant_id = '${tid}'` : "";
+    const coTenantClause = tid ? `AND co.tenant_id = '${tid}'` : "";
+    const cTenantClause = tid ? `AND c.tenant_id = '${tid}'` : "";
 
-    const [companiesResult] = await db.select({ count: sql<number>`count(*)` }).from(companies)
-      .where(tenantFilter);
-    const [contactsResult] = await db.select({ count: sql<number>`count(*)` }).from(contacts)
-      .where(contactsTenantFilter);
-    const [ordersResult] = await db.select({ count: sql<number>`count(*)` }).from(orders)
-      .where(ordersTenantFilter);
-    
-    const [revenueResult] = await db.select({ 
-      total: sql<number>`COALESCE(SUM(CAST(total AS DECIMAL)), 0)` 
-    }).from(orders).where(
-      tenantId
-        ? and(eq(orders.status, "completed"), eq(orders.tenantId, tenantId))
-        : eq(orders.status, "completed")
-    );
-    
-    const [pendingResult] = await db.select({ count: sql<number>`count(*)` }).from(orders)
-      .where(
-        tenantId
-          ? and(or(eq(orders.status, "new"), eq(orders.status, "confirmed"), eq(orders.status, "in_production")), eq(orders.tenantId, tenantId))
-          : or(eq(orders.status, "new"), eq(orders.status, "confirmed"), eq(orders.status, "in_production"))
-      );
-    
-    const [dealsResult] = await db.select({ count: sql<number>`count(*)` }).from(deals)
-      .where(
-        tenantId
-          ? and(or(eq(deals.pipelineStage, "lead"), eq(deals.pipelineStage, "qualified"), eq(deals.pipelineStage, "quote_sent"), eq(deals.pipelineStage, "negotiation")), eq(deals.tenantId, tenantId))
-          : or(eq(deals.pipelineStage, "lead"), eq(deals.pipelineStage, "qualified"), eq(deals.pipelineStage, "quote_sent"), eq(deals.pipelineStage, "negotiation"))
-      );
-    
-    const [onHoldResult] = await db.select({ count: sql<number>`count(*)` }).from(companies)
-      .where(
-        tenantId
-          ? and(eq(companies.creditStatus, "on_hold"), eq(companies.tenantId, tenantId))
-          : eq(companies.creditStatus, "on_hold")
-      );
-
-    const recentOrders = await db.select().from(orders)
-      .where(ordersTenantFilter)
-      .orderBy(desc(orders.createdAt)).limit(5);
-    const recentCompanies = await db.select().from(companies)
-      .where(tenantFilter)
-      .orderBy(desc(companies.createdAt)).limit(5);
-
-    const stageResults = await db.select({
-      stage: deals.pipelineStage,
-      count: sql<number>`count(*)`
-    }).from(deals).where(dealsTenantFilter).groupBy(deals.pipelineStage);
+    const companiesResult = await pool.query(`SELECT COUNT(*)::int as count FROM companies WHERE 1=1 ${tenantClause}`);
+    const contactsResult = await pool.query(`SELECT COUNT(*)::int as count FROM contacts ct INNER JOIN companies co ON ct.company_id = co.id WHERE 1=1 ${coTenantClause}`);
+    const ordersResult = await pool.query(`SELECT COUNT(*)::int as count FROM orders WHERE 1=1 ${tenantClause}`);
+    const revenueResult = await pool.query(`SELECT COALESCE(SUM(CAST(total AS DECIMAL)), 0) as total FROM orders WHERE status = 'completed' ${tenantClause}`);
+    const pendingResult = await pool.query(`SELECT COUNT(*)::int as count FROM orders WHERE status IN ('new','confirmed','in_production') ${tenantClause}`);
+    const dealsResult = await pool.query(`SELECT COUNT(*)::int as count FROM deals d INNER JOIN companies c ON d.company_id = c.id WHERE d.pipeline_stage IN ('lead','qualified','quote_sent','negotiation') ${cTenantClause}`);
+    const onHoldResult = await pool.query(`SELECT COUNT(*)::int as count FROM companies WHERE credit_status = 'on_hold' ${tenantClause}`);
+    const recentOrdersResult = await pool.query(`SELECT * FROM orders WHERE 1=1 ${tenantClause} ORDER BY created_at DESC LIMIT 5`);
+    const recentCompaniesResult = await pool.query(`SELECT * FROM companies WHERE 1=1 ${tenantClause} ORDER BY created_at DESC LIMIT 5`);
+    const stageResult = await pool.query(`SELECT d.pipeline_stage as stage, COUNT(*)::int as count FROM deals d INNER JOIN companies c ON d.company_id = c.id WHERE 1=1 ${cTenantClause} GROUP BY d.pipeline_stage`);
 
     const dealsByStage: Record<string, number> = {};
-    stageResults.forEach(r => {
-      dealsByStage[r.stage] = Number(r.count);
-    });
+    for (const row of stageResult.rows) {
+      dealsByStage[row.stage] = Number(row.count);
+    }
+
+    const toCamel = (obj: Record<string, any>) => {
+      const result: Record<string, any> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        const camelKey = k.replace(/_([a-z])/g, (_, l) => l.toUpperCase());
+        result[camelKey] = v;
+      }
+      return result;
+    };
 
     return {
-      totalCompanies: Number(companiesResult.count),
-      totalContacts: Number(contactsResult.count),
-      totalOrders: Number(ordersResult.count),
-      totalRevenue: Number(revenueResult.total) || 0,
-      pendingOrders: Number(pendingResult.count),
-      activeDeals: Number(dealsResult.count),
-      companiesOnHold: Number(onHoldResult.count),
-      recentOrders,
-      recentCompanies,
+      totalCompanies: Number(companiesResult.rows[0].count),
+      totalContacts: Number(contactsResult.rows[0].count),
+      totalOrders: Number(ordersResult.rows[0].count),
+      totalRevenue: Number(revenueResult.rows[0].total) || 0,
+      pendingOrders: Number(pendingResult.rows[0].count),
+      activeDeals: Number(dealsResult.rows[0].count),
+      companiesOnHold: Number(onHoldResult.rows[0].count),
+      recentOrders: recentOrdersResult.rows.map(toCamel),
+      recentCompanies: recentCompaniesResult.rows.map(toCamel),
       dealsByStage,
     };
   }
+
 
   // Forms
   async getForm(id: string, tenantId?: string): Promise<Form | undefined> {

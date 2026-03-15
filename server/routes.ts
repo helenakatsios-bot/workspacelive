@@ -950,7 +950,7 @@ export async function registerRoutes(
   // ==================== CONTACTS ROUTES ====================
   app.get("/api/contacts", requireAuth, async (req, res) => {
     try {
-      const contacts = await storage.getAllContacts();
+      const contacts = await storage.getAllContacts(req.session.tenantId!);
       const companies = await storage.getAllCompanies(req.session.tenantId!);
       const companyMap = new Map(companies.map(c => [c.id, c]));
       const contactsWithCompany = contacts.map(contact => ({
@@ -1089,9 +1089,9 @@ export async function registerRoutes(
   // ==================== DEALS ROUTES ====================
   app.get("/api/deals", requireAuth, async (req, res) => {
     try {
-      const deals = await storage.getAllDeals();
+      const deals = await storage.getAllDeals(req.session.tenantId!);
       const companies = await storage.getAllCompanies(req.session.tenantId!);
-      const contacts = await storage.getAllContacts();
+      const contacts = await storage.getAllContacts(req.session.tenantId!);
       const companyMap = new Map(companies.map(c => [c.id, c]));
       const contactMap = new Map(contacts.map(c => [c.id, c]));
       const dealsWithRelations = deals.map(deal => ({
