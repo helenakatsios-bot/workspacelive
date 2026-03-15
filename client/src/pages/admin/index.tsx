@@ -402,6 +402,7 @@ export default function AdminPage() {
   const [shopifyClientId, setShopifyClientId] = useState("");
   const [shopifyClientSecret, setShopifyClientSecret] = useState("");
   const [shopifyWebhookSecret, setShopifyWebhookSecret] = useState("");
+  const [shopifySiteUrl, setShopifySiteUrl] = useState("");
   const [shopifyCompanyId, setShopifyCompanyId] = useState("");
   const [shopifyFormDirty, setShopifyFormDirty] = useState(false);
   const [showShopifySecret, setShowShopifySecret] = useState(false);
@@ -461,6 +462,7 @@ export default function AdminPage() {
       setShopifyClientId(shopifyConfig.clientId || "");
       setShopifyClientSecret(shopifyConfig.clientSecret || "");
       setShopifyWebhookSecret(shopifyConfig.webhookSecret || "");
+      setShopifySiteUrl((shopifyConfig as any).siteUrl || "");
     }
   }, [shopifyConfig, shopifyFormDirty]);
 
@@ -475,6 +477,7 @@ export default function AdminPage() {
         clientId: shopifyClientId,
         clientSecret: shopifyClientSecret,
         webhookSecret: shopifyWebhookSecret,
+        siteUrl: shopifySiteUrl,
       });
       if (shopifyCompanyId) {
         await apiRequest("PUT", "/api/settings/shopify_company_id", { value: shopifyCompanyId });
@@ -1122,6 +1125,19 @@ export default function AdminPage() {
                         <p className="text-xs text-muted-foreground">Found in Shopify Partner Dashboard → Your app → Settings → Credentials → Show Secret</p>
                       </div>
                       <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Production URL <span className="text-destructive font-bold">*</span></label>
+                        <input
+                          className="w-full border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+                          placeholder="https://workspacelive.com.au"
+                          value={shopifySiteUrl}
+                          onChange={(e) => { setShopifySiteUrl(e.target.value); setShopifyFormDirty(true); }}
+                          data-testid="input-shopify-site-url"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          <strong>Important:</strong> This must be your live production URL (e.g. <code>https://workspacelive.com.au</code>). All Shopify webhooks will be registered to this address. If left blank, the current server's URL is used — which will be wrong when set up from a development environment.
+                        </p>
+                      </div>
+                      <div className="space-y-1.5">
                         <label className="text-sm font-medium">Webhook Secret</label>
                         <div className="relative">
                           <input
@@ -1271,6 +1287,14 @@ export default function AdminPage() {
                         <Webhook className="w-4 h-4 text-muted-foreground shrink-0" />
                         <p className="text-xs font-medium">Webhook URL — used for automatic order import</p>
                       </div>
+                      {(shopifyConfig.webhookUrl.includes("replit.app") || shopifyConfig.webhookUrl.includes("replit.dev") || shopifyConfig.webhookUrl.includes("worf.replit")) && (
+                        <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/30 rounded p-2">
+                          <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                          <p className="text-xs text-destructive">
+                            <strong>Warning:</strong> This webhook URL is pointing to the development environment, not production. Set your <strong>Production URL</strong> above (e.g. <code>https://workspacelive.com.au</code>), save, then click "Fix Webhook in Shopify".
+                          </p>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2">
                         <code className="text-xs font-mono bg-background border rounded px-2 py-1 flex-1 break-all">
                           {shopifyConfig.webhookUrl}

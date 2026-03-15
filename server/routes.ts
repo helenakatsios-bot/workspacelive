@@ -8936,7 +8936,11 @@ Rules:
         return res.status(400).json({ error: "Shopify not configured — save your store domain and token first" });
       }
 
-      const webhookUrl = `${req.protocol}://${req.get("host")}/api/webhooks/shopify/orders/created`;
+      const savedSiteUrl = await storage.getSetting("shopify_site_url");
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const effectiveSiteUrl = savedSiteUrl || `${protocol}://${host}`;
+      const webhookUrl = `${effectiveSiteUrl}/api/webhooks/shopify/orders/created`;
       const apiBase = `https://${config.storeDomain}/admin/api/2024-01`;
       const headers = { "X-Shopify-Access-Token": config.apiToken, "Content-Type": "application/json" };
 
@@ -8995,16 +8999,19 @@ Rules:
   app.get("/api/admin/shopify-config", requireAdmin, async (req, res) => {
     try {
       const config = await getShopifyConfig();
+      const savedSiteUrl = await storage.getSetting("shopify_site_url");
       const protocol = req.headers["x-forwarded-proto"] || req.protocol;
       const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const effectiveSiteUrl = savedSiteUrl || `${protocol}://${host}`;
       res.json({
         storeDomain: config.storeDomain,
         apiToken: config.apiToken ? "••••••••" + config.apiToken.slice(-4) : "",
         webhookSecret: config.webhookSecret ? "••••••••" + config.webhookSecret.slice(-4) : "",
         clientId: config.clientId || "",
         clientSecret: config.clientSecret ? "••••••••" + config.clientSecret.slice(-4) : "",
-        webhookUrl: `${protocol}://${host}/api/webhooks/shopify/orders/created`,
-        oauthCallbackUrl: `${protocol}://${host}/api/shopify/oauth/callback`,
+        siteUrl: savedSiteUrl || "",
+        webhookUrl: `${effectiveSiteUrl}/api/webhooks/shopify/orders/created`,
+        oauthCallbackUrl: `${effectiveSiteUrl}/api/shopify/oauth/callback`,
         isConnected: !!(config.storeDomain && config.apiToken),
         hasOAuthCredentials: !!(config.clientId && config.clientSecret),
       });
@@ -9016,12 +9023,13 @@ Rules:
   // PUT shopify config
   app.put("/api/admin/shopify-config", requireAdmin, async (req, res) => {
     try {
-      const { storeDomain, apiToken, webhookSecret, clientId, clientSecret } = req.body;
+      const { storeDomain, apiToken, webhookSecret, clientId, clientSecret, siteUrl } = req.body;
       if (storeDomain !== undefined) await upsertSetting("shopify_store_domain", storeDomain.trim().replace(/^https?:\/\//, "").replace(/\/$/, ""));
       if (apiToken && !apiToken.startsWith("••••")) await upsertSetting("shopify_api_token", apiToken.trim());
       if (webhookSecret && !webhookSecret.startsWith("••••")) await upsertSetting("shopify_webhook_secret", webhookSecret.trim());
       if (clientId !== undefined) await upsertSetting("shopify_client_id", clientId.trim());
       if (clientSecret && !clientSecret.startsWith("••••")) await upsertSetting("shopify_client_secret", clientSecret.trim());
+      if (siteUrl !== undefined) await upsertSetting("shopify_site_url", siteUrl.trim().replace(/\/$/, ""));
       res.json({ message: "Shopify configuration saved" });
     } catch (error) {
       console.error("Save Shopify config error:", error);
