@@ -6307,6 +6307,17 @@ Rules:
     }
   });
 
+  app.post("/api/admin/reset-portal-passwords", requireAdmin, async (req, res) => {
+    try {
+      const bcrypt = await import("bcryptjs");
+      const hash = await bcrypt.default.hash("admin123", 10);
+      const result = await pool.query(`UPDATE portal_users SET password_hash = $1 RETURNING id`, [hash]);
+      res.json({ reset: result.rowCount, message: `Reset ${result.rowCount} portal user passwords to admin123` });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.delete("/api/customer-order-requests/:id", requireAdmin, async (req, res) => {
     try {
       const deleted = await storage.deleteCustomerOrderRequest(req.params.id);

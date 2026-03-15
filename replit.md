@@ -29,6 +29,7 @@ Preferred communication style: Simple, everyday language.
 - **PDF Order Extraction**: Uses pdfjs-dist and OpenAI (gpt-4o-mini, vision API) to extract order data from email PDF attachments, supporting both text-based and scanned PDFs.
 - **Customer Portal**: A B2B customer-facing portal for viewing orders, invoices, and company information, with separate session authentication.
 - **Recurring Orders**: Per-company recurring order templates stored as JSONB in `portal_users.recurring_items`. Admins configure the template from the company detail page (copy from an existing order). Portal users see a "Recurring" tab (only when a template is configured) with pre-filled quantities they can adjust before placing.
+- **Portal Password Convention**: All portal users use password `admin123`. The startup migration (`runStartupTasks` in `server/index.ts`) verifies this on every restart and resets all portal passwords if they don't match. Admin CRM password is also `admin123`.
 - **Email-to-Order Webhook**: A public, secret-authenticated webhook for forwarding email content to create order requests, designed for Power Automate integration.
 
 ### Feature Specifications

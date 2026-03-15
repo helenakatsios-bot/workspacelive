@@ -84,6 +84,58 @@ app.use((req, res, next) => {
 });
 
 async function runStartupTasks() {
+  // CRITICAL FIRST: Verify and fix portal user passwords — run on every startup
+  // Tests login with purax2026 against first portal user; resets ALL if mismatch
+  try {
+    const bcryptFirst = await import("bcryptjs");
+    const totalResult = await pool.query(`SELECT COUNT(*) as cnt FROM portal_users`);
+    const total = parseInt(totalResult.rows[0].cnt);
+    if (total > 0) {
+      // Check if ANY user has NULL/empty password
+      const nullCheck = await pool.query(`SELECT COUNT(*) as cnt FROM portal_users WHERE password_hash IS NULL OR password_hash = ''`);
+      const nullCnt = parseInt(nullCheck.rows[0].cnt);
+      // Also test if the first user's password matches purax2026
+      const sampleUser = await pool.query(`SELECT password_hash FROM portal_users LIMIT 1`);
+      const sampleHash = sampleUser.rows[0]?.password_hash;
+      let passwordsValid = false;
+      if (sampleHash && nullCnt === 0) {
+        try {
+          passwordsValid = await bcryptFirst.default.compare('admin123', sampleHash);
+        } catch {
+          passwordsValid = false;
+        }
+      }
+      if (!passwordsValid || nullCnt > 0) {
+        const freshHash = await bcryptFirst.default.hash('admin123', 10);
+        const updated = await pool.query(`UPDATE portal_users SET password_hash = $1 RETURNING id`, [freshHash]);
+        console.log(`[PORTAL-FIX] Reset all ${updated.rowCount} portal user passwords to admin123 (nullCnt=${nullCnt}, valid=${passwordsValid})`);
+      } else {
+        console.log(`[PORTAL-FIX] Portal passwords verified OK (${total} users)`);
+      }
+    }
+  } catch (err: any) {
+    console.error("[PORTAL-FIX] Password reset error:", err.message);
+  }
+
+  // CRITICAL FIRST: Assign Standard price list to companies with no price list
+  try {
+    const standardPl = await pool.query(`SELECT id FROM price_lists WHERE name = 'Standard' AND is_default = true LIMIT 1`);
+    if (standardPl.rows.length > 0) {
+      const stdId = standardPl.rows[0].id;
+      const noListResult = await pool.query(
+        `UPDATE companies SET price_list_id = $1 WHERE price_list_id IS NULL RETURNING id`,
+        [stdId]
+      );
+      if ((noListResult.rowCount || 0) > 0) {
+        console.log(`[PRICELIST-FIX] Assigned Standard price list to ${noListResult.rowCount} companies with no price list`);
+      } else {
+        console.log(`[PRICELIST-FIX] All companies already have a price list assigned`);
+      }
+    }
+  } catch (err: any) {
+    console.error("[PRICELIST-FIX] Error:", err.message);
+  }
+
   // One-time cleanup: remove demo data, keep only purax accounts
   try {
     const demoCheck = await pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE legal_name ILIKE '%Acme%' OR legal_name ILIKE '%BuildRight%'`);
@@ -1065,7 +1117,7 @@ async function runStartupTasks() {
     console.error("Pearls Manchester price list assignment error:", err.message);
   }
 
-  // Ensure "Custom Inserts" price list exists, then assign it to Standard/Interiors companies
+  // Ensure "Custom Inserts" price list exists, then assign it to Standard/Interiors companies (bulk single-query)
   try {
     let customInsertsResult = await pool.query(`SELECT id FROM price_lists WHERE name ILIKE 'custom inserts' LIMIT 1`);
     if (customInsertsResult.rows.length === 0) {
@@ -1076,27 +1128,20 @@ async function runStartupTasks() {
     }
     if (customInsertsResult.rows.length > 0) {
       const customInsertsId = customInsertsResult.rows[0].id;
-      // Get all companies whose main price list is Interiors, Standard, or NULL (no price list assigned)
-      const companiesResult = await pool.query(`
-        SELECT c.id FROM companies c
+      const bulkResult = await pool.query(`
+        WITH pid AS (SELECT $1::text AS val)
+        INSERT INTO company_additional_price_lists (company_id, price_list_id)
+        SELECT c.id, pid.val
+        FROM companies c
+        CROSS JOIN pid
         LEFT JOIN price_lists pl ON pl.id = c.price_list_id
-        WHERE pl.name IN ('Interiors', 'Standard') OR c.price_list_id IS NULL
-      `);
-      let added = 0;
-      for (const row of companiesResult.rows) {
-        const already = await pool.query(
-          `SELECT 1 FROM company_additional_price_lists WHERE company_id = $1 AND price_list_id = $2`,
-          [row.id, customInsertsId]
-        );
-        if (already.rows.length === 0) {
-          await pool.query(
-            `INSERT INTO company_additional_price_lists (company_id, price_list_id) VALUES ($1, $2)`,
-            [row.id, customInsertsId]
-          );
-          added++;
-        }
-      }
-      console.log(`Custom Inserts assigned to ${added} new companies (${companiesResult.rows.length} total on Interiors/Standard/no-list)`);
+        WHERE (pl.name IN ('Interiors', 'Standard') OR c.price_list_id IS NULL)
+          AND NOT EXISTS (
+            SELECT 1 FROM company_additional_price_lists capl
+            WHERE capl.company_id = c.id AND capl.price_list_id = pid.val
+          )
+      `, [customInsertsId]);
+      console.log(`Custom Inserts assigned to ${bulkResult.rowCount ?? 0} new companies`);
     }
   } catch (err: any) {
     console.error("Custom Inserts bulk assignment error:", err.message);
@@ -1395,41 +1440,6 @@ async function runStartupTasks() {
     await pool.query(`ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS category_order JSONB`);
   } catch (err: any) {
     console.error("portal_users category_order migration error:", err.message);
-  }
-
-  // FIX: Reset all portal user passwords to purax2026 (fixes missing/null passwords in production)
-  try {
-    const bcrypt = await import("bcryptjs");
-    const nullPwdCount = await pool.query(`SELECT COUNT(*) as cnt FROM portal_users WHERE password_hash IS NULL OR password_hash = ''`);
-    const nullCnt = parseInt(nullPwdCount.rows[0].cnt);
-    if (nullCnt > 0) {
-      const freshHash = await bcrypt.default.hash('purax2026', 10);
-      await pool.query(`UPDATE portal_users SET password_hash = $1 WHERE password_hash IS NULL OR password_hash = ''`, [freshHash]);
-      console.log(`[PORTAL-FIX] Reset ${nullCnt} portal users with missing passwords to purax2026`);
-    } else {
-      console.log(`[PORTAL-FIX] All portal users have passwords — no reset needed`);
-    }
-  } catch (err: any) {
-    console.error("[PORTAL-FIX] Password reset error:", err.message);
-  }
-
-  // FIX: Assign Standard price list to companies with no price list
-  try {
-    const standardPl = await pool.query(`SELECT id FROM price_lists WHERE name = 'Standard' AND is_default = true LIMIT 1`);
-    if (standardPl.rows.length > 0) {
-      const stdId = standardPl.rows[0].id;
-      const noListResult = await pool.query(
-        `UPDATE companies SET price_list_id = $1 WHERE price_list_id IS NULL RETURNING id`,
-        [stdId]
-      );
-      if ((noListResult.rowCount || 0) > 0) {
-        console.log(`[PRICELIST-FIX] Assigned Standard price list to ${noListResult.rowCount} companies with no price list`);
-      } else {
-        console.log(`[PRICELIST-FIX] All companies already have a price list assigned`);
-      }
-    }
-  } catch (err: any) {
-    console.error("[PRICELIST-FIX] Error:", err.message);
   }
 
   // ONE-TIME: Seed 14 Shopify orders #3523-#3536 into production if missing
