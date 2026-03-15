@@ -84,37 +84,99 @@ app.use((req, res, next) => {
 });
 
 async function runStartupTasks() {
-  // CRITICAL FIRST: Verify and fix portal user passwords — run on every startup
-  // Tests login with purax2026 against first portal user; resets ALL if mismatch
+  // PORTAL-FIX: Only set passwords for users with NULL/empty password hashes.
+  // Never wipe custom passwords — use purax2026 as the default for new/blank accounts.
   try {
     const bcryptFirst = await import("bcryptjs");
     const totalResult = await pool.query(`SELECT COUNT(*) as cnt FROM portal_users`);
     const total = parseInt(totalResult.rows[0].cnt);
     if (total > 0) {
-      // Check if ANY user has NULL/empty password
       const nullCheck = await pool.query(`SELECT COUNT(*) as cnt FROM portal_users WHERE password_hash IS NULL OR password_hash = ''`);
       const nullCnt = parseInt(nullCheck.rows[0].cnt);
-      // Also test if the first user's password matches purax2026
-      const sampleUser = await pool.query(`SELECT password_hash FROM portal_users LIMIT 1`);
-      const sampleHash = sampleUser.rows[0]?.password_hash;
-      let passwordsValid = false;
-      if (sampleHash && nullCnt === 0) {
-        try {
-          passwordsValid = await bcryptFirst.default.compare('admin123', sampleHash);
-        } catch {
-          passwordsValid = false;
-        }
-      }
-      if (!passwordsValid || nullCnt > 0) {
-        const freshHash = await bcryptFirst.default.hash('admin123', 10);
-        const updated = await pool.query(`UPDATE portal_users SET password_hash = $1 RETURNING id`, [freshHash]);
-        console.log(`[PORTAL-FIX] Reset all ${updated.rowCount} portal user passwords to admin123 (nullCnt=${nullCnt}, valid=${passwordsValid})`);
+      if (nullCnt > 0) {
+        const freshHash = await bcryptFirst.default.hash('purax2026', 10);
+        const updated = await pool.query(
+          `UPDATE portal_users SET password_hash = $1 WHERE password_hash IS NULL OR password_hash = '' RETURNING id`,
+          [freshHash]
+        );
+        console.log(`[PORTAL-FIX] Set default password (purax2026) for ${updated.rowCount} users with blank passwords`);
       } else {
         console.log(`[PORTAL-FIX] Portal passwords verified OK (${total} users)`);
       }
     }
   } catch (err: any) {
     console.error("[PORTAL-FIX] Password reset error:", err.message);
+  }
+
+  // CUSTOM PORTAL PASSWORDS: Restore individual customer passwords
+  try {
+    const bcryptPwd = await import("bcryptjs");
+    const customPasswords: Array<{ email: string; password: string }> = [
+      { email: "cooksman@bigpond.com", password: "cooksman" },
+      { email: "admin@naturalbedding.com.au", password: "purax!" },
+      { email: "scotts.store@westnet.com.au", password: "rescott" },
+      { email: "info@ecofillingaustralia.com.au", password: "ecofilling" },
+      { email: "dyne@dynequilts.com.au", password: "dynequilts" },
+      { email: "quiltsandpillows@bigpond.com", password: "quiltsandpillows" },
+      { email: "mattressesgalore@netspace.net.au", password: "mattressesgalore" },
+      { email: "nick@homedirect.com.au", password: "homedirect" },
+      { email: "david@hotelluxurycollection.com.au", password: "hotelluxury" },
+      { email: "daleys.homewares@outlook.com.au", password: "daleys" },
+      { email: "customerservice@whamad.com.au", password: "whamad" },
+      { email: "purchasing@ecodownunder.com.au", password: "ecodown" },
+      { email: "jenny@ecolinen.com", password: "ecolinen" },
+      { email: "dhimanvinod@hotmail.com", password: "vinod!" },
+      { email: "speaktous@manchesterfactory.com.au", password: "manchester factory" },
+      { email: "nick@warehousemh.com.au", password: "warehouse" },
+      { email: "shop@pepperwhites.com.au", password: "pepperwhites" },
+      { email: "eliza@annaspirodesign.com.au", password: "annaspiro" },
+      { email: "info@jadeupholstery.com.au", password: "jade!!" },
+      { email: "maltrimupholstery@gmail.com", password: "maltrim" },
+      { email: "colleve2@bigpond.net.au", password: "colleve" },
+      { email: "admin@castleandthings.com.au", password: "castle!" },
+      { email: "mail@comerandking.com", password: "comerking" },
+      { email: "sales@linensunlimited.com.au", password: "linens" },
+      { email: "elly@landhome.com.au", password: "landhome" },
+      { email: "hollydoidge@me.com", password: "logic!" },
+      { email: "hello@thebespokelinen.co", password: "bespoke" },
+      { email: "aliphuyzen@gmail.com", password: "luxe!!" },
+      { email: "tonilynch460@bigpond.com", password: "toni!!" },
+      { email: "info@supermasterbedding.com.au", password: "superm" },
+      { email: "warehouse@lmhome.com.au", password: "warehouse" },
+      { email: "erica.kelly61@gmail.com", password: "hotel@" },
+      { email: "jessicak@comfortsleep.com.au", password: "comfort" },
+      { email: "shop@magnoliainteriors.com.au", password: "magnolia" },
+      { email: "p.weingartner@swisstrade.com.au", password: "swisstrade" },
+      { email: "hilary@manonbis.com.au", password: "manonb" },
+      { email: "barb@brownlow.net.au", password: "brownlow" },
+      { email: "sarah@newboldinteriordesign.com", password: "newbold" },
+      { email: "sales@bigbedding.com.au", password: "bigbed" },
+      { email: "wayne@sageandclare.com", password: "sageclare" },
+      { email: "pulhams@bigpond.net.au", password: "pulhams" },
+      { email: "georgie@ivylane.com.au", password: "ivylane" },
+      { email: "susan@tempointeriors.com.au", password: "purax!" },
+      { email: "estaust@bigpond.com", password: "purax!" },
+      { email: "hello@mossmade.au", password: "purax!" },
+      { email: "operations@koskela.com.au", password: "purax!" },
+      { email: "jennifer@jenniferbutton.com.au", password: "purax!" },
+      { email: "rosebud@coastalliving.com.au", password: "purax!" },
+      { email: "laura@roadlesstaken.com.au", password: "purax!" },
+      { email: "shop@hbandco.com.au", password: "purax!" },
+    ];
+    let updated = 0;
+    let notFound = 0;
+    for (const { email, password } of customPasswords) {
+      const hash = await bcryptPwd.default.hash(password, 10);
+      const result = await pool.query(
+        `UPDATE portal_users SET password_hash = $1 WHERE LOWER(email) = LOWER($2) RETURNING id`,
+        [hash, email]
+      );
+      if (result.rowCount && result.rowCount > 0) updated++;
+      else notFound++;
+    }
+    console.log(`[CUSTOM-PASSWORDS] Restored ${updated} custom portal passwords (${notFound} emails not found in portal_users)`);
+  } catch (err: any) {
+    console.error("[CUSTOM-PASSWORDS] Error:", err.message);
   }
 
   // CRITICAL FIRST: Assign Standard price list to companies with no price list
