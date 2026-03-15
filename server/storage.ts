@@ -461,7 +461,38 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOrdersByCompany(companyId: string): Promise<Order[]> {
-    return db.select().from(orders).where(eq(orders.companyId, companyId)).orderBy(desc(orders.orderDate));
+    const { pool } = await import("./db");
+    const result = await pool.query(`
+      SELECT o.*, COALESCE(o.customer_name, c.first_name || ' ' || c.last_name, c.first_name, c.last_name) AS customer_name
+      FROM orders o
+      LEFT JOIN contacts c ON c.id = o.contact_id
+      WHERE o.company_id = $1
+      ORDER BY o.order_date DESC
+    `, [companyId]);
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      orderNumber: row.order_number,
+      companyId: row.company_id,
+      contactId: row.contact_id,
+      orderDate: row.order_date,
+      status: row.status,
+      items: row.items,
+      subtotal: row.subtotal,
+      total: row.total,
+      notes: row.notes,
+      customerName: row.customer_name?.trim() || null,
+      deliveryAddress: row.delivery_address,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      pdfPath: row.pdf_path,
+      puraxSyncStatus: row.purax_sync_status,
+      puraxOrderId: row.purax_order_id,
+      miloOrderId: row.milo_order_id,
+      shopifyOrderId: row.shopify_order_id,
+      shopifyOrderNumber: row.shopify_order_number,
+      shopifyFulfillmentId: row.shopify_fulfillment_id,
+      tenantId: row.tenant_id,
+    })) as Order[];
   }
 
   async getOrdersByDateRange(startDate: Date, endDate: Date): Promise<Order[]> {
