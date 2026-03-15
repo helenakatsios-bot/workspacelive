@@ -1,0 +1,200 @@
+
+Library
+Search
+Other
+Production
+Status
+Helena published 14 minutes ago
+Visibility
+Public
+Domain
+https://puraxfeatherholdingscrm.replit.app
+https://workspacelive.com.au
+Type
+Autoscale
+(4 vCPU / 8 GiB RAM / 3 Max)
+See all usage
+Database
+Production database connected
+36d8d3ae
+HK
+helenakatsios
+Helena
+published about 1 hour ago
+2a379647
+HK
+helenakatsios
+Helena
+published about 10 hours ago
+deef28bf
+HK
+helenakatsios
+Helena
+published about 10 hours ago
+3c764095
+HK
+helenakatsios
+Helena
+published about 11 hours ago
+c04275de
+HK
+helenakatsios
+Helena
+published about 11 hours ago
+9398df94
+HK
+helenakatsios
+Helena
+published about 11 hours ago
+ae7da685
+HK
+helenakatsios
+Helena
+published about 12 hours ago
+0100a2fa
+HK
+helenakatsios
+Helena
+published about 12 hours ago
+1dda8d96
+HK
+helenakatsios
+Helena
+published about 13 hours ago
+1f6255c5
+HK
+helenakatsios
+Helena
+published about 13 hours ago
+029308be
+HK
+helenakatsios
+Helena
+published about 14 hours ago
+46196586
+HK
+helenakatsios
+Helena
+published about 14 hours ago
+fd352ef0
+HK
+helenakatsios
+Helena
+published about 14 hours ago
+424e213a
+HK
+helenakatsios
+Helena
+published about 15 hours ago
+896acb5c
+HK
+helenakatsios
+Helena
+published about 15 hours ago
+131dcf17
+HK
+helenakatsios
+Helena
+published about 15 hours ago
+9ff1196f
+HK
+helenakatsios
+Helena
+published about 15 hours ago
+ad26a367
+HK
+helenakatsios
+Helena
+published 1 day ago
+1b4e0e76
+HK
+helenakatsios
+Helena
+published 1 day ago
+2d17f6f9
+HK
+helenakatsios
+Helena
+published 1 day ago
+Databases
+Development Database
+64.35MB / 20GB
+Production Database
+62.95MB / 100GB
+Billing Period
+Renews monthly, 25 Mar
+Hours of Compute Used
+33.77 hours
+Published your App
+instead of having two websites, can i put milos website on here ? it will make things clearer and cheaper for me. can you transfer his wesbite to this one directly ?
+
+Order Manager — Internal Staff Tool for Purax Pty Ltd
+
+This is a staff-only, internal production management system — not customer-facing at all. Customers never see or interact with it. It's used by the Purax warehouse/production team to manage and process customer orders from start to finish.
+
+What it does:
+
+Staff upload customer order PDFs (received from wholesale clients like interior designers, hotels, furniture stores, etc.). The app uses AI to automatically read the PDF and pull out the customer name, address, order number, products ordered, and total amount.
+
+From there, staff work through each order:
+
+Mark orders as In Progress when work begins, and Completed when done
+Capture completion photos and collect a digital signature from the customer or staff member
+Print packing lists and track whether labels have been printed and inserts are ready
+Flag orders as Urgent or put them On Hold (Do Not Start) if awaiting payment
+Add notes and annotate PDFs or photos directly in the app
+Once an order is complete, an admin can send it to Xero (the accounting software) to create a draft invoice automatically, with the order files attached. After invoicing, the system sends a notification to Millie (the CRM) with the order and customer details.
+
+Other features:
+
+Production List — a daily summary page that groups all active orders by product type (e.g. 80% Goose Down, Hungarian Goose Down, Duck Down, Inserts) so the team can see at a glance what needs to be made
+Stock Inventory — tracks raw materials, with low-stock alerts sent by email
+Worker Analytics — tracks how long each staff member takes to complete orders
+Portal-based access — the app has two separate portals: one for "Quilts & Pillows" orders and one for "Inserts" orders, so different staff only see their relevant orders
+In short: it's a private internal operations tool that bridges the gap between receiving a customer order PDF and getting a Xero invoice sent — handling everything in between.
+
+milo response
+Here's my honest take on the situation, as Milo:
+
+The short version: migrating me into Millie is a big job, and might not be worth it just to save a domain.
+
+Here's why:
+
+Millie already has some overlapping features, but the things that are unique to me — the dual portals, production list, worker analytics, stock inventory, completion photos, digital signatures, barcode scanning, the specific Xero workflow — would all need to be rebuilt inside Millie from scratch. That's months of work, not a copy-paste.
+
+What actually makes sense for your goal (one domain):
+
+The cheapest and fastest option is to buy one domain and point different paths at each app. For example:
+
+purax.com.au → Millie (CRM, customer-facing)
+purax.com.au/orders or orders.purax.com.au → Me (internal staff tool)
+That way you have one domain, both tools live under it, and nothing needs to be rebuilt. Both Replit apps can stay exactly as they are.
+
+What I'd tell Millie:
+
+"Don't rebuild Milo's system — it's already fully working. Instead, let's set up a subdomain or path routing so both apps live under one domain. The only integration needed between us is the webhook Milo already sends when an order is invoiced."
+
+This saves you the most time and money. Want me to look into how to set up the domain routing on Replit's side?
+
+here is my domain
+workspacelive.com.au
+
+can you do it
+
+what do i od
+
+i just bought it 10 mins ago , its with panthur
+
+correct?
+
+ready for milo
+
+it works im on it now
+
+remove those logins on display
+
+Done — the demo accounts box is removed from the login page. It'll update automatically.
+
+I NEED TO BE ABLE TO DELETE CONTACTS REGARDLESS IF THEY HAVE SOMETHING ATTACHED TO THEM I JUST NEED TO BE ABLE TO DELETE THEIR EMAISL
+
+IN THESE SCREENSHOTS ARE PEOPLE ORDERING OFF THE CLIENT PORTAL. !!! THEY DO NOT HAVE ANY DATA NOW. CAN YOU PLEASE SEE IF YOU CAN SOME HOW DO A DEEP DIVE AND FIND THEIR ORIGINAL ORDERS FROM THEIR CLIENT PORTAL

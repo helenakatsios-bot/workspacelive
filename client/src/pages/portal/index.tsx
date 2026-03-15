@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, useMemo, Fragment } from "react";
+import { useState, useEffect, createContext, useContext, useMemo, Fragment, type ReactNode } from "react";
 import { useQuery, useMutation, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -965,6 +965,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
   const [search, setSearch] = useState("");
   const [customInsertSearch, setCustomInsertSearch] = useState("");
   const [sizeGroupFillings, setSizeGroupFillings] = useState<Record<string, string>>({});
+  const [insertGroupSelections, setInsertGroupSelections] = useState<Record<string, Array<{ filling: string; productId: string; weight: string }>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [editLoaded, setEditLoaded] = useState(false);
   const [showReorderModal, setShowReorderModal] = useState(false);
@@ -1013,6 +1014,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
     setFillings({});
     setWeights({});
     setSizeGroupFillings({});
+    setInsertGroupSelections({});
     setCustomLines([]);
     setCustomQuiltLines([{ id: crypto.randomUUID(), description: "", qty: 0 }]);
     setExpandedCategories(new Set());
@@ -1091,10 +1093,23 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
       }
     }
 
+    // Restore insertGroupSelections for INSERTS-style categories
+    const newInsertGroupSelections: Record<string, Array<{ filling: string; productId: string; weight: string }>> = {};
+    for (const [productId] of Object.entries(newCart)) {
+      const product = (products as any[]).find((p: any) => p.id === productId);
+      if (product && ['INSERTS', '100 PLUS INSERTS', '15 % INSERTS', 'HIGHGATE INSERTS'].includes(product.category || "")) {
+        const sgKey = `${product.category}__${product.name}`;
+        const filling = newFillings[productId] || (product.variantPrices?.[0]?.filling as string | undefined)?.trim() || "";
+        if (!newInsertGroupSelections[sgKey]) newInsertGroupSelections[sgKey] = [];
+        newInsertGroupSelections[sgKey].push({ filling, productId, weight: newWeights[productId] || "" });
+      }
+    }
+
     setCart(newCart);
     setFillings(newFillings);
     setWeights(newWeights);
     setSizeGroupFillings(newSizeGroupFillings);
+    setInsertGroupSelections(newInsertGroupSelections);
     if (newCustomLines.length > 0) setCustomLines(newCustomLines);
     setCustomQuiltLines(newCustomQuiltLines.length > 0 ? newCustomQuiltLines : [{ id: crypto.randomUUID(), description: "", qty: 0 }]);
     // Auto-expand categories that have restored items so the customer can see them immediately
@@ -1282,6 +1297,30 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
       sizeMap.get(size)!.push({ filling, productId: p.id as string, price });
     }
     return Array.from(sizeMap.entries()).map(([size, options]) => ({ size, options }));
+  };
+
+  const INSERT_GROUPED_CATEGORIES = ['INSERTS', '100 PLUS INSERTS', '15 % INSERTS', 'HIGHGATE INSERTS'];
+
+  const buildInsertGroupedBySize = (prods: any[]) => {
+    const sizeMap = new Map<string, Map<string, { productId: string; weight: string }[]>>();
+    for (const p of prods) {
+      if ((p.name as string) === 'CUSTOM INSERT') continue;
+      const size = p.name as string;
+      const vp = p.variantPrices?.[0];
+      const filling = ((vp?.filling as string | undefined) || "").trim();
+      const weight = ((vp?.weight as string | undefined) || "").trim();
+      if (!sizeMap.has(size)) sizeMap.set(size, new Map());
+      const fillingMap = sizeMap.get(size)!;
+      if (!fillingMap.has(filling)) fillingMap.set(filling, []);
+      fillingMap.get(filling)!.push({ productId: p.id as string, weight });
+    }
+    return Array.from(sizeMap.entries()).map(([size, fillingMap]) => ({
+      size,
+      fillingGroups: Array.from(fillingMap.entries()).map(([filling, weightOptions]) => ({
+        filling,
+        weightOptions,
+      })),
+    }));
   };
 
   const buildHungarianPillowGroups = (prods: any[]) => {
@@ -1573,12 +1612,14 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
           </div>
 
           {Object.entries(grouped).map(([category, prods]) => {
-            const sizeGroups = category === 'PIPED PILLOWS' ? buildPillowSizeGroups(prods) : category === 'CHAMBER PILLOW' ? buildChamberPillowGroups(prods) : category === 'HUNGARIAN PILLOW' ? buildHungarianPillowGroups(prods) : buildSizeGroups(prods);
+            const isInsertGrouped = INSERT_GROUPED_CATEGORIES.includes(category);
+            const insertGroups = isInsertGrouped ? buildInsertGroupedBySize(prods) : null;
+            const sizeGroups = isInsertGrouped ? null : (category === 'PIPED PILLOWS' ? buildPillowSizeGroups(prods) : category === 'CHAMBER PILLOW' ? buildChamberPillowGroups(prods) : category === 'HUNGARIAN PILLOW' ? buildHungarianPillowGroups(prods) : buildSizeGroups(prods));
             const hasMultipleFillings = sizeGroups ? sizeGroups.some(sg => sg.options.length > 1) : false;
             // For PIPED PILLOWS: show each filling as its own qty row (expanded mode)
             const isPillowExpanded = category === 'PIPED PILLOWS';
-            const showFillingColumn = isPillowExpanded ? false : (sizeGroups ? hasMultipleFillings : FILLING_CATEGORIES.includes(category));
-            const showWeightColumn = !sizeGroups && WEIGHT_CATEGORIES.includes(category);
+            const showFillingColumn = isPillowExpanded ? false : (insertGroups ? true : sizeGroups ? hasMultipleFillings : FILLING_CATEGORIES.includes(category));
+            const showWeightColumn = insertGroups ? true : (!sizeGroups && WEIGHT_CATEGORIES.includes(category));
             const catMinQty = category === '100 PLUS INSERTS' ? 100 : minQty;
             const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
               'INSERTS': 'INSERTS STANDARD SIZE',
@@ -1602,7 +1643,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
                   <span className="font-semibold text-sm">{displayCategory}</span>
                   {categoryHasItems && <Badge variant="default" className="text-xs">In cart</Badge>}
                 </div>
-                <Badge variant="secondary">{sizeGroups ? sizeGroups.length : prods.filter((p: any) => p.name !== 'CUSTOM INSERT').length}</Badge>
+                <Badge variant="secondary">{insertGroups ? insertGroups.length : sizeGroups ? sizeGroups.length : prods.filter((p: any) => p.name !== 'CUSTOM INSERT').length}</Badge>
               </button>
               {isExpanded && (
               <CardContent className="p-0 pt-0">
@@ -1629,7 +1670,177 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sizeGroups ? (
+                    {insertGroups ? (
+                      insertGroups.flatMap(({ size, fillingGroups }) => {
+                        const sgKey = `${category}__${size}`;
+                        const selections = insertGroupSelections[sgKey] || [{ filling: "", productId: "", weight: "" }];
+                        const rows: ReactNode[] = [];
+
+                        selections.forEach((sel, selIdx) => {
+                          const selectedFilling = sel.filling || "";
+                          const selectedWeight = sel.weight || "";
+                          const fillingGroup = fillingGroups.find(fg => fg.filling === selectedFilling);
+                          const availableWeights = fillingGroup?.weightOptions || [];
+                          const resolvedOption = availableWeights.find(wo => wo.weight === selectedWeight);
+                          const resolvedProductId = resolvedOption?.productId || "";
+                          const resolvedProduct = resolvedProductId ? prods.find((p: any) => p.id === resolvedProductId) : null;
+                          const displayPrice = resolvedProductId ? getVariantPrice(resolvedProduct, selectedFilling, selectedWeight) : "0";
+                          const isFirst = selIdx === 0;
+                          const isOnly = selections.length === 1;
+
+                          rows.push(
+                            <TableRow key={`${size}-${selIdx}`} data-testid={`row-insert-group-${size}-${selIdx}`}>
+                              <TableCell>
+                                {isFirst && <p className="font-medium">{size}</p>}
+                              </TableCell>
+                              <TableCell>
+                                <Select
+                                  value={selectedFilling}
+                                  onValueChange={(val) => {
+                                    if (resolvedProductId) {
+                                      setCart(prev => { const { [resolvedProductId]: _, ...rest } = prev; return rest; });
+                                    }
+                                    setInsertGroupSelections(prev => {
+                                      const arr = [...(prev[sgKey] || [{ filling: "", productId: "", weight: "" }])];
+                                      arr[selIdx] = { filling: val, productId: "", weight: "" };
+                                      return { ...prev, [sgKey]: arr };
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className="w-[170px]" data-testid={`select-filling-insert-${size}-${selIdx}`}>
+                                    <SelectValue placeholder="Select filling..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {fillingGroups.map(fg => (
+                                      <SelectItem key={fg.filling} value={fg.filling}>{fg.filling}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell>
+                                <Select
+                                  value={selectedWeight}
+                                  disabled={!selectedFilling}
+                                  onValueChange={(val) => {
+                                    if (resolvedProductId) {
+                                      setCart(prev => { const { [resolvedProductId]: _, ...rest } = prev; return rest; });
+                                    }
+                                    const newOpt = fillingGroup?.weightOptions.find(wo => wo.weight === val);
+                                    const newProductId = newOpt?.productId || "";
+                                    if (newProductId) {
+                                      setFillings(prev => ({ ...prev, [newProductId]: selectedFilling }));
+                                      setWeights(prev => ({ ...prev, [newProductId]: val }));
+                                    }
+                                    setInsertGroupSelections(prev => {
+                                      const arr = [...(prev[sgKey] || [{ filling: "", productId: "", weight: "" }])];
+                                      arr[selIdx] = { ...arr[selIdx], weight: val, productId: newProductId };
+                                      return { ...prev, [sgKey]: arr };
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className="w-[150px]" data-testid={`select-weight-insert-${size}-${selIdx}`}>
+                                    <SelectValue placeholder="Select weight..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {availableWeights.map(wo => (
+                                      <SelectItem key={wo.weight} value={wo.weight}>{wo.weight}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <Input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={catMinQty}
+                                    value={resolvedProductId ? (cart[resolvedProductId] || "") : ""}
+                                    placeholder="0"
+                                    disabled={!resolvedProductId}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => {
+                                      if (!resolvedProductId) return;
+                                      const val = parseInt(e.target.value) || 0;
+                                      setCart(prev => {
+                                        if (val <= 0) { const { [resolvedProductId]: _, ...rest } = prev; return rest; }
+                                        const snapped = val < catMinQty ? catMinQty : val;
+                                        return { ...prev, [resolvedProductId]: snapped };
+                                      });
+                                    }}
+                                    onBlur={(e) => {
+                                      const val = parseInt(e.target.value) || 0;
+                                      if (val > 0 && val < catMinQty && resolvedProductId) {
+                                        setCart(prev => ({ ...prev, [resolvedProductId]: catMinQty }));
+                                      }
+                                    }}
+                                    className="h-8 w-[70px] text-center mx-auto"
+                                    data-testid={`input-qty-insert-${size}-${selIdx}`}
+                                  />
+                                  {catMinQty > 1 && (
+                                    <span className="text-[10px] text-muted-foreground">Min {catMinQty}</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  {resolvedProductId ? (
+                                    <span className="font-medium">${parseFloat(displayPrice).toFixed(2)}</span>
+                                  ) : (
+                                    <span className="text-muted-foreground text-sm">—</span>
+                                  )}
+                                  {!isOnly && (
+                                    <button
+                                      type="button"
+                                      className="text-muted-foreground hover:text-destructive ml-1"
+                                      title="Remove this row"
+                                      onClick={() => {
+                                        if (resolvedProductId) {
+                                          setCart(prev => { const { [resolvedProductId]: _, ...rest } = prev; return rest; });
+                                          setFillings(prev => { const { [resolvedProductId]: _, ...rest } = prev; return rest; });
+                                          setWeights(prev => { const { [resolvedProductId]: _, ...rest } = prev; return rest; });
+                                        }
+                                        setInsertGroupSelections(prev => {
+                                          const arr = [...(prev[sgKey] || [])];
+                                          arr.splice(selIdx, 1);
+                                          return { ...prev, [sgKey]: arr };
+                                        });
+                                      }}
+                                      data-testid={`btn-remove-insert-row-${size}-${selIdx}`}
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        });
+
+                        // "Add another filling" row
+                        rows.push(
+                          <TableRow key={`${size}-add`} className="border-b-0">
+                            <TableCell colSpan={5} className="py-1 pb-2">
+                              <button
+                                type="button"
+                                className="text-xs text-primary hover:underline flex items-center gap-1 pl-0"
+                                onClick={() => {
+                                  setInsertGroupSelections(prev => {
+                                    const arr = [...(prev[sgKey] || [{ filling: "", productId: "", weight: "" }])];
+                                    arr.push({ filling: "", productId: "", weight: "" });
+                                    return { ...prev, [sgKey]: arr };
+                                  });
+                                }}
+                                data-testid={`btn-add-insert-row-${size}`}
+                              >
+                                + add another filling for {size}
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                        );
+
+                        return rows;
+                      })
+                    ) : sizeGroups ? (
                       sizeGroups.map(({ size, options }) => {
                         if (isPillowExpanded) {
                           // PIPED PILLOWS: size header row + one qty row per filling option
