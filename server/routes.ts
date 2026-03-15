@@ -8699,8 +8699,10 @@ Rules:
 
       // Fetch all orders paginated from Shopify
       while (true) {
-        let url = `https://${config.storeDomain}/admin/api/2024-01/orders.json?status=any&limit=${limit}`;
-        if (pageInfo) url += `&page_info=${pageInfo}`;
+        // When using page_info, Shopify disallows other params like status=any
+        let url = pageInfo
+          ? `https://${config.storeDomain}/admin/api/2024-01/orders.json?limit=${limit}&page_info=${pageInfo}`
+          : `https://${config.storeDomain}/admin/api/2024-01/orders.json?status=any&limit=${limit}`;
 
         const shopifyRes = await fetch(url, {
           headers: {
@@ -8782,6 +8784,69 @@ Rules:
     } catch (error: any) {
       console.error("[SHOPIFY IMPORT]", error);
       res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Register/update Shopify webhook to point to THIS server
+  app.post("/api/admin/shopify-register-webhook", requireAdmin, async (req, res) => {
+    try {
+      const config = await getShopifyConfig();
+      if (!config.storeDomain || !config.apiToken) {
+        return res.status(400).json({ error: "Shopify not configured — save your store domain and token first" });
+      }
+
+      const webhookUrl = `${req.protocol}://${req.get("host")}/api/webhooks/shopify/orders/created`;
+      const apiBase = `https://${config.storeDomain}/admin/api/2024-01`;
+      const headers = { "X-Shopify-Access-Token": config.apiToken, "Content-Type": "application/json" };
+
+      // List existing webhooks
+      const listRes = await fetch(`${apiBase}/webhooks.json`, { headers });
+      if (!listRes.ok) {
+        const t = await listRes.text();
+        return res.status(500).json({ error: `Shopify API error listing webhooks: ${listRes.status}`, detail: t.slice(0, 200) });
+      }
+      const { webhooks } = await listRes.json() as any;
+
+      // Delete any existing orders/create webhooks (old or pointing to wrong URL)
+      let deleted = 0;
+      for (const wh of webhooks || []) {
+        if (wh.topic === "orders/create") {
+          await fetch(`${apiBase}/webhooks/${wh.id}.json`, { method: "DELETE", headers });
+          deleted++;
+        }
+      }
+
+      // Create fresh webhook pointing to current server
+      const createRes = await fetch(`${apiBase}/webhooks.json`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          webhook: {
+            topic: "orders/create",
+            address: webhookUrl,
+            format: "json",
+          },
+        }),
+      });
+
+      if (!createRes.ok) {
+        const t = await createRes.text();
+        return res.status(500).json({ error: `Failed to create webhook: ${createRes.status}`, detail: t.slice(0, 300) });
+      }
+
+      const created = await createRes.json() as any;
+      console.log("[SHOPIFY WEBHOOK] Registered:", created.webhook?.address);
+
+      res.json({
+        message: `Webhook updated successfully. Removed ${deleted} old webhook(s), created 1 pointing to ${webhookUrl}`,
+        deleted,
+        created: 1,
+        webhookId: created.webhook?.id,
+        address: created.webhook?.address,
+      });
+    } catch (error: any) {
+      console.error("[SHOPIFY WEBHOOK REGISTER]", error);
+      res.status(500).json({ error: error.message });
     }
   });
 

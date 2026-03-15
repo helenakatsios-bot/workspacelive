@@ -505,6 +505,36 @@ export default function AdminPage() {
     },
   });
 
+  const registerShopifyWebhookMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/shopify-register-webhook", {});
+      return res.json();
+    },
+    onSuccess: (data: { message: string; created?: number; deleted?: number }) => {
+      toast({ title: "Webhook registered", description: data.message });
+    },
+    onError: async (error: any) => {
+      let msg = "Could not register webhook";
+      try { const d = await error.response?.json(); if (d?.error) msg = d.error; } catch {}
+      toast({ title: "Webhook registration failed", description: msg, variant: "destructive" });
+    },
+  });
+
+  const importShopifyOrdersMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/import-shopify-orders", { limit: 250 });
+      return res.json();
+    },
+    onSuccess: (data: { imported: number; skipped: number; message?: string }) => {
+      toast({ title: "Shopify orders imported", description: `${data.imported} new, ${data.skipped} already existed` });
+    },
+    onError: async (error: any) => {
+      let msg = "Could not import orders";
+      try { const d = await error.response?.json(); if (d?.error) msg = d.error; } catch {}
+      toast({ title: "Import failed", description: msg, variant: "destructive" });
+    },
+  });
+
   const testShopifyMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/shopify-config/test", {});
@@ -1239,7 +1269,7 @@ export default function AdminPage() {
                     <div className="rounded-lg border bg-muted/40 p-3 space-y-2">
                       <div className="flex items-center gap-2">
                         <Webhook className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <p className="text-xs font-medium">Webhook URL — add this in Shopify Admin for automatic order import</p>
+                        <p className="text-xs font-medium">Webhook URL — used for automatic order import</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <code className="text-xs font-mono bg-background border rounded px-2 py-1 flex-1 break-all">
@@ -1255,7 +1285,31 @@ export default function AdminPage() {
                           <Copy className="w-4 h-4" />
                         </button>
                       </div>
-                      <p className="text-xs text-muted-foreground">In Shopify: Settings → Notifications → Webhooks → Add webhook → Event: <strong>Order creation</strong></p>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={registerShopifyWebhookMutation.isPending}
+                          onClick={() => registerShopifyWebhookMutation.mutate()}
+                          data-testid="button-register-shopify-webhook"
+                        >
+                          {registerShopifyWebhookMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Webhook className="w-3 h-3 mr-1" />}
+                          Fix Webhook in Shopify
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={importShopifyOrdersMutation.isPending}
+                          onClick={() => importShopifyOrdersMutation.mutate()}
+                          data-testid="button-import-shopify-orders"
+                        >
+                          {importShopifyOrdersMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Download className="w-3 h-3 mr-1" />}
+                          Import Missing Orders
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">"Fix Webhook" updates the webhook URL in your Shopify store so new orders reach this CRM automatically. "Import Missing Orders" pulls any orders that were missed.</p>
                     </div>
                   )}
                 </>
