@@ -6981,7 +6981,7 @@ Rules:
         'CASES', '4 SEASONS CASE', 'CASSETTES CASES', 'CHANNELLED CASES',
         'GOLD PILLOW CASE', 'GOLD QUILT CASE', 'MATTRESS TOPPER CASE',
         'MEN JACKET', 'WOMAN JACKET', 'JACKETS',
-        'WINTER', 'WINTER 80% DOWN',
+        'WINTER',
         'CUSTOM INSERTS',
       ];
       const portalCatsResult = await pool.query(`SELECT portal_categories FROM companies WHERE id = $1`, [companyId]);
