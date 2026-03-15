@@ -5981,7 +5981,7 @@ Rules:
     }
   });
 
-  app.get("/api/customer-order-requests", requireAuth, async (_req, res) => {
+  app.get("/api/customer-order-requests", requireAuth, async (req, res) => {
     try {
       const requests = await storage.getAllCustomerOrderRequests();
       const attachCounts = await pool.query(
