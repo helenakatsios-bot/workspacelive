@@ -1,6 +1,6 @@
 import { XeroClient, Contact as XeroContact, Invoice as XeroInvoice, LineItem, Invoices } from "xero-node";
 import { db } from "./db";
-import { xeroTokens, xeroSyncMapping, companies, contacts, invoices, orders, orderLines, crmSettings, PURAX_TENANT_ID } from "@shared/schema";
+import { xeroTokens, xeroSyncMapping, companies, contacts, invoices, orders, orderLines, crmSettings } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 
 const XERO_CLIENT_ID = process.env.XERO_CLIENT_ID;
@@ -31,13 +31,7 @@ export function createXeroClient(redirectUri: string) {
   });
 }
 
-export async function getStoredToken(crmTenantId?: string) {
-  if (crmTenantId) {
-    const [token] = await db.select().from(xeroTokens)
-      .where(eq(xeroTokens.crmTenantId, crmTenantId))
-      .orderBy(desc(xeroTokens.updatedAt)).limit(1);
-    return token;
-  }
+export async function getStoredToken() {
   const [token] = await db.select().from(xeroTokens).orderBy(desc(xeroTokens.updatedAt)).limit(1);
   return token;
 }
@@ -47,15 +41,20 @@ export async function saveXeroToken(
   tenantName: string | undefined,
   accessToken: string,
   refreshToken: string,
-  expiresAt: Date,
-  crmTenantId: string = PURAX_TENANT_ID
+  expiresAt: Date
 ) {
-  const [existing] = await db.select().from(xeroTokens)
-    .where(and(eq(xeroTokens.tenantId, tenantId), eq(xeroTokens.crmTenantId, crmTenantId)));
+  // Check if we already have a token for this tenant
+  const [existing] = await db.select().from(xeroTokens).where(eq(xeroTokens.tenantId, tenantId));
 
   if (existing) {
     await db.update(xeroTokens)
-      .set({ accessToken, refreshToken, expiresAt, tenantName, updatedAt: new Date() })
+      .set({
+        accessToken,
+        refreshToken,
+        expiresAt,
+        tenantName,
+        updatedAt: new Date(),
+      })
       .where(eq(xeroTokens.id, existing.id));
   } else {
     await db.insert(xeroTokens).values({
@@ -64,13 +63,12 @@ export async function saveXeroToken(
       accessToken,
       refreshToken,
       expiresAt,
-      crmTenantId,
     });
   }
 }
 
-export async function deleteXeroToken(crmTenantId: string = PURAX_TENANT_ID) {
-  await db.delete(xeroTokens).where(eq(xeroTokens.crmTenantId, crmTenantId));
+export async function deleteXeroToken() {
+  await db.delete(xeroTokens);
 }
 
 export async function getXeroSyncMapping(entityType: string, localId: string) {

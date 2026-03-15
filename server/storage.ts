@@ -1,4 +1,4 @@
-import { db, pool } from "./db";
+import { db } from "./db";
 import { eq, and, gte, lte, desc, ilike, or, sql } from "drizzle-orm";
 import {
   users, companies, contacts, deals, products, quotes, quoteLines,
@@ -48,7 +48,7 @@ export interface IStorage {
 
   // Contacts
   getContact(id: string): Promise<Contact | undefined>;
-  getAllContacts(tenantId?: string): Promise<Contact[]>;
+  getAllContacts(): Promise<Contact[]>;
   getContactsByCompany(companyId: string): Promise<Contact[]>;
   createContact(contact: InsertContact): Promise<Contact>;
   updateContact(id: string, data: Partial<InsertContact>): Promise<Contact | undefined>;
@@ -56,7 +56,7 @@ export interface IStorage {
 
   // Deals
   getDeal(id: string): Promise<Deal | undefined>;
-  getAllDeals(tenantId?: string): Promise<Deal[]>;
+  getAllDeals(): Promise<Deal[]>;
   getDealsByCompany(companyId: string): Promise<Deal[]>;
   createDeal(deal: InsertDeal): Promise<Deal>;
   updateDeal(id: string, data: Partial<InsertDeal>): Promise<Deal | undefined>;
@@ -123,7 +123,7 @@ export interface IStorage {
   createActivity(activity: InsertActivity): Promise<Activity>;
 
   // Audit Logs
-  getAuditLogs(limit?: number, tenantId?: string): Promise<AuditLog[]>;
+  getAuditLogs(limit?: number): Promise<AuditLog[]>;
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
 
   // Reports
@@ -140,8 +140,8 @@ export interface IStorage {
   deleteOrder(id: string): Promise<boolean>;
 
   // CRM Settings
-  getSetting(key: string, tenantId?: string): Promise<string | undefined>;
-  setSetting(key: string, value: string, tenantId?: string): Promise<void>;
+  getSetting(key: string): Promise<string | undefined>;
+  setSetting(key: string, value: string): Promise<void>;
 
   // Public
   getActiveProducts(): Promise<Product[]>;
@@ -166,7 +166,7 @@ export interface IStorage {
   deleteAllCompanyPrices(companyId: string): Promise<number>;
 
   // Dashboard Stats
-  getDashboardStats(tenantId?: string): Promise<{
+  getDashboardStats(): Promise<{
     totalCompanies: number;
     totalContacts: number;
     totalOrders: number;
@@ -296,14 +296,7 @@ export class DatabaseStorage implements IStorage {
     return contact;
   }
 
-  async getAllContacts(tenantId?: string): Promise<Contact[]> {
-    if (tenantId) {
-      return db.select({ contact: contacts }).from(contacts)
-        .innerJoin(companies, eq(contacts.companyId, companies.id))
-        .where(eq(companies.tenantId, tenantId))
-        .orderBy(contacts.firstName)
-        .then(rows => rows.map(r => r.contact));
-    }
+  async getAllContacts(): Promise<Contact[]> {
     return db.select().from(contacts).orderBy(contacts.firstName);
   }
 
@@ -332,14 +325,7 @@ export class DatabaseStorage implements IStorage {
     return deal;
   }
 
-  async getAllDeals(tenantId?: string): Promise<Deal[]> {
-    if (tenantId) {
-      return db.select({ deal: deals }).from(deals)
-        .innerJoin(companies, eq(deals.companyId, companies.id))
-        .where(eq(companies.tenantId, tenantId))
-        .orderBy(desc(deals.createdAt))
-        .then(rows => rows.map(r => r.deal));
-    }
+  async getAllDeals(): Promise<Deal[]> {
     return db.select().from(deals).orderBy(desc(deals.createdAt));
   }
 
@@ -673,14 +659,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Audit Logs
-  async getAuditLogs(limit: number = 100, tenantId?: string): Promise<AuditLog[]> {
-    if (tenantId) {
-      const rows = await pool.query(
-        `SELECT al.* FROM audit_logs al LEFT JOIN users u ON al.user_id = u.id WHERE u.tenant_id = $1 OR (al.user_id IS NULL AND $2 = $3) ORDER BY al.timestamp DESC LIMIT $4`,
-        [tenantId, tenantId, PURAX_TENANT_ID, limit]
-      );
-      return rows.rows as AuditLog[];
-    }
+  async getAuditLogs(limit: number = 100): Promise<AuditLog[]> {
     return db.select().from(auditLogs).orderBy(desc(auditLogs.timestamp)).limit(limit);
   }
 
@@ -759,16 +738,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   // CRM Settings
-  async getSetting(key: string, tenantId: string = PURAX_TENANT_ID): Promise<string | undefined> {
-    const [setting] = await db.select().from(crmSettings)
-      .where(and(eq(crmSettings.key, key), eq(crmSettings.tenantId, tenantId)));
+  async getSetting(key: string): Promise<string | undefined> {
+    const [setting] = await db.select().from(crmSettings).where(eq(crmSettings.key, key));
     return setting?.value;
   }
 
-  async setSetting(key: string, value: string, tenantId: string = PURAX_TENANT_ID): Promise<void> {
+  async setSetting(key: string, value: string): Promise<void> {
     await db.insert(crmSettings)
-      .values({ key, tenantId, value, updatedAt: new Date() })
-      .onConflictDoUpdate({ target: [crmSettings.key, crmSettings.tenantId], set: { value, updatedAt: new Date() } });
+      .values({ key, value, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: crmSettings.key, set: { value, updatedAt: new Date() } });
   }
 
   // Public
@@ -777,51 +755,50 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Dashboard Stats
-  async getDashboardStats(tenantId?: string) {
-    const tid = tenantId || null;
-    const tenantClause = tid ? `AND tenant_id = '${tid}'` : "";
-    const coTenantClause = tid ? `AND co.tenant_id = '${tid}'` : "";
-    const cTenantClause = tid ? `AND c.tenant_id = '${tid}'` : "";
+  async getDashboardStats() {
+    const [companiesResult] = await db.select({ count: sql<number>`count(*)` }).from(companies);
+    const [contactsResult] = await db.select({ count: sql<number>`count(*)` }).from(contacts);
+    const [ordersResult] = await db.select({ count: sql<number>`count(*)` }).from(orders);
+    
+    const [revenueResult] = await db.select({ 
+      total: sql<number>`COALESCE(SUM(CAST(total AS DECIMAL)), 0)` 
+    }).from(orders).where(eq(orders.status, "completed"));
+    
+    const [pendingResult] = await db.select({ count: sql<number>`count(*)` }).from(orders)
+      .where(or(eq(orders.status, "new"), eq(orders.status, "confirmed"), eq(orders.status, "in_production")));
+    
+    const [dealsResult] = await db.select({ count: sql<number>`count(*)` }).from(deals)
+      .where(or(eq(deals.pipelineStage, "lead"), eq(deals.pipelineStage, "qualified"), eq(deals.pipelineStage, "quote_sent"), eq(deals.pipelineStage, "negotiation")));
+    
+    const [onHoldResult] = await db.select({ count: sql<number>`count(*)` }).from(companies)
+      .where(eq(companies.creditStatus, "on_hold"));
 
-    const companiesResult = await pool.query(`SELECT COUNT(*)::int as count FROM companies WHERE 1=1 ${tenantClause}`);
-    const contactsResult = await pool.query(`SELECT COUNT(*)::int as count FROM contacts ct INNER JOIN companies co ON ct.company_id = co.id WHERE 1=1 ${coTenantClause}`);
-    const ordersResult = await pool.query(`SELECT COUNT(*)::int as count FROM orders WHERE 1=1 ${tenantClause}`);
-    const revenueResult = await pool.query(`SELECT COALESCE(SUM(CAST(total AS DECIMAL)), 0) as total FROM orders WHERE status = 'completed' ${tenantClause}`);
-    const pendingResult = await pool.query(`SELECT COUNT(*)::int as count FROM orders WHERE status IN ('new','confirmed','in_production') ${tenantClause}`);
-    const dealsResult = await pool.query(`SELECT COUNT(*)::int as count FROM deals d INNER JOIN companies c ON d.company_id = c.id WHERE d.pipeline_stage IN ('lead','qualified','quote_sent','negotiation') ${cTenantClause}`);
-    const onHoldResult = await pool.query(`SELECT COUNT(*)::int as count FROM companies WHERE credit_status = 'on_hold' ${tenantClause}`);
-    const recentOrdersResult = await pool.query(`SELECT * FROM orders WHERE 1=1 ${tenantClause} ORDER BY created_at DESC LIMIT 5`);
-    const recentCompaniesResult = await pool.query(`SELECT * FROM companies WHERE 1=1 ${tenantClause} ORDER BY created_at DESC LIMIT 5`);
-    const stageResult = await pool.query(`SELECT d.pipeline_stage as stage, COUNT(*)::int as count FROM deals d INNER JOIN companies c ON d.company_id = c.id WHERE 1=1 ${cTenantClause} GROUP BY d.pipeline_stage`);
+    const recentOrders = await db.select().from(orders).orderBy(desc(orders.createdAt)).limit(5);
+    const recentCompanies = await db.select().from(companies).orderBy(desc(companies.createdAt)).limit(5);
+
+    const stageResults = await db.select({
+      stage: deals.pipelineStage,
+      count: sql<number>`count(*)`
+    }).from(deals).groupBy(deals.pipelineStage);
 
     const dealsByStage: Record<string, number> = {};
-    for (const row of stageResult.rows) {
-      dealsByStage[row.stage] = Number(row.count);
-    }
-
-    const toCamel = (obj: Record<string, any>) => {
-      const result: Record<string, any> = {};
-      for (const [k, v] of Object.entries(obj)) {
-        const camelKey = k.replace(/_([a-z])/g, (_, l) => l.toUpperCase());
-        result[camelKey] = v;
-      }
-      return result;
-    };
+    stageResults.forEach(r => {
+      dealsByStage[r.stage] = Number(r.count);
+    });
 
     return {
-      totalCompanies: Number(companiesResult.rows[0].count),
-      totalContacts: Number(contactsResult.rows[0].count),
-      totalOrders: Number(ordersResult.rows[0].count),
-      totalRevenue: Number(revenueResult.rows[0].total) || 0,
-      pendingOrders: Number(pendingResult.rows[0].count),
-      activeDeals: Number(dealsResult.rows[0].count),
-      companiesOnHold: Number(onHoldResult.rows[0].count),
-      recentOrders: recentOrdersResult.rows.map(toCamel),
-      recentCompanies: recentCompaniesResult.rows.map(toCamel),
+      totalCompanies: Number(companiesResult.count),
+      totalContacts: Number(contactsResult.count),
+      totalOrders: Number(ordersResult.count),
+      totalRevenue: Number(revenueResult.total) || 0,
+      pendingOrders: Number(pendingResult.count),
+      activeDeals: Number(dealsResult.count),
+      companiesOnHold: Number(onHoldResult.count),
+      recentOrders,
+      recentCompanies,
       dealsByStage,
     };
   }
-
 
   // Forms
   async getForm(id: string, tenantId?: string): Promise<Form | undefined> {

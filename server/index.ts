@@ -109,26 +109,10 @@ async function runStartupTasks() {
     console.error("Demo cleanup error:", error);
   }
 
-  // Ensure Purax tenant exists
-  try {
-    const PURAX_TENANT_ID = "00000000-0000-0000-0000-000000000001";
-    const tenantExists = await pool.query(`SELECT id FROM tenants WHERE id = $1`, [PURAX_TENANT_ID]);
-    if (tenantExists.rows.length === 0) {
-      await pool.query(
-        `INSERT INTO tenants (id, name, slug, active, plan, contact_email) VALUES ($1, $2, $3, true, 'enterprise', $4)`,
-        [PURAX_TENANT_ID, "Purax Feather Holdings", "purax", "helena@purax.com.au"]
-      );
-      console.log("Purax tenant created");
-    }
-  } catch (error) {
-    console.error("Purax tenant sync error:", error);
-  }
-
   // Ensure Helena and Yana accounts exist with correct passwords
   try {
     const bcrypt = await import("bcryptjs");
     const freshHash = await bcrypt.default.hash("admin123", 10);
-    const PURAX_TENANT_ID = "00000000-0000-0000-0000-000000000001";
     const accounts = [
       { name: "Helena Katsios", email: "helena@purax.com.au" },
       { name: "Yana", email: "yana@purax.com.au" },
@@ -138,41 +122,14 @@ async function runStartupTasks() {
     for (const acct of accounts) {
       const exists = await pool.query(`SELECT id FROM users WHERE email = $1`, [acct.email]);
       if (exists.rows.length > 0) {
-        await pool.query(
-          `UPDATE users SET password_hash = $1, role = 'admin', active = true, tenant_id = $3 WHERE email = $2`,
-          [freshHash, acct.email, PURAX_TENANT_ID]
-        );
+        await pool.query(`UPDATE users SET password_hash = $1, role = 'admin', active = true WHERE email = $2`, [freshHash, acct.email]);
       } else {
-        await pool.query(
-          `INSERT INTO users (name, email, password_hash, role, active, tenant_id) VALUES ($1, $2, $3, 'admin', true, $4)`,
-          [acct.name, acct.email, freshHash, PURAX_TENANT_ID]
-        );
+        await pool.query(`INSERT INTO users (name, email, password_hash, role, active) VALUES ($1, $2, $3, 'admin', true)`, [acct.name, acct.email, freshHash]);
       }
     }
     console.log("Admin accounts synced successfully");
   } catch (error) {
     console.error("Account sync error:", error);
-  }
-
-  // Ensure platform super admin exists
-  try {
-    const bcrypt = await import("bcryptjs");
-    const PURAX_TENANT_ID = "00000000-0000-0000-0000-000000000001";
-    const SUPER_ADMIN_EMAIL = "superadmin@workspacelive.com.au";
-    const existing = await pool.query(`SELECT id FROM users WHERE email = $1`, [SUPER_ADMIN_EMAIL]);
-    if (existing.rows.length === 0) {
-      const hash = await bcrypt.default.hash("Workspace2026!", 10);
-      await pool.query(
-        `INSERT INTO users (id, name, email, password_hash, role, active, is_super_admin, tenant_id)
-         VALUES (gen_random_uuid(), 'Platform Admin', $1, $2, 'admin', true, true, $3)`,
-        [SUPER_ADMIN_EMAIL, hash, PURAX_TENANT_ID]
-      );
-      console.log("Super admin created successfully");
-    } else {
-      console.log("Super admin already exists");
-    }
-  } catch (error) {
-    console.error("Super admin sync error:", error);
   }
 
   // Remove duplicate price lists (same name created by concurrent imports) — keep the one with most prices

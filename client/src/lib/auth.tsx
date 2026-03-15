@@ -2,10 +2,8 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import type { User } from "@shared/schema";
 import { apiRequest } from "./queryClient";
 
-type UserWithTenant = User & { tenantName?: string | null };
-
 interface AuthContextType {
-  user: UserWithTenant | null;
+  user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -18,7 +16,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<UserWithTenant | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
