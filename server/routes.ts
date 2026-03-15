@@ -6274,6 +6274,32 @@ Rules:
     }
   });
 
+  // Batch set individual portal user passwords by email
+  app.post("/api/admin/set-portal-passwords", requireAdmin, async (req, res) => {
+    try {
+      const bcrypt = await import("bcryptjs");
+      const { passwords } = req.body as { passwords: Array<{ email: string; password: string }> };
+      if (!Array.isArray(passwords) || passwords.length === 0) {
+        return res.status(400).json({ message: "passwords array required" });
+      }
+      let updated = 0;
+      let notFound = 0;
+      for (const { email, password } of passwords) {
+        if (!email || !password) continue;
+        const hash = await bcrypt.default.hash(password, 10);
+        const result = await pool.query(
+          `UPDATE portal_users SET password_hash = $1 WHERE LOWER(email) = LOWER($2) RETURNING id`,
+          [hash, email.trim()]
+        );
+        if (result.rowCount && result.rowCount > 0) updated++;
+        else notFound++;
+      }
+      res.json({ updated, notFound, message: `Updated ${updated} passwords (${notFound} emails not found)` });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.delete("/api/customer-order-requests/:id", requireAdmin, async (req, res) => {
     try {
       const deleted = await storage.deleteCustomerOrderRequest(req.params.id);
