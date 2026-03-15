@@ -275,6 +275,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteContact(id: string): Promise<boolean> {
+    // Nullify all foreign key references to this contact before deleting
+    await db.execute(sql`UPDATE deals SET contact_id = NULL WHERE contact_id = ${id}`);
+    await db.execute(sql`UPDATE quotes SET contact_id = NULL WHERE contact_id = ${id}`);
+    await db.execute(sql`UPDATE orders SET contact_id = NULL WHERE contact_id = ${id}`);
+    await db.execute(sql`UPDATE emails SET contact_id = NULL WHERE contact_id = ${id}`);
+    await db.execute(sql`UPDATE form_submissions SET contact_id = NULL WHERE contact_id = ${id}`);
+    await db.execute(sql`UPDATE portal_users SET contact_id = NULL WHERE contact_id = ${id}`);
+    await db.execute(sql`UPDATE crm_tasks SET contact_id = NULL WHERE contact_id = ${id}`);
+    await db.execute(sql`UPDATE crm_tickets SET contact_id = NULL WHERE contact_id = ${id}`);
+    await db.execute(sql`UPDATE crm_calls SET contact_id = NULL WHERE contact_id = ${id}`);
     const [deleted] = await db.delete(contacts).where(eq(contacts.id, id)).returning();
     return !!deleted;
   }
