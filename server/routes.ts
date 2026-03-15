@@ -5928,6 +5928,27 @@ Rules:
   });
 
   // ==================== CUSTOMER ORDER REQUESTS (ADMIN) ====================
+
+  // Manually create a missing order request (for recovery purposes)
+  app.post("/api/admin/create-order-request", requireAdmin, async (req, res) => {
+    try {
+      const { companyName, contactName, contactEmail, contactPhone, shippingAddress, customerNotes, items, totalAmount, subtotal } = req.body;
+      if (!companyName || !contactName || !items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: "companyName, contactName, and items are required" });
+      }
+      const result = await pool.query(
+        `INSERT INTO customer_order_requests (company_name, contact_name, contact_email, contact_phone, shipping_address, customer_notes, items, status, total_amount, subtotal, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, 'pending', $8, $9, NOW())
+         RETURNING *`,
+        [companyName, contactName, contactEmail || "", contactPhone || null, shippingAddress || null, customerNotes || null, JSON.stringify(items), totalAmount || null, subtotal || null]
+      );
+      res.json(result.rows[0]);
+    } catch (error: any) {
+      console.error("Error creating order request:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/customer-order-requests/pending-count", requireAuth, async (_req, res) => {
     try {
       const result = await pool.query(`SELECT COUNT(*) as count FROM customer_order_requests WHERE status = 'pending'`);
