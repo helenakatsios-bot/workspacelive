@@ -136,30 +136,7 @@ async function runStartupTasks() {
     console.error("[PRICELIST-FIX] Error:", err.message);
   }
 
-  // One-time cleanup: remove demo data, keep only purax accounts
-  try {
-    const demoCheck = await pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE legal_name ILIKE '%Acme%' OR legal_name ILIKE '%BuildRight%'`);
-    if (parseInt(demoCheck.rows[0].cnt) > 0) {
-      console.log("Cleaning demo data...");
-      await pool.query(`DELETE FROM order_lines`);
-      await pool.query(`DELETE FROM quote_lines`);
-      await pool.query(`DELETE FROM activities`);
-      await pool.query(`DELETE FROM audit_logs`);
-      await pool.query(`DELETE FROM attachments`);
-      await pool.query(`DELETE FROM invoices`);
-      await pool.query(`DELETE FROM orders`);
-      await pool.query(`DELETE FROM quotes`);
-      await pool.query(`DELETE FROM deals`);
-      await pool.query(`DELETE FROM contacts`);
-      await pool.query(`DELETE FROM emails`);
-      await pool.query(`DELETE FROM customer_order_requests`);
-      await pool.query(`DELETE FROM companies`);
-      await pool.query(`DELETE FROM users WHERE email NOT ILIKE '%purax%'`);
-      console.log("Demo data cleaned successfully");
-    }
-  } catch (error) {
-    console.error("Demo cleanup error:", error);
-  }
+  // Demo cleanup removed — was dangerous and caused accidental order deletion
 
   // Ensure Helena and Yana accounts exist with correct passwords
   try {

@@ -106,62 +106,6 @@ export async function registerRoutes(
   );
 
   // ==================== AUTH ROUTES ====================
-  app.post("/api/sync-accounts-once", async (req, res) => {
-    try {
-      // Clean all demo data first
-      await pool.query(`DELETE FROM order_lines`);
-      await pool.query(`DELETE FROM quote_lines`);
-      await pool.query(`DELETE FROM activities`);
-      await pool.query(`DELETE FROM audit_logs`);
-      await pool.query(`DELETE FROM attachments`);
-      await pool.query(`DELETE FROM invoices`);
-      await pool.query(`DELETE FROM orders`);
-      await pool.query(`DELETE FROM quotes`);
-      await pool.query(`DELETE FROM deals`);
-      await pool.query(`DELETE FROM contacts`);
-      await pool.query(`DELETE FROM emails`);
-      await pool.query(`DELETE FROM customer_order_requests`);
-      await pool.query(`DELETE FROM companies`);
-      await pool.query(`DELETE FROM users WHERE email NOT ILIKE '%purax%'`);
-
-      const hash = await bcrypt.hash("admin123", 10);
-      
-      const helenaExists = await storage.getUserByEmail("helena@purax.com.au");
-      const adminExists = await storage.getUserByEmail("admin@company.com");
-      
-      if (!helenaExists && adminExists) {
-        await pool.query(
-          `UPDATE users SET email = $1, name = $2, role = 'admin', active = true, password_hash = $3 WHERE email ILIKE 'admin@company.com'`,
-          ["helena@purax.com.au", "Helena Katsios", hash]
-        );
-      } else if (helenaExists) {
-        await pool.query(
-          `UPDATE users SET role = 'admin', active = true, password_hash = $1 WHERE email ILIKE 'helena@purax.com.au'`,
-          [hash]
-        );
-      }
-      
-      const yanaExists = await storage.getUserByEmail("yana@purax.com.au");
-      if (yanaExists) {
-        await pool.query(
-          `UPDATE users SET role = 'admin', active = true, password_hash = $1 WHERE email ILIKE 'yana@purax.com.au'`,
-          [hash]
-        );
-      } else {
-        await pool.query(
-          `INSERT INTO users (id, name, email, password_hash, role, active) VALUES (gen_random_uuid(), 'Yana', 'yana@purax.com.au', $1, 'admin', true)`,
-          [hash]
-        );
-      }
-      
-      const allUsers = await pool.query(`SELECT id, name, email, role, active FROM users ORDER BY name`);
-      res.json({ message: "Accounts synced", users: allUsers.rows });
-    } catch (error) {
-      console.error("Sync accounts error:", error);
-      res.status(500).json({ message: "Failed", error: String(error) });
-    }
-  });
-
   app.post("/api/auth/login", async (req, res) => {
     try {
       const data = loginSchema.parse(req.body);
@@ -8723,6 +8667,123 @@ Rules:
       set: { value, updatedAt: new Date() },
     });
   }
+
+  // POST import all historical Shopify orders
+  app.post("/api/admin/import-shopify-orders", requireAdmin, async (req, res) => {
+    try {
+      const config = await getShopifyConfig();
+      if (!config.storeDomain || !config.apiToken) {
+        return res.status(400).json({ message: "Shopify not configured" });
+      }
+
+      // Get the PURADOWN company to link orders
+      const allCompanies = await storage.getAllCompanies();
+      const configuredCompanyId = await storage.getSetting("shopify_company_id");
+      let shopifyCompany = configuredCompanyId
+        ? allCompanies.find((c) => c.id === configuredCompanyId)
+        : null;
+      if (!shopifyCompany) {
+        shopifyCompany = allCompanies.find((c) =>
+          (c.legalName || "").toLowerCase().includes("puradown") ||
+          (c.tradingName || "").toLowerCase().includes("puradown")
+        ) || null;
+      }
+      const companyName = shopifyCompany
+        ? (shopifyCompany.tradingName || shopifyCompany.legalName)
+        : "PURADOWN WEBSITE SALES";
+
+      let imported = 0;
+      let skipped = 0;
+      let pageInfo: string | null = null;
+      const limit = req.body?.limit || 250;
+
+      // Fetch all orders paginated from Shopify
+      while (true) {
+        let url = `https://${config.storeDomain}/admin/api/2024-01/orders.json?status=any&limit=${limit}`;
+        if (pageInfo) url += `&page_info=${pageInfo}`;
+
+        const shopifyRes = await fetch(url, {
+          headers: {
+            "X-Shopify-Access-Token": config.apiToken,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!shopifyRes.ok) {
+          const errText = await shopifyRes.text();
+          return res.status(500).json({ message: `Shopify API error: ${shopifyRes.status}`, detail: errText.slice(0, 200) });
+        }
+
+        const data = await shopifyRes.json() as any;
+        const orders = data.orders || [];
+
+        for (const payload of orders) {
+          const shopifyOrderId = String(payload.id);
+          const shopifyOrderNumber = payload.name || `#${payload.order_number}`;
+
+          // Skip if already imported as order or order request
+          const existingOrder = await pool.query(`SELECT id FROM orders WHERE shopify_order_id = $1 LIMIT 1`, [shopifyOrderId]);
+          if (existingOrder.rows.length > 0) { skipped++; continue; }
+          const existingReq = await pool.query(`SELECT id FROM customer_order_requests WHERE shopify_order_id = $1 LIMIT 1`, [shopifyOrderId]);
+          if (existingReq.rows.length > 0) { skipped++; continue; }
+
+          // Map customer info
+          const customer = payload.customer || {};
+          const shipping = payload.shipping_address || payload.billing_address || {};
+          const customerName = shipping.name || `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || "Shopify Customer";
+          const customerEmail = customer.email || payload.email || "shopify@puradown.com.au";
+          const customerPhone = shipping.phone || customer.phone || null;
+          const customerAddress = [shipping.address1, shipping.address2, shipping.city, shipping.province, shipping.zip, shipping.country].filter(Boolean).join("\n") || null;
+
+          const subtotal = parseFloat(payload.subtotal_price || "0");
+          const total = parseFloat(payload.total_price || "0");
+          const paymentStatus = payload.financial_status === "paid" ? "paid" : "unpaid";
+          const createdAt = payload.created_at ? new Date(payload.created_at) : new Date();
+
+          const noteLines: string[] = [`Shopify Order ${shopifyOrderNumber}`];
+          if (payload.note) noteLines.push(payload.note);
+
+          const lineItems = payload.line_items || [];
+          const items: any[] = [];
+          for (const item of lineItems) {
+            const itemName = [item.title, item.variant_title].filter(Boolean).join(" — ");
+            const unitPrice = parseFloat(item.price || "0");
+            const qty = item.quantity || 1;
+            let productId: string | null = null;
+            if (item.sku) {
+              const productRes = await pool.query(`SELECT id FROM products WHERE sku = $1 LIMIT 1`, [item.sku]);
+              if (productRes.rows.length > 0) productId = productRes.rows[0].id;
+            }
+            items.push({ productId, productName: itemName, sku: item.sku || null, quantity: qty, unitPrice, lineTotal: unitPrice * qty });
+          }
+
+          await pool.query(
+            `INSERT INTO customer_order_requests (id, company_name, contact_name, contact_email, contact_phone, shipping_address, customer_notes, items, status, shopify_order_id, shopify_order_number, payment_status, subtotal, total_amount, created_at)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11, $12, $13)`,
+            [companyName, customerName, customerEmail, customerPhone, customerAddress,
+              noteLines.join("\n"), JSON.stringify(items),
+              shopifyOrderId, shopifyOrderNumber, paymentStatus,
+              subtotal.toFixed(2), total.toFixed(2), createdAt]
+          );
+          imported++;
+        }
+
+        // Check for next page
+        const linkHeader = shopifyRes.headers.get("link") || "";
+        const nextMatch = linkHeader.match(/<[^>]*[?&]page_info=([^&>]+)[^>]*>;\s*rel="next"/);
+        if (nextMatch) {
+          pageInfo = nextMatch[1];
+        } else {
+          break;
+        }
+      }
+
+      res.json({ message: `Import complete`, imported, skipped });
+    } catch (error: any) {
+      console.error("[SHOPIFY IMPORT]", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
 
   // GET shopify config (masks tokens)
   app.get("/api/admin/shopify-config", requireAdmin, async (req, res) => {
