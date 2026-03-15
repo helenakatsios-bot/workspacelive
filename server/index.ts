@@ -1397,6 +1397,41 @@ async function runStartupTasks() {
     console.error("portal_users category_order migration error:", err.message);
   }
 
+  // FIX: Reset all portal user passwords to purax2026 (fixes missing/null passwords in production)
+  try {
+    const bcrypt = await import("bcryptjs");
+    const nullPwdCount = await pool.query(`SELECT COUNT(*) as cnt FROM portal_users WHERE password_hash IS NULL OR password_hash = ''`);
+    const nullCnt = parseInt(nullPwdCount.rows[0].cnt);
+    if (nullCnt > 0) {
+      const freshHash = await bcrypt.default.hash('purax2026', 10);
+      await pool.query(`UPDATE portal_users SET password_hash = $1 WHERE password_hash IS NULL OR password_hash = ''`, [freshHash]);
+      console.log(`[PORTAL-FIX] Reset ${nullCnt} portal users with missing passwords to purax2026`);
+    } else {
+      console.log(`[PORTAL-FIX] All portal users have passwords — no reset needed`);
+    }
+  } catch (err: any) {
+    console.error("[PORTAL-FIX] Password reset error:", err.message);
+  }
+
+  // FIX: Assign Standard price list to companies with no price list
+  try {
+    const standardPl = await pool.query(`SELECT id FROM price_lists WHERE name = 'Standard' AND is_default = true LIMIT 1`);
+    if (standardPl.rows.length > 0) {
+      const stdId = standardPl.rows[0].id;
+      const noListResult = await pool.query(
+        `UPDATE companies SET price_list_id = $1 WHERE price_list_id IS NULL RETURNING id`,
+        [stdId]
+      );
+      if ((noListResult.rowCount || 0) > 0) {
+        console.log(`[PRICELIST-FIX] Assigned Standard price list to ${noListResult.rowCount} companies with no price list`);
+      } else {
+        console.log(`[PRICELIST-FIX] All companies already have a price list assigned`);
+      }
+    }
+  } catch (err: any) {
+    console.error("[PRICELIST-FIX] Error:", err.message);
+  }
+
   // ONE-TIME: Seed 14 Shopify orders #3523-#3536 into production if missing
   try {
     const shopifyOrders = [
