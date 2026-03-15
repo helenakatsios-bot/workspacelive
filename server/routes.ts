@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { eq, ilike, and, sql, inArray } from "drizzle-orm";
 import express from "express";
-import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, insertQuoteSchema, emails as emailsTable, contacts, companies as companiesTable, outlookTokens as outlookTokensTable, crmSettings, portalUsers, attachments, PURAX_TENANT_ID, tenants } from "@shared/schema";
+import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, insertQuoteSchema, emails as emailsTable, contacts, companies as companiesTable, outlookTokens as outlookTokensTable, crmSettings, portalUsers, attachments } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero, autoSyncXeroInvoices, repairMissingInvoiceRecords, getXeroSyncMapping, saveXeroSyncMapping } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks, fetchEmailAttachments, downloadAttachment } from "./outlook";
@@ -16,8 +16,6 @@ import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOu
 declare module "express-session" {
   interface SessionData {
     userId: string;
-    tenantId: string;
-    isSuperAdmin?: boolean;
     portalUserId?: string;
     portalCompanyId?: string;
     xeroState?: string;
@@ -188,8 +186,6 @@ export async function registerRoutes(
       }
 
       req.session.userId = user.id;
-      req.session.tenantId = user.tenantId;
-      if (user.isSuperAdmin) req.session.isSuperAdmin = true;
       await storage.updateUser(user.id, { lastLogin: new Date() } as any);
       await storage.createAuditLog({
         userId: user.id,
@@ -274,7 +270,7 @@ export async function registerRoutes(
   // ==================== COMPANIES ROUTES ====================
   app.get("/api/companies", requireAuth, async (req, res) => {
     try {
-      const companies = await storage.getAllCompanies(req.session.tenantId!);
+      const companies = await storage.getAllCompanies();
       res.json(companies);
     } catch (error) {
       console.error("Get companies error:", error);
@@ -593,7 +589,7 @@ export async function registerRoutes(
 
   app.post("/api/companies", requireEdit, async (req, res) => {
     try {
-      const data = insertCompanySchema.parse({ ...req.body, tenantId: req.session.tenantId });
+      const data = insertCompanySchema.parse(req.body);
       const company = await storage.createCompany(data);
       await storage.createAuditLog({
         userId: req.session.userId,
@@ -883,7 +879,7 @@ export async function registerRoutes(
 
   app.get("/api/companies/:id/prices/export", requireAuth, async (req, res) => {
     try {
-      const allProducts = await storage.getAllProducts(req.session.tenantId!);
+      const allProducts = await storage.getAllProducts();
       const companyPrices = await storage.getCompanyPrices(req.params.id);
       const priceMap = new Map(companyPrices.map(cp => [cp.productId, cp.unitPrice]));
       const activeProducts = allProducts.filter(p => p.active);
@@ -908,7 +904,7 @@ export async function registerRoutes(
       if (!Array.isArray(prices)) {
         return res.status(400).json({ message: "prices array is required" });
       }
-      const allProducts = await storage.getAllProducts(req.session.tenantId!);
+      const allProducts = await storage.getAllProducts();
       const skuMap = new Map(allProducts.filter(p => p.sku).map(p => [p.sku!.toLowerCase(), p.id]));
       const nameMap = new Map(allProducts.map(p => [p.name.toLowerCase().trim(), p.id]));
       let imported = 0;
@@ -946,7 +942,7 @@ export async function registerRoutes(
   app.get("/api/contacts", requireAuth, async (req, res) => {
     try {
       const contacts = await storage.getAllContacts();
-      const companies = await storage.getAllCompanies(req.session.tenantId!);
+      const companies = await storage.getAllCompanies();
       const companyMap = new Map(companies.map(c => [c.id, c]));
       const contactsWithCompany = contacts.map(contact => ({
         ...contact,
@@ -1085,7 +1081,7 @@ export async function registerRoutes(
   app.get("/api/deals", requireAuth, async (req, res) => {
     try {
       const deals = await storage.getAllDeals();
-      const companies = await storage.getAllCompanies(req.session.tenantId!);
+      const companies = await storage.getAllCompanies();
       const contacts = await storage.getAllContacts();
       const companyMap = new Map(companies.map(c => [c.id, c]));
       const contactMap = new Map(contacts.map(c => [c.id, c]));
@@ -1159,7 +1155,7 @@ export async function registerRoutes(
   // ==================== PRODUCTS ROUTES ====================
   app.get("/api/products", requireAuth, async (req, res) => {
     try {
-      const products = await storage.getAllProducts(req.session.tenantId!);
+      const products = await storage.getAllProducts();
       res.json(products);
     } catch (error) {
       console.error("Get products error:", error);
@@ -1190,7 +1186,7 @@ export async function registerRoutes(
   // ============ PRICE LISTS ============
   app.get("/api/price-lists", requireAuth, async (req, res) => {
     try {
-      const lists = await storage.getAllPriceLists(req.session.tenantId!);
+      const lists = await storage.getAllPriceLists();
       res.json(lists);
     } catch (error) {
       console.error("Get price lists error:", error);
@@ -1659,7 +1655,7 @@ export async function registerRoutes(
 
   app.post("/api/products", requireEdit, async (req, res) => {
     try {
-      const data = insertProductSchema.parse({ ...req.body, tenantId: req.session.tenantId });
+      const data = insertProductSchema.parse(req.body);
       const product = await storage.createProduct(data);
       await storage.createAuditLog({
         userId: req.session.userId,
@@ -1726,8 +1722,8 @@ export async function registerRoutes(
   // ==================== QUOTES ROUTES ====================
   app.get("/api/quotes", requireAuth, async (req, res) => {
     try {
-      const quotes = await storage.getAllQuotes(req.session.tenantId!);
-      const companies = await storage.getAllCompanies(req.session.tenantId!);
+      const quotes = await storage.getAllQuotes();
+      const companies = await storage.getAllCompanies();
       const companyMap = new Map(companies.map(c => [c.id, c]));
       const quotesWithCompany = quotes.map(quote => ({
         ...quote,
@@ -1762,7 +1758,7 @@ export async function registerRoutes(
       const quoteNumber = `QUO-${String(nextNum).padStart(4, '0')}`;
 
       const { lines, ...quoteData } = req.body;
-      const data = insertQuoteSchema.parse({ ...quoteData, quoteNumber, tenantId: req.session.tenantId });
+      const data = insertQuoteSchema.parse({ ...quoteData, quoteNumber });
       const quote = await storage.createQuote(data);
 
       if (lines && Array.isArray(lines)) {
@@ -1835,8 +1831,8 @@ export async function registerRoutes(
   // ==================== ORDERS ROUTES ====================
   app.get("/api/orders", requireAuth, async (req, res) => {
     try {
-      const orders = await storage.getAllOrders(req.session.tenantId!);
-      const companies = await storage.getAllCompanies(req.session.tenantId!);
+      const orders = await storage.getAllOrders();
+      const companies = await storage.getAllCompanies();
       const companyMap = new Map(companies.map(c => [c.id, c]));
       const ordersWithCompany = orders.map(order => ({
         ...order,
@@ -2126,7 +2122,6 @@ export async function registerRoutes(
 
       const order = await storage.createOrder({
         ...data,
-        tenantId: req.session.tenantId,
         createdBy: req.session.userId,
       });
 
@@ -3270,8 +3265,8 @@ export async function registerRoutes(
   // ==================== INVOICES ROUTES ====================
   app.get("/api/invoices", requireAuth, async (req, res) => {
     try {
-      const invoices = await storage.getAllInvoices(req.session.tenantId!);
-      const companies = await storage.getAllCompanies(req.session.tenantId!);
+      const invoices = await storage.getAllInvoices();
+      const companies = await storage.getAllCompanies();
       const companyMap = new Map(companies.map(c => [c.id, c]));
       const invoicesWithCompany = invoices.map(invoice => ({
         ...invoice,
@@ -3315,7 +3310,7 @@ export async function registerRoutes(
 
       const data = schema.parse(req.body);
 
-      const existingInvoices = await storage.getAllInvoices(req.session.tenantId!);
+      const existingInvoices = await storage.getAllInvoices();
       let maxNum = 0;
       for (const inv of existingInvoices) {
         const match = inv.invoiceNumber.match(/INV-(\d+)/);
@@ -3330,7 +3325,6 @@ export async function registerRoutes(
         invoiceNumber,
         orderId: data.orderId || null,
         companyId: data.companyId,
-        tenantId: req.session.tenantId,
         status: data.status,
         issueDate: data.issueDate ? new Date(data.issueDate) : new Date(),
         dueDate: data.dueDate ? new Date(data.dueDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -3419,7 +3413,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Order has no company assigned" });
       }
 
-      const existingInvoices = await storage.getAllInvoices(req.session.tenantId!);
+      const existingInvoices = await storage.getAllInvoices();
       const alreadyHasInvoice = existingInvoices.find(inv => inv.orderId === order.id);
       if (alreadyHasInvoice) {
         return res.status(400).json({ message: `This order already has invoice ${alreadyHasInvoice.invoiceNumber}` });
@@ -3444,7 +3438,6 @@ export async function registerRoutes(
         invoiceNumber,
         orderId: order.id,
         companyId: order.companyId,
-        tenantId: req.session.tenantId,
         status: "draft",
         issueDate: new Date(),
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -3473,7 +3466,7 @@ export async function registerRoutes(
   // GET invoice for a specific order (used on order detail page)
   app.get("/api/orders/:orderId/invoice", requireAuth, async (req, res) => {
     try {
-      const allInvoices = await storage.getAllInvoices(req.session.tenantId!);
+      const allInvoices = await storage.getAllInvoices();
       const invoice = allInvoices.find(inv => inv.orderId === req.params.orderId);
       if (!invoice) return res.status(404).json({ message: "No invoice found for this order" });
       res.json(invoice);
@@ -3485,7 +3478,7 @@ export async function registerRoutes(
   // ==================== ADMIN ROUTES ====================
   app.get("/api/admin/users", requireAdmin, async (req, res) => {
     try {
-      const users = await storage.getAllUsers(req.session.tenantId!);
+      const users = await storage.getAllUsers();
       const usersWithoutPassword = users.map(({ passwordHash, ...user }) => user);
       res.json(usersWithoutPassword);
     } catch (error) {
@@ -3518,7 +3511,6 @@ export async function registerRoutes(
         passwordHash,
         role: data.role,
         active: data.active,
-        tenantId: req.session.tenantId,
       });
 
       await storage.createAuditLog({
@@ -3611,7 +3603,7 @@ export async function registerRoutes(
   app.get("/api/admin/audit-logs", requireAdmin, async (req, res) => {
     try {
       const logs = await storage.getAuditLogs(100);
-      const users = await storage.getAllUsers(req.session.tenantId!);
+      const users = await storage.getAllUsers();
       const userMap = new Map(users.map(u => [u.id, u]));
       const logsWithUser = logs.map(log => ({
         ...log,
@@ -4608,7 +4600,7 @@ Rules: Extract ALL line items. If prices are not present, use 0. Quantities must
       console.log(`[EMAIL-TO-ORDER] Successfully extracted ${lines.length} order lines`);
 
       // Match company: try subject/body name first (most reliable), then sender email, then domain
-      const allCompanies = await storage.getAllCompanies(req.session.tenantId!);
+      const allCompanies = await storage.getAllCompanies();
       let company: any = null;
 
       // For forwarded Shopify emails (e.g. "[Big Bedding Australia] Order #21696 placed by...")
@@ -4828,7 +4820,7 @@ Rules: Extract ALL line items. If prices are not present, use 0. Quantities must
       // Use email order number if available, otherwise generate sequential
       let orderNumber: string;
       if (shopifyOrderNum) {
-        const existingOrders = await storage.getAllOrders(req.session.tenantId!);
+        const existingOrders = await storage.getAllOrders();
         const shopifyNotePattern = new RegExp(`(^|\\W)#?${shopifyOrderNum}(\\W|$)`);
         const duplicate = existingOrders.find((o) => 
           o.orderNumber === `PD-${shopifyOrderNum}` || 
@@ -5187,7 +5179,7 @@ Rules:
         return res.status(500).json({ message: "AI returned invalid data. Please try again." });
       }
 
-      const allCompanies = await storage.getAllCompanies(req.session.tenantId!);
+      const allCompanies = await storage.getAllCompanies();
       let matchedCompanyId: string | null = null;
 
       if (extractedData.companyName) {
@@ -5495,7 +5487,7 @@ Rules:
             const protocol = req.headers["x-forwarded-proto"] || (host.includes("localhost") ? "http" : "https");
             const notificationRedirectUri = `${protocol}://${host}/api/outlook/callback`;
 
-            const allUsers = await storage.getAllUsers(req.session.tenantId!);
+            const allUsers = await storage.getAllUsers();
             let emailSent = false;
             for (const user of allUsers) {
               if (emailSent) break;
@@ -5564,7 +5556,7 @@ Rules:
 
   app.get("/api/forms", requireAuth, async (req, res) => {
     try {
-      const allForms = await storage.getAllForms(req.session.tenantId!);
+      const allForms = await storage.getAllForms();
       const formsWithCounts = await Promise.all(
         allForms.map(async (form) => {
           const submissions = await storage.getFormSubmissions(form.id);
@@ -5603,7 +5595,6 @@ Rules:
         successMessage: successMessage || "Thank you for your submission!",
         notifyEmails: notifyEmails || null,
         createdBy: req.session.userId,
-        tenantId: req.session.tenantId,
       });
       await storage.createAuditLog({
         userId: req.session.userId,
@@ -5992,7 +5983,7 @@ Rules:
 
   app.get("/api/customer-order-requests", requireAuth, async (_req, res) => {
     try {
-      const requests = await storage.getAllCustomerOrderRequests(req.session.tenantId!);
+      const requests = await storage.getAllCustomerOrderRequests();
       const attachCounts = await pool.query(
         `SELECT entity_id, COUNT(*)::int as count FROM attachments WHERE entity_type = 'order_request' GROUP BY entity_id`
       );
@@ -6075,7 +6066,7 @@ Rules:
         return res.status(400).json({ message: "This order request has already been converted" });
       }
 
-      const allCompanies = await storage.getAllCompanies(req.session.tenantId!);
+      const allCompanies = await storage.getAllCompanies();
       const reqName = orderRequest.companyName.toLowerCase().trim();
       let company = allCompanies.find(
         (c) =>
@@ -7161,7 +7152,7 @@ Rules:
             const redirectUri = `${protocol}://${host}/api/outlook/callback`;
 
             const isRecurring = (notesWithPO || "").toLowerCase().includes("recurring order");
-            const allUsers = await storage.getAllUsers(req.session.tenantId!);
+            const allUsers = await storage.getAllUsers();
             let emailSent = false;
             for (const user of allUsers) {
               if (emailSent) break;
@@ -8890,8 +8881,8 @@ Rules:
         shipping.province, shipping.zip, shipping.country
       ].filter(Boolean).join("\n") || null;
 
-      // Get the configured Shopify company name (Shopify webhook is Purax-specific)
-      const allCompanies = await storage.getAllCompanies(PURAX_TENANT_ID);
+      // Get the configured Shopify company name
+      const allCompanies = await storage.getAllCompanies();
       const configuredCompanyId = await storage.getSetting("shopify_company_id");
       let shopifyCompany = configuredCompanyId
         ? allCompanies.find((c) => c.id === configuredCompanyId)
@@ -9031,136 +9022,6 @@ Rules:
     } catch (error: any) {
       console.error("[SHOPIFY] Fulfill error:", error);
       res.status(500).json({ message: "Failed to fulfill order in Shopify" });
-    }
-  });
-
-  // ============================================
-  // SUPER ADMIN ROUTES
-  // ============================================
-  const requireSuperAdmin = (req: Request, res: Response, next: NextFunction) => {
-    if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
-    if (!req.session.isSuperAdmin) return res.status(403).json({ message: "Super admin access required" });
-    next();
-  };
-
-  // GET /api/super-admin/tenants - list all tenants with user counts
-  app.get("/api/super-admin/tenants", requireSuperAdmin, async (req, res) => {
-    try {
-      const allTenants = await storage.getAllTenants();
-      // Enrich with user counts
-      const enriched = await Promise.all(allTenants.map(async (tenant) => {
-        const users = await storage.getAllUsers(tenant.id);
-        return { ...tenant, userCount: users.length };
-      }));
-      res.json(enriched);
-    } catch (error) {
-      console.error("Super admin get tenants error:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  // POST /api/super-admin/tenants - create a new tenant
-  app.post("/api/super-admin/tenants", requireSuperAdmin, async (req, res) => {
-    try {
-      const { name, slug, adminName, adminEmail, adminPassword } = req.body;
-      if (!name || !slug || !adminName || !adminEmail || !adminPassword) {
-        return res.status(400).json({ message: "name, slug, adminName, adminEmail, adminPassword are required" });
-      }
-
-      // Check slug uniqueness
-      const existing = await db.select().from(tenants).where(eq(tenants.slug, slug));
-      if (existing.length > 0) {
-        return res.status(400).json({ message: "A tenant with this slug already exists" });
-      }
-
-      // Check email uniqueness
-      const existingUser = await storage.getUserByEmail(adminEmail);
-      if (existingUser) {
-        return res.status(400).json({ message: "A user with this email already exists" });
-      }
-
-      // Create tenant
-      const tenant = await storage.createTenant({ name, slug, active: true });
-
-      // Create admin user for the tenant
-      const passwordHash = await bcrypt.hash(adminPassword, 10);
-      const adminUser = await storage.createUser({
-        name: adminName,
-        email: adminEmail,
-        passwordHash,
-        role: "admin",
-        active: true,
-        tenantId: tenant.id,
-        isSuperAdmin: false,
-      });
-
-      res.status(201).json({ tenant, adminUser: { ...adminUser, passwordHash: undefined } });
-    } catch (error) {
-      console.error("Super admin create tenant error:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  // PUT /api/super-admin/tenants/:id - update tenant
-  app.put("/api/super-admin/tenants/:id", requireSuperAdmin, async (req, res) => {
-    try {
-      const { name, slug, active } = req.body;
-      const updated = await storage.updateTenant(req.params.id, { name, slug, active });
-      if (!updated) return res.status(404).json({ message: "Tenant not found" });
-      res.json(updated);
-    } catch (error) {
-      console.error("Super admin update tenant error:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  // GET /api/super-admin/tenants/:id/users - list users for a tenant
-  app.get("/api/super-admin/tenants/:id/users", requireSuperAdmin, async (req, res) => {
-    try {
-      const users = await storage.getAllUsers(req.params.id);
-      res.json(users.map(u => ({ ...u, passwordHash: undefined })));
-    } catch (error) {
-      console.error("Super admin get tenant users error:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  // POST /api/super-admin/tenants/:id/users - create user for a tenant
-  app.post("/api/super-admin/tenants/:id/users", requireSuperAdmin, async (req, res) => {
-    try {
-      const { name, email, password, role } = req.body;
-      if (!name || !email || !password || !role) {
-        return res.status(400).json({ message: "name, email, password, role are required" });
-      }
-      const existing = await storage.getUserByEmail(email);
-      if (existing) {
-        return res.status(400).json({ message: "A user with this email already exists" });
-      }
-      const passwordHash = await bcrypt.hash(password, 10);
-      const user = await storage.createUser({
-        name,
-        email,
-        passwordHash,
-        role: role as any,
-        active: true,
-        tenantId: req.params.id,
-        isSuperAdmin: false,
-      });
-      res.status(201).json({ ...user, passwordHash: undefined });
-    } catch (error) {
-      console.error("Super admin create user error:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  // GET /api/super-admin/me - get super admin info
-  app.get("/api/super-admin/me", requireSuperAdmin, async (req, res) => {
-    try {
-      const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(404).json({ message: "User not found" });
-      res.json({ ...user, passwordHash: undefined });
-    } catch (error) {
-      res.status(500).json({ message: "Internal server error" });
     }
   });
 

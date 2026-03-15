@@ -10,7 +10,6 @@ interface AuthContextType {
   isAdmin: boolean;
   canEdit: boolean;
   canViewPricing: boolean;
-  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -55,10 +54,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = user?.role === "admin";
   const canEdit = user?.role === "admin" || user?.role === "office";
   const canViewPricing = user?.role !== "warehouse";
-  const isSuperAdmin = user?.isSuperAdmin === true;
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, isAdmin, canEdit, canViewPricing, isSuperAdmin }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, isAdmin, canEdit, canViewPricing }}>
       {children}
     </AuthContext.Provider>
   );

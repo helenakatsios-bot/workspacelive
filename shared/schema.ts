@@ -1,35 +1,16 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, serial, boolean, timestamp, decimal, jsonb, index, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, serial, boolean, timestamp, decimal, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-
-// ============ TENANTS (Multi-tenancy) ============
-export const PURAX_TENANT_ID = "00000000-0000-0000-0000-000000000001";
-
-export const tenants = pgTable("tenants", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  active: boolean("active").notNull().default(true),
-  plan: text("plan").notNull().default("standard"), // standard, professional, enterprise
-  contactEmail: text("contact_email"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
-export type InsertTenant = z.infer<typeof insertTenantSchema>;
-export type Tenant = typeof tenants.$inferSelect;
 
 // ============ USERS ============
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id", { length: 36 }).notNull().default(PURAX_TENANT_ID),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   role: text("role").notNull().default("office"), // admin, office, warehouse, readonly
   active: boolean("active").notNull().default(true),
-  isSuperAdmin: boolean("is_super_admin").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   lastLogin: timestamp("last_login"),
 });
@@ -41,7 +22,6 @@ export type User = typeof users.$inferSelect;
 // ============ COMPANIES (CUSTOMERS) ============
 export const companies = pgTable("companies", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id", { length: 36 }).notNull().default(PURAX_TENANT_ID),
   legalName: text("legal_name").notNull(),
   tradingName: text("trading_name"),
   abn: text("abn"),
@@ -115,8 +95,7 @@ export type Deal = typeof deals.$inferSelect;
 // ============ PRODUCTS ============
 export const products = pgTable("products", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id", { length: 36 }).notNull().default(PURAX_TENANT_ID),
-  sku: text("sku").notNull(),
+  sku: text("sku").notNull().unique(),
   name: text("name").notNull(),
   description: text("description"),
   category: text("category"),
@@ -127,7 +106,6 @@ export const products = pgTable("products", {
 }, (table) => [
   index("products_sku_idx").on(table.sku),
   index("products_category_idx").on(table.category),
-  index("products_tenant_idx").on(table.tenantId),
 ]);
 
 export const insertProductSchema = createInsertSchema(products).omit({ id: true, createdAt: true });
@@ -137,8 +115,7 @@ export type Product = typeof products.$inferSelect;
 // ============ QUOTES ============
 export const quotes = pgTable("quotes", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id", { length: 36 }).notNull().default(PURAX_TENANT_ID),
-  quoteNumber: text("quote_number").notNull(),
+  quoteNumber: text("quote_number").notNull().unique(),
   companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id),
   contactId: varchar("contact_id", { length: 36 }).references(() => contacts.id),
   status: text("status").notNull().default("draft"), // draft, sent, accepted, declined
@@ -178,7 +155,6 @@ export type QuoteLine = typeof quoteLines.$inferSelect;
 // ============ ORDERS (CORE TABLE) ============
 export const orders = pgTable("orders", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id", { length: 36 }).notNull().default(PURAX_TENANT_ID),
   orderNumber: text("order_number").notNull(),
   companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id),
   contactId: varchar("contact_id", { length: 36 }).references(() => contacts.id),
@@ -243,8 +219,7 @@ export type OrderLine = typeof orderLines.$inferSelect;
 // ============ INVOICES ============
 export const invoices = pgTable("invoices", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id", { length: 36 }).notNull().default(PURAX_TENANT_ID),
-  invoiceNumber: text("invoice_number").notNull(),
+  invoiceNumber: text("invoice_number").notNull().unique(),
   orderId: varchar("order_id", { length: 36 }).references(() => orders.id),
   companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id),
   status: text("status").notNull().default("draft"), // draft, sent, paid, overdue, void
@@ -421,7 +396,6 @@ export type Email = typeof emails.$inferSelect;
 // ============ CUSTOMER ORDER REQUESTS (PUBLIC FORM SUBMISSIONS) ============
 export const customerOrderRequests = pgTable("customer_order_requests", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id", { length: 36 }).notNull().default(PURAX_TENANT_ID),
   companyName: text("company_name").notNull(),
   contactName: text("contact_name").notNull(),
   contactEmail: text("contact_email").notNull(),
@@ -479,7 +453,6 @@ export type Message = typeof messages.$inferSelect;
 // ============ FORMS ============
 export const forms = pgTable("forms", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id", { length: 36 }).notNull().default(PURAX_TENANT_ID),
   name: text("name").notNull(),
   description: text("description"),
   status: text("status").notNull().default("draft"),
@@ -512,7 +485,6 @@ export type FormSubmission = typeof formSubmissions.$inferSelect;
 // ============ PORTAL USERS (Customer-facing login) ============
 export const portalUsers = pgTable("portal_users", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id", { length: 36 }).notNull().default(PURAX_TENANT_ID),
   companyId: varchar("company_id", { length: 36 }).notNull().references(() => companies.id),
   contactId: varchar("contact_id", { length: 36 }).references(() => contacts.id),
   name: text("name").notNull(),
@@ -604,7 +576,6 @@ export type DefaultVariantPrice = typeof defaultVariantPrices.$inferSelect;
 // ============ PRICE LISTS ============
 export const priceLists = pgTable("price_lists", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  tenantId: varchar("tenant_id", { length: 36 }).notNull().default(PURAX_TENANT_ID),
   name: text("name").notNull(),
   description: text("description"),
   isDefault: boolean("is_default").notNull().default(false),
