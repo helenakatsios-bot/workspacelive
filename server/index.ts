@@ -1397,6 +1397,42 @@ async function runStartupTasks() {
     console.error("portal_users category_order migration error:", err.message);
   }
 
+  // ONE-TIME: Seed 14 Shopify orders #3523-#3536 into production if missing
+  try {
+    const shopifyOrders = [
+      { name: "Louise", num: "#3523", sid: "3523", date: "2026-03-13 02:55:07", sub: "350.00", total: "350.00", notes: "Shopify Order #3523 — Mar 13 at 1:55 pm", items: [{ productName: "4 Seasons Cassette 80% Duck Down Quilt", quantity: 1, unitPrice: 350, lineTotal: 350, notes: "Queen" }] },
+      { name: "Nicole", num: "#3524", sid: "3524", date: "2026-03-13 03:18:10", sub: "126.00", total: "146.00", notes: "Shopify Order #3524 — Mar 13 at 2:18 pm", items: [{ productName: "PuraKids Sleep Tight Goose Down Cot Quilt", quantity: 1, unitPrice: 126, lineTotal: 126, notes: "Cot / SLEEP10 discount applied" }] },
+      { name: "Melinda Jones", num: "#3525", sid: "3525", date: "2026-03-13 03:20:05", sub: "15.00", total: "35.00", notes: "Shopify Order #3525 — Mar 13 at 2:20 pm", items: [{ productName: "Bulk Buy 100% Duck Feather", quantity: 1, unitPrice: 15, lineTotal: 15, notes: "1kg" }] },
+      { name: "Belinda Mackellar", num: "#3526", sid: "3526", date: "2026-03-13 10:14:46", sub: "255.00", total: "255.00", notes: "Shopify Order #3526 — Mar 13 at 9:14 pm", items: [{ productName: "Bulk Buy 100% Duck Feather", quantity: 1, unitPrice: 30, lineTotal: 30, notes: "2kg" }, { productName: "Bulk Buy 100% Duck Feather", quantity: 1, unitPrice: 225, lineTotal: 225, notes: "15kg" }] },
+      { name: "Andrew Hall", num: "#3527", sid: "3527", date: "2026-03-13 20:01:37", sub: "1044.00", total: "1044.00", notes: "Shopify Order #3527 — Mar 14 at 7:01 am", items: [{ productName: "80% Goose Down Pillow", quantity: 4, unitPrice: 261, lineTotal: 1044, notes: "King / 100g / Cotton Japara / SLEEP10 discount applied" }] },
+      { name: "Toni Raso", num: "#3528", sid: "3528", date: "2026-03-13 23:30:47", sub: "360.00", total: "360.00", notes: "Shopify Order #3528 — Mar 14 at 10:30 am", items: [{ productName: "4 Seasons Cassette 80% Duck Down Quilt", quantity: 1, unitPrice: 360, lineTotal: 360, notes: "King / SLEEP10 discount applied" }] },
+      { name: "Nadia", num: "#3529", sid: "3529", date: "2026-03-14 02:14:37", sub: "790.00", total: "790.00", notes: "Shopify Order #3529 — Mar 14 at 1:14 pm", items: [{ productName: "4 Seasons Cassette 80% Goose Down Quilt", quantity: 2, unitPrice: 395, lineTotal: 790, notes: "Queen" }] },
+      { name: "Kerry Merrick", num: "#3530", sid: "3530", date: "2026-03-14 07:04:16", sub: "252.00", total: "252.00", notes: "Shopify Order #3530 — Mar 14 at 6:04 pm", items: [{ productName: "Summerweight 80% Goose Down Quilt", quantity: 1, unitPrice: 252, lineTotal: 252, notes: "King / Standard / Cotton Japara / PURADOWN10 discount applied" }] },
+      { name: "Renee", num: "#3531", sid: "3531", date: "2026-03-14 10:15:43", sub: "360.00", total: "360.00", notes: "Shopify Order #3531 — Mar 14 at 9:15 pm", items: [{ productName: "80% Goose Down Winter Quilt", quantity: 1, unitPrice: 360, lineTotal: 360, notes: "Queen / 100g / Cotton Japara / SLEEP10 discount applied" }] },
+      { name: "Katie Clarke", num: "#3532", sid: "3532", date: "2026-03-15 00:23:04", sub: "315.00", total: "315.00", notes: "Shopify Order #3532 — Mar 15 at 11:23 am", items: [{ productName: "4 Seasons Cassette 80% Duck Down Quilt", quantity: 1, unitPrice: 315, lineTotal: 315, notes: "Queen / SLEEP10 discount applied" }] },
+      { name: "Margaret", num: "#3533", sid: "3533", date: "2026-03-15 00:56:47", sub: "180.00", total: "200.00", notes: "Shopify Order #3533 — Mar 15 at 11:56 am", items: [{ productName: "50% Duck Down Pillow", quantity: 2, unitPrice: 90, lineTotal: 180, notes: "Standard / Standard / Cotton Japara" }] },
+      { name: "Christopher", num: "#3534", sid: "3534", date: "2026-03-15 05:59:34", sub: "702.00", total: "702.00", notes: "Shopify Order #3534 — Mar 15 at 4:59 pm", items: [{ productName: "80% Goose Down Pillow", quantity: 2, unitPrice: 351, lineTotal: 702, notes: "King / 300g / Cotton Japara / SLEEP10 discount applied" }] },
+      { name: "Una", num: "#3535", sid: "3535", date: "2026-03-15 09:29:06", sub: "540.00", total: "540.00", notes: "Shopify Order #3535 — Mar 15 at 8:29 pm", items: [{ productName: "Mid Warm 80% Hungarian Goose Down Quilt", quantity: 1, unitPrice: 540, lineTotal: 540, notes: "Super King / Standard / Cotton Japara / PURADOWN10 discount applied" }] },
+      { name: "Barry Nunn", num: "#3536", sid: "3536", date: "2026-03-15 10:18:27", sub: "576.00", total: "576.00", notes: "Shopify Order #3536 — Mar 15 at 9:18 pm", items: [{ productName: "30% Duck Down Pillow", quantity: 2, unitPrice: 63, lineTotal: 126, notes: "Standard / Standard / Cotton Japara / SNOOZE10 discount applied" }, { productName: "Mattress Topper 10% Goose Down", quantity: 2, unitPrice: 225, lineTotal: 450, notes: "SNOOZE10 discount applied" }] },
+    ];
+    let seeded = 0;
+    for (const o of shopifyOrders) {
+      const exists = await pool.query(`SELECT id FROM customer_order_requests WHERE shopify_order_number = $1 LIMIT 1`, [o.num]);
+      if (exists.rows.length === 0) {
+        await pool.query(
+          `INSERT INTO customer_order_requests (id, company_name, contact_name, contact_email, customer_notes, items, status, shopify_order_id, shopify_order_number, payment_status, subtotal, total_amount, created_at)
+           VALUES (gen_random_uuid(), 'PURADOWN WEBSITE SALES', $1, 'shopify@puradown.com.au', $2, $3, 'pending', $4, $5, 'paid', $6, $7, $8)`,
+          [o.name, o.notes, JSON.stringify(o.items), o.sid, o.num, o.sub, o.total, o.date]
+        );
+        seeded++;
+      }
+    }
+    if (seeded > 0) console.log(`[SHOPIFY-SEED] Inserted ${seeded} missing Shopify order(s) #3523-#3536`);
+    else console.log(`[SHOPIFY-SEED] All Shopify orders #3523-#3536 already present`);
+  } catch (err: any) {
+    console.error("[SHOPIFY-SEED] Error:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 
