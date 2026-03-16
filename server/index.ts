@@ -1508,6 +1508,25 @@ async function runStartupTasks() {
     console.error("[SHOPIFY-SEED] Error:", err.message);
   }
 
+  // One-time: dismiss Puradown customer order requests from Jan 26 – Dec 31 2025 (already processed)
+  try {
+    const puradownDismiss = await pool.query(
+      `UPDATE customer_order_requests
+       SET status = 'dismissed'
+       WHERE company_name ILIKE '%puradown%'
+         AND status != 'dismissed'
+         AND created_at >= '2025-01-26'
+         AND created_at < '2026-01-01'`
+    );
+    if ((puradownDismiss.rowCount ?? 0) > 0) {
+      console.log(`[STARTUP] Dismissed ${puradownDismiss.rowCount} Puradown portal requests (Jan 26 – Dec 31 2025)`);
+    } else {
+      console.log(`[STARTUP] Puradown portal requests (Jan 26 – Dec 31 2025): already all dismissed or none found`);
+    }
+  } catch (err: any) {
+    console.error("[STARTUP] Error dismissing Puradown requests:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 
