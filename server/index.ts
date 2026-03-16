@@ -1508,28 +1508,28 @@ async function runStartupTasks() {
     console.error("[SHOPIFY-SEED] Error:", err.message);
   }
 
-  // One-time: rename "80% Hungarian Goose down" products to include "All Season"
+  // One-time: REVERT any "All Season" additions from Hungarian product names (these products are shared across categories)
   try {
-    const renames = [
-      ["Single 80% Hungarian Goose down", "Single 80% All Season Hungarian Goose down"],
-      ["Double 80% Hungarian Goose down", "Double 80% All Season Hungarian Goose down"],
-      ["King Single 80% Hungarian Goose down", "King Single 80% All Season Hungarian Goose down"],
-      ["Queen 80% Hungarian Goose down", "Queen 80% All Season Hungarian Goose down"],
-      ["King 80% Hungarian Goose down", "King 80% All Season Hungarian Goose down"],
-      ["Super King 80% Hungarian Goose down", "Super King 80% All Season Hungarian Goose down"],
+    const reverts = [
+      ["Single 80% All Season Hungarian Goose down", "Single 80% Hungarian Goose down"],
+      ["Double 80% All Season Hungarian Goose down", "Double 80% Hungarian Goose down"],
+      ["King Single 80% All Season Hungarian Goose down", "King Single 80% Hungarian Goose down"],
+      ["Queen 80% All Season Hungarian Goose down", "Queen 80% Hungarian Goose down"],
+      ["King 80% All Season Hungarian Goose down", "King 80% Hungarian Goose down"],
+      ["Super King 80% All Season Hungarian Goose down", "Super King 80% Hungarian Goose down"],
     ];
-    let renamed = 0;
-    for (const [oldName, newName] of renames) {
+    let reverted = 0;
+    for (const [wrongName, correctName] of reverts) {
       const r = await pool.query(
         `UPDATE products SET name = $1 WHERE name = $2`,
-        [newName, oldName]
+        [correctName, wrongName]
       );
-      renamed += r.rowCount ?? 0;
+      reverted += r.rowCount ?? 0;
     }
-    if (renamed > 0) console.log(`[STARTUP] Renamed ${renamed} Hungarian All Seasons products to include "All Season"`);
-    else console.log(`[STARTUP] Hungarian All Seasons rename: already updated or not found`);
+    if (reverted > 0) console.log(`[STARTUP] Reverted ${reverted} Hungarian product names (removed incorrect "All Season")`);
+    else console.log(`[STARTUP] Hungarian product name revert: already correct or not found`);
   } catch (err: any) {
-    console.error("[STARTUP] Error renaming Hungarian products:", err.message);
+    console.error("[STARTUP] Error reverting Hungarian product names:", err.message);
   }
 
   // One-time: dismiss Puradown customer order requests from Jan 26 – Dec 31 2025 (already processed)
