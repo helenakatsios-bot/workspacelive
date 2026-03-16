@@ -8,6 +8,10 @@ A professional B2B CRM and order management system designed for wholesale manufa
 
 Preferred communication style: Simple, everyday language.
 
+### CRITICAL RULES — NEVER VIOLATE
+- **NEVER override freshly uploaded price list data with hardcoded price correction tasks.** When a user uploads a new price list CSV, those prices are the source of truth. Any existing startup tasks that hardcode price corrections for a specific price list MUST be updated to exclude that list the moment a new CSV is provided for it. Violating this corrupts the user's pricing data.
+- **When importing a price list from a new CSV, always check for and remove the price list from any existing hardcoded price correction startup tasks** before or during the import. The CSV is always correct; hardcoded corrections must never win over a user-supplied CSV.
+
 ## System Architecture
 
 ### UI/UX Decisions
