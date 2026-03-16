@@ -1538,6 +1538,23 @@ async function runStartupTasks() {
     console.error("[STARTUP] Error renaming HUNGARIAN ALL SEASONS products:", err.message);
   }
 
+  // One-time: dismiss all currently pending Puradown portal order requests (already entered)
+  try {
+    const pendingPuradown = await pool.query(
+      `UPDATE customer_order_requests
+       SET status = 'dismissed'
+       WHERE company_name ILIKE '%puradown%'
+         AND status = 'pending'`
+    );
+    if ((pendingPuradown.rowCount ?? 0) > 0) {
+      console.log(`[STARTUP] Dismissed ${pendingPuradown.rowCount} pending Puradown portal requests`);
+    } else {
+      console.log(`[STARTUP] No pending Puradown portal requests to dismiss`);
+    }
+  } catch (err: any) {
+    console.error("[STARTUP] Error dismissing pending Puradown requests:", err.message);
+  }
+
   // One-time: dismiss Puradown customer order requests from Jan 26 – Dec 31 2025 (already processed)
   try {
     const puradownDismiss = await pool.query(
