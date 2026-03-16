@@ -7109,7 +7109,26 @@ Rules:
       const isNonZeroPrice = (p: string | null | undefined) => !!p && p !== "0.00" && p !== "0";
 
       const products = Array.from(productMap.values()).map((product) => {
-        let variants = companyVariantMap.get(product.id) || variantMap.get(product.id) || [];
+        const priceListVariants = variantMap.get(product.id) || [];
+        const companyVariants = companyVariantMap.get(product.id) || [];
+        let variants: Array<{ filling: string; weight: string | null; unitPrice: string }>;
+        if (companyVariants.length > 0 && priceListVariants.length > 0) {
+          // Merge: start with all price list variants, override price where company has a custom price
+          variants = priceListVariants.map((plv) => {
+            const override = companyVariants.find(
+              (cv) => cv.filling === plv.filling && cv.weight === plv.weight
+            );
+            return override || plv;
+          });
+          // Also add any company variants not present in the price list
+          for (const cv of companyVariants) {
+            if (!variants.find((v) => v.filling === cv.filling && v.weight === cv.weight)) {
+              variants.push(cv);
+            }
+          }
+        } else {
+          variants = companyVariants.length > 0 ? companyVariants : priceListVariants;
+        }
         let effectiveUnitPrice = companyPriceMap.get(product.id) || product.unitPrice;
         if (!isNonZeroPrice(effectiveUnitPrice) && variants.length > 0) {
           const nonZero = variants.find((v: any) => isNonZeroPrice(v.unitPrice));
