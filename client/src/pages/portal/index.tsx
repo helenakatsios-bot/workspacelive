@@ -1306,13 +1306,18 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
     for (const p of prods) {
       if ((p.name as string) === 'CUSTOM INSERT') continue;
       const size = p.name as string;
-      const vp = p.variantPrices?.[0];
-      const filling = ((vp?.filling as string | undefined) || "").trim();
-      const weight = ((vp?.weight as string | undefined) || "").trim();
+      const variants: any[] = p.variantPrices && p.variantPrices.length > 0 ? p.variantPrices : [{ filling: "", weight: "" }];
       if (!sizeMap.has(size)) sizeMap.set(size, new Map());
       const fillingMap = sizeMap.get(size)!;
-      if (!fillingMap.has(filling)) fillingMap.set(filling, []);
-      fillingMap.get(filling)!.push({ productId: p.id as string, weight });
+      for (const vp of variants) {
+        const filling = ((vp?.filling as string | undefined) || "").trim();
+        const weight = ((vp?.weight as string | undefined) || "").trim();
+        if (!fillingMap.has(filling)) fillingMap.set(filling, []);
+        const existing = fillingMap.get(filling)!;
+        if (!existing.find((e) => e.productId === (p.id as string) && e.weight === weight)) {
+          existing.push({ productId: p.id as string, weight });
+        }
+      }
     }
     return Array.from(sizeMap.entries()).map(([size, fillingMap]) => ({
       size,
