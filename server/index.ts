@@ -10,6 +10,7 @@ import { syncProductionData } from "./data-sync";
 import { startAutoEmailSync, backfillEmailCompanyLinks } from "./outlook";
 import { startInactivityChecker } from "./inactivity-checker";
 import { startRecurringOrderScheduler } from "./recurring-order-scheduler";
+import { startBackupScheduler } from "./backup-scheduler";
 import { startAutoXeroInvoiceSync } from "./xero";
 import { importPuradownPrices } from "./import-puradown-prices";
 import { seedPriceLists } from "./seed-price-lists";
@@ -1555,6 +1556,7 @@ async function runStartupTasks() {
       startInactivityChecker(redirectUri);
       startAutoXeroInvoiceSync(15);
       startRecurringOrderScheduler();
+      startBackupScheduler();
 
       // Run all startup database tasks in the background after port is open
       runStartupTasks().catch(err => console.error("Startup tasks error:", err));
