@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2, Webhook, Key, Globe, Building2, Pencil, Save, AlertCircle } from "lucide-react";
+import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2, Webhook, Key, Globe, Building2, Pencil, Save, AlertCircle, Database } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -550,6 +550,25 @@ export default function AdminPage() {
       let msg = "Connection failed — check your credentials";
       try { if (error?.message) msg = error.message; } catch {}
       toast({ title: "Shopify test failed", description: msg, variant: "destructive" });
+    },
+  });
+
+  const { data: backupList, refetch: refetchBackups } = useQuery<{ name: string; size: number; createdAt: string }[]>({
+    queryKey: ["/api/admin/backup/list"],
+    refetchOnWindowFocus: false,
+  });
+
+  const createBackupMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/backup/create", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Backup created", description: "Database backup completed successfully." });
+      refetchBackups();
+    },
+    onError: () => {
+      toast({ title: "Backup failed", description: "Could not create backup.", variant: "destructive" });
     },
   });
 
@@ -1342,7 +1361,58 @@ export default function AdminPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="exports" className="mt-6">
+        <TabsContent value="exports" className="mt-6 space-y-6">
+          {/* Database Backup */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Database className="w-5 h-5" />
+                Database Backup
+              </CardTitle>
+              <CardDescription>
+                A full backup runs automatically every 24 hours. The last 7 backups are kept. Download any backup to store it safely offsite.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button
+                onClick={() => createBackupMutation.mutate()}
+                disabled={createBackupMutation.isPending}
+                data-testid="button-create-backup"
+              >
+                {createBackupMutation.isPending
+                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating backup…</>
+                  : <><Download className="w-4 h-4 mr-2" />Create Backup Now</>}
+              </Button>
+
+              {backupList && backupList.length > 0 ? (
+                <div className="rounded-lg border divide-y">
+                  {backupList.map((b) => (
+                    <div key={b.name} className="flex items-center justify-between px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium font-mono">{b.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(b.size / 1024 / 1024).toFixed(1)} MB &middot; {new Date(b.createdAt).toLocaleString("en-AU")}
+                        </p>
+                      </div>
+                      <a
+                        href={`/api/admin/backup/download/${b.name}`}
+                        download={b.name}
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                        data-testid={`button-download-backup-${b.name}`}
+                      >
+                        <Download className="w-4 h-4" />
+                        Download
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No backups found yet — create one above.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Data Exports */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Data Exports</CardTitle>

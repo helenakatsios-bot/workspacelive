@@ -9347,6 +9347,61 @@ Rules:
     }
   });
 
+  // ── Database Backup Routes ──────────────────────────────────────────
+  const { exec: execCallback } = await import("child_process");
+  const { promisify: prom } = await import("util");
+  const fsBackup = await import("fs");
+  const pathBackup = await import("path");
+  const execAsync2 = prom(execCallback);
+  const BACKUP_DIR2 = pathBackup.default.join(process.cwd(), "backups");
+
+  app.get("/api/admin/backup/list", requireAdmin, async (_req, res) => {
+    try {
+      if (!fsBackup.default.existsSync(BACKUP_DIR2)) return res.json([]);
+      const files = fsBackup.default
+        .readdirSync(BACKUP_DIR2)
+        .filter((f: string) => f.startsWith("backup_") && f.endsWith(".sql"))
+        .map((f: string) => {
+          const stat = fsBackup.default.statSync(pathBackup.default.join(BACKUP_DIR2, f));
+          return { name: f, size: stat.size, createdAt: stat.mtime.toISOString() };
+        })
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      res.json(files);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to list backups" });
+    }
+  });
+
+  app.post("/api/admin/backup/create", requireAdmin, async (_req, res) => {
+    try {
+      if (!fsBackup.default.existsSync(BACKUP_DIR2)) fsBackup.default.mkdirSync(BACKUP_DIR2, { recursive: true });
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const filename = `backup_${timestamp}.sql`;
+      const filepath = pathBackup.default.join(BACKUP_DIR2, filename);
+      await execAsync2(`pg_dump "${process.env.DATABASE_URL}" > "${filepath}"`);
+      const stat = fsBackup.default.statSync(filepath);
+      res.json({ name: filename, size: stat.size, createdAt: stat.mtime.toISOString() });
+    } catch (err) {
+      res.status(500).json({ message: "Backup failed" });
+    }
+  });
+
+  app.get("/api/admin/backup/download/:filename", requireAdmin, async (req, res) => {
+    try {
+      const filename = req.params.filename.replace(/[^a-zA-Z0-9_\-\.]/g, "");
+      if (!filename.startsWith("backup_") || !filename.endsWith(".sql")) {
+        return res.status(400).json({ message: "Invalid filename" });
+      }
+      const filepath = pathBackup.default.join(BACKUP_DIR2, filename);
+      if (!fsBackup.default.existsSync(filepath)) return res.status(404).json({ message: "Backup not found" });
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Type", "application/octet-stream");
+      fsBackup.default.createReadStream(filepath).pipe(res);
+    } catch (err) {
+      res.status(500).json({ message: "Download failed" });
+    }
+  });
+
   registerChatRoutes(app);
 
   return httpServer;
