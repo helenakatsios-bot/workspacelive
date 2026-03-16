@@ -17,6 +17,7 @@ function statusBadgeClass(status: string) {
   if (status === "pending") return "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400";
   if (status === "converted") return "bg-green-500/10 text-green-700 dark:text-green-400";
   if (status === "reviewed") return "bg-blue-500/10 text-blue-700 dark:text-blue-400";
+  if (status === "dismissed") return "bg-gray-500/10 text-gray-500 dark:text-gray-400";
   return "bg-red-500/10 text-red-700 dark:text-red-400";
 }
 
@@ -162,6 +163,7 @@ export default function OrderRequestsPage() {
                   <TableHead>Contact</TableHead>
                   <TableHead>Items</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead></TableHead>
                   <TableHead>Sent to Purax</TableHead>
                 </TableRow>
               </TableHeader>
@@ -209,6 +211,21 @@ export default function OrderRequestsPage() {
                           </Badge>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell data-testid={`cell-actions-${req.id}`} onClick={(e) => e.stopPropagation()}>
+                      {(req.status === "pending" || req.status === "reviewed") && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => updateStatusMutation.mutate({ id: req.id, status: "dismissed" })}
+                          disabled={updateStatusMutation.isPending}
+                          data-testid={`button-dismiss-${req.id}`}
+                        >
+                          <X className="w-3.5 h-3.5 mr-1" />
+                          Dismiss
+                        </Button>
+                      )}
                     </TableCell>
                     <TableCell data-testid={`cell-purax-${req.id}`}>
                       {req.puraxSyncStatus === "sent" ? (
@@ -525,6 +542,19 @@ export default function OrderRequestsPage() {
                       data-testid="button-reject"
                     >
                       Reject
+                    </Button>
+                  )}
+                  {(selectedRequest.status === "pending" || selectedRequest.status === "reviewed") && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => updateStatusMutation.mutate({ id: selectedRequest.id, status: "dismissed" })}
+                      disabled={updateStatusMutation.isPending}
+                      data-testid="button-dismiss-detail"
+                    >
+                      <X className="w-3.5 h-3.5 mr-1" />
+                      Dismiss
                     </Button>
                   )}
                   <Button
