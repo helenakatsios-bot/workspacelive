@@ -20,6 +20,7 @@ interface PriceListConfig {
   csvStartRow?: number;
   swapSkuCategory?: boolean;
   allowedCategories?: string[];
+  noSku?: boolean; // CSV format: Category, Product, Filling, Weight, Price (5 cols, no SKU)
 }
 
 const PRICE_LISTS: PriceListConfig[] = [
@@ -113,7 +114,8 @@ const PRICE_LISTS: PriceListConfig[] = [
     name: "Poulos",
     description: "Poulos pricing",
     isDefault: false,
-    csvFiles: ["prices_for_replit_poulos_CSV_OFFICAL_1773097451070.csv", "poulos_prices.csv"],
+    csvFiles: ["prices_for_replit_poulos_CSV_OFFICAL_1773702370028.csv", "prices_for_replit_poulos_CSV_OFFICAL_1773097451070.csv", "poulos_prices.csv"],
+    noSku: true,
     categoryNorm: (cat) => {
       if (cat === "KHAKI BLANKET" || cat === "SILVER BLANKET") return "BLANKETS";
       if (cat === "STRIP PILLOW") return "HUNGARIAN PILLOW";
@@ -252,17 +254,29 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
   let rows: CsvRow[] = [];
   for (let i = startRow; i < lines.length; i++) {
     const fields = parseCsvLine(lines[i]);
-    if (fields.length < 6) continue;
-    const productName = fields[0].trim().replace(/[^\x20-\x7E]/g, ' ').replace(/\s+/g, ' ').trim();
-    if (!productName) continue;
-    const rawCategoryField = config.swapSkuCategory ? fields[2] : fields[1];
-    const rawSkuField = config.swapSkuCategory ? fields[1] : fields[2];
-    const category = normCategory(rawCategoryField);
-    const sku = rawSkuField.trim();
-    const filling = fields[3].trim();
-    const weight = fields[4].trim();
-    const price = parsePrice(fields[5]);
-    rows.push({ productName, category, sku, filling, weight, price: price !== null && !isNaN(price) ? price : null });
+    if (config.noSku) {
+      // 5-column format: Category, Product, Filling, Weight, Price
+      if (fields.length < 5) continue;
+      const category = normCategory(fields[0]);
+      const productName = fields[1].trim().replace(/[^\x20-\x7E]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!productName) continue;
+      const filling = fields[2].trim();
+      const weight = fields[3].trim();
+      const price = parsePrice(fields[4]);
+      rows.push({ productName, category, sku: '', filling, weight, price: price !== null && !isNaN(price) ? price : null });
+    } else {
+      if (fields.length < 6) continue;
+      const productName = fields[0].trim().replace(/[^\x20-\x7E]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!productName) continue;
+      const rawCategoryField = config.swapSkuCategory ? fields[2] : fields[1];
+      const rawSkuField = config.swapSkuCategory ? fields[1] : fields[2];
+      const category = normCategory(rawCategoryField);
+      const sku = rawSkuField.trim();
+      const filling = fields[3].trim();
+      const weight = fields[4].trim();
+      const price = parsePrice(fields[5]);
+      rows.push({ productName, category, sku, filling, weight, price: price !== null && !isNaN(price) ? price : null });
+    }
   }
 
   console.log(`[${config.name}] Parsed ${rows.length} rows from CSV`);
@@ -337,17 +351,25 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
         const hasVariants = groupRows.length > 1;
         const basePrice = hasVariants ? "0.00" : (firstRow.price?.toFixed(2) || "0.00");
         const generatedSku = firstRow.sku || `AUTO-${Date.now()}-${newProductCount}`;
-        const result = await client.query(
-          `INSERT INTO products (id, sku, name, category, unit_price, active)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, true)
-           ON CONFLICT (sku) DO UPDATE SET name = products.name
-           RETURNING id, name, category, sku`,
-          [generatedSku, name, category, basePrice]
+        // Check if product already exists by name+category before inserting
+        const existCheck = await client.query(
+          `SELECT id, name, category, sku FROM products WHERE name = $1 AND category = $2 LIMIT 1`,
+          [name, category]
         );
-        product = result.rows[0];
+        if (existCheck.rows.length > 0) {
+          product = existCheck.rows[0];
+        } else {
+          const result = await client.query(
+            `INSERT INTO products (id, sku, name, category, unit_price, active)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, true)
+             RETURNING id, name, category, sku`,
+            [generatedSku, name, category, basePrice]
+          );
+          product = result.rows[0];
+          newProductCount++;
+        }
         productByName.set(lookupKey, product);
         if (product.sku) productBySku.set(product.sku.toUpperCase(), product);
-        newProductCount++;
       }
 
       // RULE: Never import any product with "HIGHGATE" in its category or SKU (HG##) into any price list other than "Highgate Inserts"

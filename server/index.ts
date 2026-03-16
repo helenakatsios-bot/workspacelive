@@ -316,7 +316,26 @@ async function runStartupTasks() {
     console.error("CUSTINNERS-25 fix error:", err.message);
   }
 
-  // Import all 18 price lists from CSV files (idempotent - skips if already imported)
+  // One-time: clear and reimport Poulos price list with updated prices from new CSV
+  try {
+    const poulosListResult = await pool.query(`SELECT id FROM price_lists WHERE name = 'Poulos' LIMIT 1`);
+    if (poulosListResult.rows.length > 0) {
+      const poulosListId = poulosListResult.rows[0].id;
+      const newCsvExists = fs.existsSync(
+        path.join(process.cwd(), "attached_assets", "prices_for_replit_poulos_CSV_OFFICAL_1773702370028.csv")
+      );
+      if (newCsvExists) {
+        const deleted = await pool.query(`DELETE FROM price_list_prices WHERE price_list_id = $1`, [poulosListId]);
+        console.log(`[STARTUP] Cleared ${deleted.rowCount} old Poulos prices — will reimport from new CSV`);
+      } else {
+        console.log(`[STARTUP] New Poulos CSV not found — skipping price clear`);
+      }
+    }
+  } catch (err: any) {
+    console.error("[STARTUP] Error clearing Poulos prices:", err.message);
+  }
+
+  // Import all price lists from CSV files (idempotent - skips if already imported)
   try {
     await importAllPriceLists();
   } catch (error) {
@@ -787,10 +806,10 @@ async function runStartupTasks() {
     console.error("company_additional_price_lists table error:", err.message);
   }
 
-  // Fix 50X110CM 100% Feather prices in 5 price lists (Normal=$50, Firm Fill=$50.60, Extra Firm Fill=$51.80)
+  // Fix 50X110CM 100% Feather prices in 4 price lists (Poulos excluded — prices now managed via CSV)
   try {
     const targetLists = await pool.query(`
-      SELECT id FROM price_lists WHERE name IN ('Standard', 'Interiors', 'Poulos', 'Frontline', 'Hotel Luxury Collection')
+      SELECT id FROM price_lists WHERE name IN ('Standard', 'Interiors', 'Frontline', 'Hotel Luxury Collection')
     `);
     if (targetLists.rows.length > 0) {
       const targetIds = targetLists.rows.map((r: any) => r.id);
@@ -821,10 +840,10 @@ async function runStartupTasks() {
     console.error("50X110CM price fix error:", err.message);
   }
 
-  // Fix 50X110CM prices across ALL fillings in 6 price lists (Standard, Interiors, Poulos, Frontline, Hotel Luxury Collection, Dyne)
+  // Fix 50X110CM prices across ALL fillings in 5 price lists (Poulos excluded — prices now managed via CSV)
   try {
     const targetLists2 = await pool.query(`
-      SELECT id FROM price_lists WHERE name IN ('Standard', 'Interiors', 'Poulos', 'Frontline', 'Hotel Luxury Collection', 'Dyne')
+      SELECT id FROM price_lists WHERE name IN ('Standard', 'Interiors', 'Frontline', 'Hotel Luxury Collection', 'Dyne')
     `);
     if (targetLists2.rows.length > 0) {
       const targetIds2 = targetLists2.rows.map((r: any) => r.id);
