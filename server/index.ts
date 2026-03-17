@@ -1607,40 +1607,20 @@ async function runStartupTasks() {
     console.error("[STARTUP] Error renaming HUNGARIAN ALL SEASONS products:", err.message);
   }
 
-  // One-time: dismiss all currently pending Puradown portal order requests (already entered)
+  // One-time: restore Puradown orders from 17 Mar 2026 that were wrongly auto-dismissed
   try {
-    const pendingPuradown = await pool.query(
+    const restored = await pool.query(
       `UPDATE customer_order_requests
-       SET status = 'dismissed'
+       SET status = 'pending'
        WHERE company_name ILIKE '%puradown%'
-         AND status = 'pending'`
+         AND status = 'dismissed'
+         AND created_at >= '2026-03-17'`
     );
-    if ((pendingPuradown.rowCount ?? 0) > 0) {
-      console.log(`[STARTUP] Dismissed ${pendingPuradown.rowCount} pending Puradown portal requests`);
-    } else {
-      console.log(`[STARTUP] No pending Puradown portal requests to dismiss`);
+    if ((restored.rowCount ?? 0) > 0) {
+      console.log(`[STARTUP] Restored ${restored.rowCount} Puradown orders to pending (wrongly auto-dismissed)`);
     }
   } catch (err: any) {
-    console.error("[STARTUP] Error dismissing pending Puradown requests:", err.message);
-  }
-
-  // One-time: dismiss Puradown customer order requests from Jan 26 – Dec 31 2025 (already processed)
-  try {
-    const puradownDismiss = await pool.query(
-      `UPDATE customer_order_requests
-       SET status = 'dismissed'
-       WHERE company_name ILIKE '%puradown%'
-         AND status != 'dismissed'
-         AND created_at >= '2025-01-26'
-         AND created_at < '2026-01-01'`
-    );
-    if ((puradownDismiss.rowCount ?? 0) > 0) {
-      console.log(`[STARTUP] Dismissed ${puradownDismiss.rowCount} Puradown portal requests (Jan 26 – Dec 31 2025)`);
-    } else {
-      console.log(`[STARTUP] Puradown portal requests (Jan 26 – Dec 31 2025): already all dismissed or none found`);
-    }
-  } catch (err: any) {
-    console.error("[STARTUP] Error dismissing Puradown requests:", err.message);
+    console.error("[STARTUP] Error restoring Puradown orders:", err.message);
   }
 
   console.log("All startup tasks completed");
