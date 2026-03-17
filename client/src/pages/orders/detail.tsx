@@ -1295,6 +1295,23 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
+      {(() => {
+        const companyName = (order.company?.tradingName || order.company?.legalName || "").toUpperCase();
+        const isCod = companyName.includes("/COD");
+        if (!isCod) return null;
+        return (
+          <div className="flex items-start gap-3 rounded-lg border-2 border-red-500 bg-red-50 dark:bg-red-950/40 px-5 py-4" data-testid="alert-cod-customer">
+            <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-bold text-red-700 dark:text-red-300 text-base">⚠️ COD Customer — Invoice First!</p>
+              <p className="text-sm text-red-600 dark:text-red-400 mt-0.5">
+                This customer pays Cash on Delivery. You <strong>must send the invoice to the customer before processing or dispatching this order.</strong>
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6">
           <Card>
