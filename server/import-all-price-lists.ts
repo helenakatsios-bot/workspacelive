@@ -353,10 +353,14 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
       const [name, category] = key.split("|||");
       const lookupKey = `${name.toUpperCase()}|||${category.toUpperCase()}`;
 
-      let product = productByName.get(lookupKey);
-
-      if (!product && groupRows[0].sku) {
+      // SKU is unique per price list — always try SKU first to avoid name collisions
+      // (165+ products share the same name+category across price lists, each with its own SKU)
+      let product = null;
+      if (groupRows[0].sku) {
         product = productBySku.get(groupRows[0].sku.toUpperCase());
+      }
+      if (!product) {
+        product = productByName.get(lookupKey);
       }
 
       if (!product) {
