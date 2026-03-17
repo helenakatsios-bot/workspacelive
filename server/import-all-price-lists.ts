@@ -16,7 +16,7 @@ interface PriceListConfig {
   description: string;
   isDefault: boolean;
   csvFiles: string[];
-  categoryNorm?: (cat: string) => string;
+  categoryNorm?: (cat: string, sku?: string, productName?: string) => string;
   csvStartRow?: number;
   swapSkuCategory?: boolean;
   allowedCategories?: string[];
@@ -43,8 +43,14 @@ const PRICE_LISTS: PriceListConfig[] = [
       "ECO_DOWN_UNDER_PRICES_OFFICAL__1772688157685.csv",
       "ECO_DOWN_UNDER_PRICES_OFFICAL__1772682499501.csv",
     ],
-    categoryNorm: (cat) => {
-      if (cat === "PILLOW") return "PIPED PILLOWS";
+    categoryNorm: (cat, sku) => {
+      if (cat === "PILLOW") {
+        // ECO951 = Standard 80% Duck Down, ECO952 = King 80% Duck Down → piped pillows
+        if (sku === "ECO951" || sku === "ECO952") return "PIPED PILLOWS";
+        // ECO953 = Standard Hungarian Goosedown, ECO954 = King Hungarian Goosedown,
+        // ECO955 = 80 Chamber duck pillow → all HUNGARIAN PILLOWS
+        return "HUNGARIAN PILLOWS";
+      }
       return cat;
     },
   },
@@ -251,7 +257,7 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
 
   const defaultNorm = (cat: string) => cat.trim().toUpperCase();
   const normCategory = config.categoryNorm
-    ? (cat: string) => config.categoryNorm!(cat.trim().toUpperCase())
+    ? (cat: string, sku?: string, productName?: string) => config.categoryNorm!(cat.trim().toUpperCase(), sku, productName)
     : defaultNorm;
 
   const content = fs.readFileSync(csvPath, "utf-8");
@@ -264,9 +270,9 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
     if (config.noSku) {
       // 5-column format: Category, Product, Filling, Weight, Price
       if (fields.length < 5) continue;
-      const category = normCategory(fields[0]);
       const productName = fields[1].trim().replace(/[^\x20-\x7E]/g, ' ').replace(/\s+/g, ' ').trim();
       if (!productName) continue;
+      const category = normCategory(fields[0], '', productName);
       const filling = fields[2].trim();
       const weight = fields[3].trim();
       const price = parsePrice(fields[4]);
@@ -277,8 +283,8 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
       if (!productName) continue;
       const rawCategoryField = config.swapSkuCategory ? fields[2] : fields[1];
       const rawSkuField = config.swapSkuCategory ? fields[1] : fields[2];
-      const category = normCategory(rawCategoryField);
       const sku = rawSkuField.trim();
+      const category = normCategory(rawCategoryField, sku, productName);
       const filling = fields[3].trim();
       const weight = fields[4].trim();
       const price = parsePrice(fields[5]);

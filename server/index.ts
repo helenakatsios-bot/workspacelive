@@ -269,10 +269,18 @@ async function runStartupTasks() {
 
   // Purge products with SKU-like category names (corrupt data from bad Poulos import)
   // Bad categories: starts with "MW" or "HLC", or equals "INSERT" or "PILLOW" (without S)
+  // IMPORTANT: Only delete products that are NOT in any other price list — this protects
+  // ECO DOWN UNDER and other price lists that use "PILLOW" as a valid category in their CSVs.
   try {
     const badCatCheck = await pool.query(`
       SELECT COUNT(*) as bad FROM products
-      WHERE category ~ '^MW' OR category ~ '^HLC' OR category = 'INSERT' OR category = 'PILLOW'
+      WHERE (category ~ '^MW' OR category ~ '^HLC' OR category = 'INSERT' OR category = 'PILLOW')
+        AND id NOT IN (
+          SELECT DISTINCT product_id FROM price_list_prices
+          WHERE price_list_id IN (
+            SELECT id FROM price_lists WHERE name != 'Poulos'
+          )
+        )
     `);
     const badCount = parseInt(badCatCheck.rows[0].bad);
     if (badCount > 0) {
@@ -281,13 +289,25 @@ async function runStartupTasks() {
       await pool.query(`
         DELETE FROM price_list_prices WHERE product_id IN (
           SELECT id FROM products
-          WHERE category ~ '^MW' OR category ~ '^HLC' OR category = 'INSERT' OR category = 'PILLOW'
+          WHERE (category ~ '^MW' OR category ~ '^HLC' OR category = 'INSERT' OR category = 'PILLOW')
+            AND id NOT IN (
+              SELECT DISTINCT product_id FROM price_list_prices
+              WHERE price_list_id IN (
+                SELECT id FROM price_lists WHERE name != 'Poulos'
+              )
+            )
         )
       `);
       // Remove the bad products themselves
       const del = await pool.query(`
         DELETE FROM products
-        WHERE category ~ '^MW' OR category ~ '^HLC' OR category = 'INSERT' OR category = 'PILLOW'
+        WHERE (category ~ '^MW' OR category ~ '^HLC' OR category = 'INSERT' OR category = 'PILLOW')
+          AND id NOT IN (
+            SELECT DISTINCT product_id FROM price_list_prices
+            WHERE price_list_id IN (
+              SELECT id FROM price_lists WHERE name != 'Poulos'
+            )
+          )
         RETURNING id
       `);
       console.log(`Poulos cleanup: deleted ${del.rowCount} products — Poulos will be re-imported from CSV`);
