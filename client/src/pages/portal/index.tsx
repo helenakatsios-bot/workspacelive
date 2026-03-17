@@ -1258,7 +1258,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
     const sizeMap = new Map<string, { filling: string; productId: string; price: string }[]>();
     const FILLING_ORDER = ['100% FEATHER', '30% DUCK DOWN', '50% DUCK DOWN', '80% DUCK DOWN', '80% GOOSE DOWN'];
     for (const p of prods) {
-      const name = (p.name as string).trim();
+      const name = (p.name as string).trim().toUpperCase();
       const sizePrefix = PILLOW_SIZES.find(s => name.startsWith(s + ' '));
       if (!sizePrefix) continue;
       // Skip chamber-style products like "STANDARD PILLOW - 80 DUCK DOWN CHAMBER PILLOW"
