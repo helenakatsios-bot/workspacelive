@@ -43,14 +43,9 @@ const PRICE_LISTS: PriceListConfig[] = [
       "ECO_DOWN_UNDER_PRICES_OFFICAL__1772688157685.csv",
       "ECO_DOWN_UNDER_PRICES_OFFICAL__1772682499501.csv",
     ],
-    categoryNorm: (cat, sku) => {
-      if (cat === "PILLOW") {
-        // ECO951 = Standard 80% Duck Down, ECO952 = King 80% Duck Down → piped pillows
-        if (sku === "ECO951" || sku === "ECO952") return "PIPED PILLOWS";
-        // ECO953 = Standard Hungarian Goosedown, ECO954 = King Hungarian Goosedown,
-        // ECO955 = 80 Chamber duck pillow → PILLOWS
-        return "PILLOWS";
-      }
+    categoryNorm: (cat) => {
+      // All ECO pillow products (ECO951-ECO955) go into PILLOWS
+      if (cat === "PILLOW") return "PILLOWS";
       return cat;
     },
   },

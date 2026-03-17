@@ -680,8 +680,8 @@ async function runStartupTasks() {
     if (pillowsCatFix.rowCount && pillowsCatFix.rowCount > 0) {
       console.log(`Renamed ${pillowsCatFix.rowCount} HUNGARIAN PILLOWS products to PILLOWS`);
     }
-    // ECO951/ECO952 are duck down pillow products — always keep them in PIPED PILLOWS
-    await pool.query("UPDATE products SET category = 'PIPED PILLOWS' WHERE sku IN ('ECO951','ECO952') AND category != 'PIPED PILLOWS'");
+    // ECO951/ECO952 are ECO DOWN UNDER duck down pillows — keep them in PILLOWS (not PIPED PILLOWS)
+    await pool.query("UPDATE products SET category = 'PILLOWS' WHERE sku IN ('ECO951','ECO952') AND category != 'PILLOWS'");
     const quiltFix = await pool.query("UPDATE products SET category = 'HUNGARIAN WINTER STRIP' WHERE category IN ('STRIPPED QUILT', 'HUNGARIAN')");
     if (quiltFix.rowCount && quiltFix.rowCount > 0) {
       console.log(`Renamed ${quiltFix.rowCount} products to HUNGARIAN WINTER STRIP`);
