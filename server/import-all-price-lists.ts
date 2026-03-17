@@ -48,8 +48,8 @@ const PRICE_LISTS: PriceListConfig[] = [
         // ECO951 = Standard 80% Duck Down, ECO952 = King 80% Duck Down → piped pillows
         if (sku === "ECO951" || sku === "ECO952") return "PIPED PILLOWS";
         // ECO953 = Standard Hungarian Goosedown, ECO954 = King Hungarian Goosedown,
-        // ECO955 = 80 Chamber duck pillow → all HUNGARIAN PILLOWS
-        return "HUNGARIAN PILLOWS";
+        // ECO955 = 80 Chamber duck pillow → PILLOWS
+        return "PILLOWS";
       }
       return cat;
     },
