@@ -1264,7 +1264,8 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
       if (name.includes(' - ')) continue;
       // Extract filling label by stripping size prefix and " PILLOW" suffix
       const filling = name.slice(sizePrefix.length + 1).replace(/ PILLOW$/i, '').trim();
-      const price = (p.unitPrice as string) || (p.variantPrices?.[0]?.unitPrice as string) || "0";
+      const rawPrice = p.unitPrice as string;
+      const price = (rawPrice && rawPrice !== "0" ? rawPrice : (p.variantPrices?.[0]?.unitPrice as string)) || "0";
       if (!sizeMap.has(sizePrefix)) sizeMap.set(sizePrefix, []);
       sizeMap.get(sizePrefix)!.push({ filling, productId: p.id as string, price });
     }
@@ -1621,9 +1622,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
             const insertGroups = isInsertGrouped ? buildInsertGroupedBySize(prods) : null;
             const sizeGroups = isInsertGrouped ? null : (category === 'PIPED PILLOWS' ? buildPillowSizeGroups(prods) : category === 'CHAMBER PILLOW' ? buildChamberPillowGroups(prods) : category === 'HUNGARIAN PILLOW' ? buildHungarianPillowGroups(prods) : buildSizeGroups(prods));
             const hasMultipleFillings = sizeGroups ? sizeGroups.some(sg => sg.options.length > 1) : false;
-            // For PIPED PILLOWS: show each filling as its own qty row (expanded mode)
-            const isPillowExpanded = category === 'PIPED PILLOWS';
-            const showFillingColumn = isPillowExpanded ? false : (insertGroups ? true : sizeGroups ? hasMultipleFillings : FILLING_CATEGORIES.includes(category));
+            const showFillingColumn = insertGroups ? true : sizeGroups ? hasMultipleFillings : FILLING_CATEGORIES.includes(category);
             const showWeightColumn = insertGroups ? true : (!sizeGroups && WEIGHT_CATEGORIES.includes(category));
             const catMinQty = category === '100 PLUS INSERTS' ? 100 : minQty;
             const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
@@ -1847,46 +1846,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
                       })
                     ) : sizeGroups ? (
                       sizeGroups.map(({ size, options }) => {
-                        if (isPillowExpanded) {
-                          // PIPED PILLOWS: size header row + one qty row per filling option
-                          return (
-                            <Fragment key={size}>
-                              <TableRow className="bg-muted/40 border-t">
-                                <TableCell colSpan={3} className="py-1.5 pl-4 font-semibold text-sm text-foreground">
-                                  {size}
-                                </TableCell>
-                              </TableRow>
-                              {options.map(opt => (
-                                <TableRow key={opt.productId} data-testid={`row-product-sg-${size}-${opt.filling}`}>
-                                  <TableCell className="pl-8 text-sm text-muted-foreground">{opt.filling}</TableCell>
-                                  <TableCell>
-                                    <Input
-                                      type="number"
-                                      inputMode="numeric"
-                                      min={0}
-                                      value={cart[opt.productId] || ""}
-                                      placeholder="0"
-                                      onFocus={(e) => e.target.select()}
-                                      onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 0;
-                                        setCart(prev => {
-                                          if (val <= 0) { const { [opt.productId]: _, ...rest } = prev; return rest; }
-                                          return { ...prev, [opt.productId]: val };
-                                        });
-                                      }}
-                                      className="h-8 w-[70px] text-center mx-auto"
-                                      data-testid={`input-qty-sg-${size}-${opt.filling}`}
-                                    />
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    <span className="font-medium">${parseFloat(opt.price).toFixed(2)}</span>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </Fragment>
-                          );
-                        }
-                        // Standard size-group render (CHAMBER PILLOW, HUNGARIAN PILLOW, etc.)
+                        // Standard size-group render (PIPED PILLOWS, CHAMBER PILLOW, HUNGARIAN PILLOW, etc.)
                         const sgKey = `${category}__${size}`;
                         const selectedFilling = options.length === 1
                           ? options[0].filling
