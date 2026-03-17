@@ -43,6 +43,10 @@ const PRICE_LISTS: PriceListConfig[] = [
       "ECO_DOWN_UNDER_PRICES_OFFICAL__1772688157685.csv",
       "ECO_DOWN_UNDER_PRICES_OFFICAL__1772682499501.csv",
     ],
+    categoryNorm: (cat) => {
+      if (cat === "PILLOW") return "PIPED PILLOWS";
+      return cat;
+    },
   },
   {
     name: "ECO LINEN",
