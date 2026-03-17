@@ -342,6 +342,56 @@ async function runStartupTasks() {
     console.error("Price list import error:", error);
   }
 
+  // Fix Poulos inserts: ensure they point to products with category 'INSERTS' not '15 % INSERTS'
+  try {
+    const poulosRow = await pool.query(`SELECT id FROM price_lists WHERE name = 'Poulos' LIMIT 1`);
+    if (poulosRow.rows.length > 0) {
+      const poulosListId = poulosRow.rows[0].id;
+      // Find all Poulos price entries that wrongly point to '15 % INSERTS' products
+      const wrongOnes = await pool.query(`
+        SELECT plp.id as plp_id, plp.filling, plp.weight, plp.unit_price, p.id as product_id, p.name as product_name, p.sku
+        FROM price_list_prices plp
+        JOIN products p ON p.id = plp.product_id
+        WHERE plp.price_list_id = $1 AND p.category = '15 % INSERTS'
+      `, [poulosListId]);
+
+      if (wrongOnes.rows.length > 0) {
+        let fixedCount = 0;
+        for (const row of wrongOnes.rows) {
+          // Find or create a product with the same name but category 'INSERTS'
+          const existing = await pool.query(
+            `SELECT id FROM products WHERE name = $1 AND category = 'INSERTS' LIMIT 1`,
+            [row.product_name]
+          );
+          let correctProductId: number;
+          if (existing.rows.length > 0) {
+            correctProductId = existing.rows[0].id;
+          } else {
+            // Create a new product with category INSERTS
+            const newSku = `POULOS-INS-${row.product_name.replace(/[^A-Z0-9]/gi, '').substring(0, 10).toUpperCase()}-${Date.now()}`;
+            const created = await pool.query(
+              `INSERT INTO products (name, category, sku, created_at, updated_at)
+               VALUES ($1, 'INSERTS', $2, NOW(), NOW()) RETURNING id`,
+              [row.product_name, newSku]
+            );
+            correctProductId = created.rows[0].id;
+          }
+          // Update the Poulos price entry to point to the correct product
+          await pool.query(
+            `UPDATE price_list_prices SET product_id = $1 WHERE id = $2`,
+            [correctProductId, row.plp_id]
+          );
+          fixedCount++;
+        }
+        console.log(`[STARTUP] Fixed ${fixedCount} Poulos insert entries — now linked to INSERTS category products`);
+      } else {
+        console.log(`[STARTUP] Poulos inserts: category already correct`);
+      }
+    }
+  } catch (err: any) {
+    console.error("[STARTUP] Poulos insert category fix error:", err.message);
+  }
+
   // Product sync disabled - user managing products manually
   // try {
   //   await syncProductionData();
