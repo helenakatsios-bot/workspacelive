@@ -7007,6 +7007,7 @@ Rules:
       const categoryRenames: Record<string, string> = {
         'CUST INSERTS': 'CUSTOM INSERTS',
         'CUST INSERT': 'CUSTOM INSERTS',
+        '15 % INSERTS': 'INSERTS',
       };
       if (portalCategories.map(c => c.toUpperCase()).includes('CASES')) {
         categoryRenames['CASES'] = 'RAW MATERIAL';
