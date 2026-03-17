@@ -676,6 +676,10 @@ async function runStartupTasks() {
     if (blanketFix.rowCount && blanketFix.rowCount > 0) {
       console.log(`Normalized ${blanketFix.rowCount} blanket products into BLANKETS category`);
     }
+    const pillowsCatFix = await pool.query("UPDATE products SET category = 'PILLOWS' WHERE category = 'HUNGARIAN PILLOWS'");
+    if (pillowsCatFix.rowCount && pillowsCatFix.rowCount > 0) {
+      console.log(`Renamed ${pillowsCatFix.rowCount} HUNGARIAN PILLOWS products to PILLOWS`);
+    }
     const quiltFix = await pool.query("UPDATE products SET category = 'HUNGARIAN WINTER STRIP' WHERE category IN ('STRIPPED QUILT', 'HUNGARIAN')");
     if (quiltFix.rowCount && quiltFix.rowCount > 0) {
       console.log(`Renamed ${quiltFix.rowCount} products to HUNGARIAN WINTER STRIP`);
