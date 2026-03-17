@@ -21,6 +21,7 @@ interface PriceListConfig {
   swapSkuCategory?: boolean;
   allowedCategories?: string[];
   noSku?: boolean; // CSV format: Category, Product, Filling, Weight, Price (5 cols, no SKU)
+  tabSeparated?: boolean; // File uses tabs instead of commas as delimiter
 }
 
 const PRICE_LISTS: PriceListConfig[] = [
@@ -114,8 +115,10 @@ const PRICE_LISTS: PriceListConfig[] = [
     name: "Poulos",
     description: "Poulos pricing",
     isDefault: false,
-    csvFiles: ["prices_for_replit_poulos_CSV_OFFICAL_1773702370028.csv", "prices_for_replit_poulos_CSV_OFFICAL_1773097451070.csv", "poulos_prices.csv"],
-    noSku: true,
+    csvFiles: [
+      "Pasted-Product-Category-SKU-Filling-Weight-Price-DOUBLE-4-SEAS_1773707318650.txt",
+    ],
+    tabSeparated: true,
     categoryNorm: (cat) => {
       if (cat === "KHAKI BLANKET" || cat === "SILVER BLANKET") return "BLANKETS";
       if (cat === "STRIP PILLOW") return "HUNGARIAN PILLOW";
@@ -253,7 +256,7 @@ async function importOnePriceList(config: PriceListConfig): Promise<void> {
   const startRow = config.csvStartRow ?? 1;
   let rows: CsvRow[] = [];
   for (let i = startRow; i < lines.length; i++) {
-    const fields = parseCsvLine(lines[i]);
+    const fields = config.tabSeparated ? lines[i].split("\t") : parseCsvLine(lines[i]);
     if (config.noSku) {
       // 5-column format: Category, Product, Filling, Weight, Price
       if (fields.length < 5) continue;
