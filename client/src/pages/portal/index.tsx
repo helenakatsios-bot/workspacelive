@@ -1620,7 +1620,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
           {Object.entries(grouped).map(([category, prods]) => {
             const isInsertGrouped = INSERT_GROUPED_CATEGORIES.includes(category);
             const insertGroups = isInsertGrouped ? buildInsertGroupedBySize(prods) : null;
-            const sizeGroups = isInsertGrouped ? null : (category === 'PIPED PILLOWS' ? buildPillowSizeGroups(prods) : category === 'CHAMBER PILLOW' ? buildChamberPillowGroups(prods) : category === 'HUNGARIAN PILLOW' ? buildHungarianPillowGroups(prods) : buildSizeGroups(prods));
+            const sizeGroups = isInsertGrouped ? null : (category === 'PIPED PILLOWS' ? buildPillowSizeGroups(prods) : category === 'CHAMBER PILLOW' ? buildChamberPillowGroups(prods) : (category === 'HUNGARIAN PILLOW' || category === 'HUNGARIAN PILLOWS') ? buildHungarianPillowGroups(prods) : buildSizeGroups(prods));
             const hasMultipleFillings = sizeGroups ? sizeGroups.some(sg => sg.options.length > 1) : false;
             const showFillingColumn = insertGroups ? true : sizeGroups ? hasMultipleFillings : FILLING_CATEGORIES.includes(category);
             const showWeightColumn = insertGroups ? true : (!sizeGroups && WEIGHT_CATEGORIES.includes(category));
