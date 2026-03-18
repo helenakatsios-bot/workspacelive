@@ -117,7 +117,7 @@ async function runStartupTasks() {
       { email: "purchasing@ecodownunder.com.au", password: "ecodown" },
       { email: "jenny@ecolinen.com", password: "ecolinen" },
       { email: "dhimanvinod@hotmail.com", password: "vinod!" },
-      { email: "speaktous@manchesterfactory.com.au", password: "manchester factory" },
+      { email: "speaktous@manchesterfactory.com.au", password: "warehouse" },
       { email: "nick@warehousemh.com.au", password: "warehouse" },
       { email: "shop@pepperwhites.com.au", password: "pepperwhites" },
       { email: "eliza@annaspirodesign.com.au", password: "annaspiro" },
