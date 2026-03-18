@@ -1621,10 +1621,13 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
           {Object.entries(grouped).map(([category, prods]) => {
             const isInsertGrouped = INSERT_GROUPED_CATEGORIES.includes(category);
             const insertGroups = isInsertGrouped ? buildInsertGroupedBySize(prods) : null;
+            // Simple inserts: L&M only — one filling, no weight variant — no dropdowns needed
+            const isLandM = (company?.priceListName || "").includes("L&M");
+            const isSimpleInserts = isLandM && insertGroups !== null;
             const sizeGroups = isInsertGrouped ? null : (category === 'PIPED PILLOWS' ? buildPillowSizeGroups(prods) : category === 'CHAMBER PILLOW' ? buildChamberPillowGroups(prods) : (category === 'HUNGARIAN PILLOW' || category === 'HUNGARIAN PILLOWS' || category === 'PILLOWS') ? buildHungarianPillowGroups(prods) : buildSizeGroups(prods));
             const hasMultipleFillings = sizeGroups ? sizeGroups.some(sg => sg.options.length > 1) : false;
-            const showFillingColumn = insertGroups ? true : sizeGroups ? hasMultipleFillings : FILLING_CATEGORIES.includes(category);
-            const showWeightColumn = insertGroups ? true : (!sizeGroups && WEIGHT_CATEGORIES.includes(category));
+            const showFillingColumn = (insertGroups && !isSimpleInserts) ? true : sizeGroups ? hasMultipleFillings : FILLING_CATEGORIES.includes(category);
+            const showWeightColumn = (insertGroups && !isSimpleInserts) ? true : (!sizeGroups && WEIGHT_CATEGORIES.includes(category));
             const catMinQty = category === '100 PLUS INSERTS' ? 100 : minQty;
             const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
               'INSERTS': 'INSERTS STANDARD SIZE',
@@ -1675,7 +1678,59 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {insertGroups ? (
+                    {insertGroups && isSimpleInserts ? (
+                      // Simple inserts (e.g. L&M) — one filling, no weight — just show product + qty + price
+                      insertGroups.map(({ size, fillingGroups }) => {
+                        const autoFilling = fillingGroups[0]?.filling || "";
+                        const autoOpt = fillingGroups[0]?.weightOptions[0];
+                        const productId = autoOpt?.productId || "";
+                        const resolvedProduct = productId ? prods.find((p: any) => p.id === productId) : null;
+                        const displayPrice = resolvedProduct ? getVariantPrice(resolvedProduct, autoFilling, "") : "0";
+                        return (
+                          <TableRow key={size} data-testid={`row-insert-simple-${size}`}>
+                            <TableCell><p className="font-medium">{size}</p></TableCell>
+                            <TableCell>
+                              <div className="flex flex-col items-center gap-0.5">
+                                <Input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min={catMinQty}
+                                  value={productId ? (cart[productId] || "") : ""}
+                                  placeholder="0"
+                                  disabled={!productId}
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    if (!productId) return;
+                                    const val = parseInt(e.target.value) || 0;
+                                    setCart(prev => {
+                                      if (val <= 0) { const { [productId]: _, ...rest } = prev; return rest; }
+                                      const snapped = val < catMinQty ? catMinQty : val;
+                                      return { ...prev, [productId]: snapped };
+                                    });
+                                  }}
+                                  onBlur={(e) => {
+                                    const val = parseInt(e.target.value) || 0;
+                                    if (val > 0 && val < catMinQty && productId) {
+                                      setCart(prev => ({ ...prev, [productId]: catMinQty }));
+                                    }
+                                  }}
+                                  className="h-8 w-[70px] text-center mx-auto"
+                                  data-testid={`input-qty-insert-simple-${size}`}
+                                />
+                                {catMinQty > 1 && <span className="text-[10px] text-muted-foreground">Min {catMinQty}</span>}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {productId ? (
+                                <span className="font-medium">${parseFloat(displayPrice).toFixed(2)}</span>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    ) : insertGroups ? (
                       insertGroups.flatMap(({ size, fillingGroups }) => {
                         const sgKey = `${category}__${size}`;
                         const selections = insertGroupSelections[sgKey] || [{ filling: "", productId: "", weight: "" }];
