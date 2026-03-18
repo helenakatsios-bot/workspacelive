@@ -1421,11 +1421,17 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
       return;
     }
     if (products) {
+      // Categories where filling is inherent to the product — no user selection required
+      const FILLING_NOT_REQUIRED_CATS = new Set([
+        'PIPED PILLOWS', 'HUNGARIAN PILLOW', 'HUNGARIAN PILLOWS', 'PILLOWS',
+        'CHAMBER PILLOW', ...INSERT_GROUPED_CATEGORIES,
+      ]);
       const missingFilling = cartItems.filter((item) => {
         const cat = (item as any).category || "";
-        // Size-grouped products (name contains " - " or are pillow products) already have filling embedded in the product itself
+        // Size-grouped products (name contains " - ") have filling embedded in the product name
         if ((item.name as string).includes(' - ')) return false;
-        if (cat === 'PIPED PILLOWS') return false;
+        // Categories that don't need a filling selection from the user
+        if (FILLING_NOT_REQUIRED_CATS.has(cat)) return false;
         return FILLING_CATEGORIES.includes(cat) && !fillings[item.id];
       });
       if (missingFilling.length > 0) {
