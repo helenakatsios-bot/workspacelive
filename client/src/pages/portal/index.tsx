@@ -1705,53 +1705,78 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
                                     if (resolvedProductId) {
                                       setCart(prev => { const { [resolvedProductId]: _, ...rest } = prev; return rest; });
                                     }
-                                    setInsertGroupSelections(prev => {
-                                      const arr = [...(prev[sgKey] || [{ filling: "", productId: "", weight: "" }])];
-                                      arr[selIdx] = { filling: val, productId: "", weight: "" };
-                                      return { ...prev, [sgKey]: arr };
-                                    });
+                                    // Check if filling has only one weight option (or all weights are empty)
+                                    // If so, auto-resolve the product ID without requiring weight selection
+                                    const fg = fillingGroups.find(f => f.filling === val);
+                                    const weightOpts = fg?.weightOptions || [];
+                                    const namedWeights = weightOpts.filter(wo => wo.weight !== "");
+                                    if (namedWeights.length === 0 && weightOpts.length > 0) {
+                                      // No weight distinction — auto-select the first option
+                                      const autoOpt = weightOpts[0];
+                                      setFillings(prev => ({ ...prev, [autoOpt.productId]: val }));
+                                      setInsertGroupSelections(prev => {
+                                        const arr = [...(prev[sgKey] || [{ filling: "", productId: "", weight: "" }])];
+                                        arr[selIdx] = { filling: val, productId: autoOpt.productId, weight: "" };
+                                        return { ...prev, [sgKey]: arr };
+                                      });
+                                    } else {
+                                      setInsertGroupSelections(prev => {
+                                        const arr = [...(prev[sgKey] || [{ filling: "", productId: "", weight: "" }])];
+                                        arr[selIdx] = { filling: val, productId: "", weight: "" };
+                                        return { ...prev, [sgKey]: arr };
+                                      });
+                                    }
                                   }}
                                 >
                                   <SelectTrigger className="w-[170px]" data-testid={`select-filling-insert-${size}-${selIdx}`}>
                                     <SelectValue placeholder="Select filling..." />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {fillingGroups.map(fg => (
+                                    {fillingGroups.filter(fg => fg.filling !== "").map(fg => (
                                       <SelectItem key={fg.filling} value={fg.filling}>{fg.filling}</SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
                               </TableCell>
                               <TableCell>
-                                <Select
-                                  value={selectedWeight}
-                                  disabled={!selectedFilling}
-                                  onValueChange={(val) => {
-                                    if (resolvedProductId) {
-                                      setCart(prev => { const { [resolvedProductId]: _, ...rest } = prev; return rest; });
-                                    }
-                                    const newOpt = fillingGroup?.weightOptions.find(wo => wo.weight === val);
-                                    const newProductId = newOpt?.productId || "";
-                                    if (newProductId) {
-                                      setFillings(prev => ({ ...prev, [newProductId]: selectedFilling }));
-                                      setWeights(prev => ({ ...prev, [newProductId]: val }));
-                                    }
-                                    setInsertGroupSelections(prev => {
-                                      const arr = [...(prev[sgKey] || [{ filling: "", productId: "", weight: "" }])];
-                                      arr[selIdx] = { ...arr[selIdx], weight: val, productId: newProductId };
-                                      return { ...prev, [sgKey]: arr };
-                                    });
-                                  }}
-                                >
-                                  <SelectTrigger className="w-[150px]" data-testid={`select-weight-insert-${size}-${selIdx}`}>
-                                    <SelectValue placeholder="Select weight..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {availableWeights.map(wo => (
-                                      <SelectItem key={wo.weight} value={wo.weight}>{wo.weight}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                {(() => {
+                                  const namedWeights = availableWeights.filter(wo => wo.weight !== "");
+                                  if (namedWeights.length === 0) {
+                                    // No weight options — nothing to show
+                                    return <span className="text-sm text-muted-foreground">—</span>;
+                                  }
+                                  return (
+                                    <Select
+                                      value={selectedWeight}
+                                      disabled={!selectedFilling}
+                                      onValueChange={(val) => {
+                                        if (resolvedProductId) {
+                                          setCart(prev => { const { [resolvedProductId]: _, ...rest } = prev; return rest; });
+                                        }
+                                        const newOpt = fillingGroup?.weightOptions.find(wo => wo.weight === val);
+                                        const newProductId = newOpt?.productId || "";
+                                        if (newProductId) {
+                                          setFillings(prev => ({ ...prev, [newProductId]: selectedFilling }));
+                                          setWeights(prev => ({ ...prev, [newProductId]: val }));
+                                        }
+                                        setInsertGroupSelections(prev => {
+                                          const arr = [...(prev[sgKey] || [{ filling: "", productId: "", weight: "" }])];
+                                          arr[selIdx] = { ...arr[selIdx], weight: val, productId: newProductId };
+                                          return { ...prev, [sgKey]: arr };
+                                        });
+                                      }}
+                                    >
+                                      <SelectTrigger className="w-[150px]" data-testid={`select-weight-insert-${size}-${selIdx}`}>
+                                        <SelectValue placeholder="Select weight..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {namedWeights.map(wo => (
+                                          <SelectItem key={wo.weight} value={wo.weight}>{wo.weight}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  );
+                                })()}
                               </TableCell>
                               <TableCell>
                                 <div className="flex flex-col items-center gap-0.5">
