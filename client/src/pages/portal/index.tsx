@@ -1707,6 +1707,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
                                       const snapped = val < catMinQty ? catMinQty : val;
                                       return { ...prev, [productId]: snapped };
                                     });
+                                    if (autoFilling) setFillings(prev => ({ ...prev, [productId]: autoFilling }));
                                   }}
                                   onBlur={(e) => {
                                     const val = parseInt(e.target.value) || 0;
