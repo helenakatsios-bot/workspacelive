@@ -1954,6 +1954,12 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
                                     onValueChange={(val) => {
                                       if (productId) {
                                         setCart(prev => { const { [productId]: _, ...rest } = prev; return rest; });
+                                        setFillings(prev => { const { [productId]: _, ...rest } = prev; return rest; });
+                                      }
+                                      // Find the new product for this filling so we can record it
+                                      const newOpt = options.find(o => o.filling === val);
+                                      if (newOpt?.productId) {
+                                        setFillings(prev => ({ ...prev, [newOpt.productId]: val }));
                                       }
                                       setSizeGroupFillings(prev => ({ ...prev, [sgKey]: val }));
                                     }}
@@ -1986,6 +1992,10 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
                                     if (val <= 0) { const { [productId]: _, ...rest } = prev; return rest; }
                                     return { ...prev, [productId]: val };
                                   });
+                                  // Record filling so submit validation passes for single-option size groups
+                                  if (options.length === 1 && options[0].filling) {
+                                    setFillings(prev => ({ ...prev, [productId]: options[0].filling }));
+                                  }
                                 }}
                                 className="h-8 w-[70px] text-center mx-auto"
                                 data-testid={`input-qty-sg-${size}`}
