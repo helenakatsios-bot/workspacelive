@@ -16,6 +16,7 @@ interface InventoryItem {
   sku: string;
   name: string;
   category: string;
+  inventoryCategory: string | null;
   physicalStock: number;
   reservedStock: number;
   availableStock: number;
@@ -138,7 +139,8 @@ export default function InventoryPage() {
     const matchesSearch = !search ||
       item.name.toLowerCase().includes(search.toLowerCase()) ||
       item.sku.toLowerCase().includes(search.toLowerCase()) ||
-      (item.category || "").toLowerCase().includes(search.toLowerCase());
+      (item.category || "").toLowerCase().includes(search.toLowerCase()) ||
+      (item.inventoryCategory || "").toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || item.stockStatus === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -286,7 +288,11 @@ export default function InventoryPage() {
                   <TableCell>
                     <Link href={`/products/${item.id}`} className="font-medium hover:underline text-sm">{item.name}</Link>
                     <p className="text-xs text-muted-foreground font-mono">{item.sku}</p>
-                    {item.category && <p className="text-xs text-muted-foreground">{item.category}</p>}
+                    {item.inventoryCategory && (
+                      <span className="inline-block mt-0.5 text-xs font-medium bg-primary/10 text-primary rounded px-1.5 py-0.5">
+                        {item.inventoryCategory}
+                      </span>
+                    )}
                   </TableCell>
 
                   {/* Physical stock */}

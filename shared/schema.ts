@@ -110,6 +110,7 @@ export const products = pgTable("products", {
   reorderPoint: integer("reorder_point").default(0),
   safetyStock: integer("safety_stock").default(0),
   leadTimeDays: integer("lead_time_days").default(0),
+  inventoryCategory: text("inventory_category"),
 }, (table) => [
   index("products_sku_idx").on(table.sku),
   index("products_category_idx").on(table.category),

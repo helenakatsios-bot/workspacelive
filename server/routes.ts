@@ -1712,6 +1712,64 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/products/:id/reserved-stock", requireEdit, async (req, res) => {
+    try {
+      const { reservedStock, notes } = req.body;
+      if (typeof reservedStock !== "number" || reservedStock < 0) {
+        return res.status(400).json({ message: "reservedStock must be a non-negative number" });
+      }
+      const product = await storage.getProduct(req.params.id);
+      if (!product) return res.status(404).json({ message: "Product not found" });
+      const oldReserved = (product as any).reservedStock ?? 0;
+      await pool.query(
+        `UPDATE products SET reserved_stock = $1, available_stock = physical_stock - $1 WHERE id = $2`,
+        [reservedStock, req.params.id]
+      );
+      await pool.query(
+        `INSERT INTO stock_movements (id, product_id, movement_type, quantity_change, quantity_after, reference_type, note, created_by, created_at)
+         VALUES (gen_random_uuid(), $1, 'adjustment', $2, $3, 'manual', $4, $5, NOW())`,
+        [req.params.id, reservedStock - oldReserved, reservedStock, notes || "Manual reserved stock adjustment", req.session.userId || null]
+      );
+      const updated = await storage.getProduct(req.params.id);
+      res.json(updated);
+    } catch (error) {
+      console.error("Update reserved stock error:", error);
+      res.status(500).json({ message: "Failed to update reserved stock" });
+    }
+  });
+
+  app.patch("/api/products/:id/inventory-category", requireEdit, async (req, res) => {
+    try {
+      const { inventoryCategory } = req.body;
+      await pool.query(`UPDATE products SET inventory_category = $1 WHERE id = $2`, [inventoryCategory || null, req.params.id]);
+      const updated = await storage.getProduct(req.params.id);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update inventory category" });
+    }
+  });
+
+  app.patch("/api/order-requests/:id/cassette-types", requireEdit, async (req, res) => {
+    try {
+      const { cassetteTypes } = req.body; // { [itemIndex]: "Stripe Quilt Cassette" | "Cassette" }
+      const reqId = req.params.id;
+      const existing = await pool.query(`SELECT items FROM customer_order_requests WHERE id = $1`, [reqId]);
+      if (!existing.rows[0]) return res.status(404).json({ message: "Order request not found" });
+      const items = existing.rows[0].items || [];
+      const updated = items.map((item: any, idx: number) => {
+        if (cassetteTypes[idx] !== undefined) {
+          return { ...item, cassetteType: cassetteTypes[idx] };
+        }
+        return item;
+      });
+      await pool.query(`UPDATE customer_order_requests SET items = $1 WHERE id = $2`, [JSON.stringify(updated), reqId]);
+      res.json({ success: true, items: updated });
+    } catch (error) {
+      console.error("Update cassette types error:", error);
+      res.status(500).json({ message: "Failed to update cassette types" });
+    }
+  });
+
   app.get("/api/inventory/dashboard", requireAuth, async (req, res) => {
     try {
       const result = await pool.query(`
@@ -1719,7 +1777,7 @@ export async function registerRoutes(
           p.id, p.sku, p.name, p.category,
           p.physical_stock, p.reserved_stock, p.available_stock,
           p.reorder_point, p.safety_stock, p.lead_time_days,
-          p.manufactured_stock,
+          p.manufactured_stock, p.inventory_category,
           COALESCE(
             (SELECT SUM(ol.quantity)
              FROM order_lines ol
@@ -1746,6 +1804,7 @@ export async function registerRoutes(
         safetyStock: parseInt(r.safety_stock) || 0,
         leadTimeDays: parseInt(r.lead_time_days) || 0,
         manufacturedStock: parseInt(r.manufactured_stock) || 0,
+        inventoryCategory: r.inventory_category || null,
         unitsSold90d: parseInt(r.units_sold_90d) || 0,
         avgMonthlySales: Math.round((parseInt(r.units_sold_90d) || 0) / 3),
         dailyVelocity: parseFloat(((parseInt(r.units_sold_90d) || 0) / 90).toFixed(2)),
@@ -6303,10 +6362,14 @@ Rules:
       const order = orderResult.rows[0];
 
       for (const item of resolvedItems) {
+        let lineDesc = item.description || item.productName || "Item";
+        if (item.cassetteType && item.cassetteType !== "Cassette") {
+          lineDesc = `${lineDesc} [${item.cassetteType}]`;
+        }
         await client.query(
           `INSERT INTO order_lines (id, order_id, product_id, description_override, quantity, unit_price, discount, line_total)
            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, '0', $6)`,
-          [order.id, item.productId || null, item.description || item.productName || "Item", item.quantity || 1, String(item.unitPrice || "0"), String(item.lineTotal || "0")]
+          [order.id, item.productId || null, lineDesc, item.quantity || 1, String(item.unitPrice || "0"), String(item.lineTotal || "0")]
         );
       }
 

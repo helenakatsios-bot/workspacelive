@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
@@ -21,10 +21,16 @@ function statusBadgeClass(status: string) {
   return "bg-red-500/10 text-red-700 dark:text-red-400";
 }
 
+function isCassetteItem(item: any): boolean {
+  const name = (item.description || item.productName || "").toUpperCase();
+  return name.includes("CASSETTE") && !name.includes("STRIPE QUILT") && !name.includes("STRIPE CASSETTE");
+}
+
 export default function OrderRequestsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingCompany, setEditingCompany] = useState(false);
   const [editCompanyName, setEditCompanyName] = useState("");
+  const [cassetteSelections, setCassetteSelections] = useState<Record<number, string>>({});
   const { toast } = useToast();
   const [, navigate] = useLocation();
 
@@ -117,6 +123,31 @@ export default function OrderRequestsPage() {
       toast({ title: "Error", description: "Failed to delete order request.", variant: "destructive" });
     },
   });
+
+  const cassetteMutation = useMutation({
+    mutationFn: async ({ id, cassetteTypes }: { id: string; cassetteTypes: Record<number, string> }) => {
+      return apiRequest("PATCH", `/api/order-requests/${id}/cassette-types`, { cassetteTypes });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-order-requests", selectedId] });
+      toast({ title: "Saved", description: "Cassette type clarification saved." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save cassette type.", variant: "destructive" });
+    },
+  });
+
+  useEffect(() => {
+    if (selectedRequest?.items && Array.isArray(selectedRequest.items)) {
+      const initial: Record<number, string> = {};
+      selectedRequest.items.forEach((item: any, idx: number) => {
+        if (item.cassetteType) initial[idx] = item.cassetteType;
+      });
+      setCassetteSelections(initial);
+    } else {
+      setCassetteSelections({});
+    }
+  }, [selectedRequest?.id]);
 
   const pendingCount = orderRequests?.filter(r => r.status === "pending").length || 0;
 
@@ -380,39 +411,95 @@ export default function OrderRequestsPage() {
 
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold text-muted-foreground">Order Items</h3>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
-                      <TableHead className="text-right">Unit Price</TableHead>
-                      <TableHead className="text-right">Line Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {Array.isArray(selectedRequest.items) ? selectedRequest.items.map((item: any, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell className="text-sm">
-                          {item.description || item.productName || "Item"}
-                          {item.sku && <span className="text-xs text-muted-foreground ml-1">({item.sku})</span>}
-                        </TableCell>
-                        <TableCell className="text-right text-sm">{item.quantity}</TableCell>
-                        <TableCell className="text-right text-sm">
-                          {parseFloat(item.unitPrice) > 0 ? `$${parseFloat(item.unitPrice).toFixed(2)}` : "-"}
-                        </TableCell>
-                        <TableCell className="text-right text-sm font-medium">
-                          {(parseFloat(item.lineTotal) || (parseInt(item.quantity) * (parseFloat(item.unitPrice) || 0))) > 0
-                            ? `$${(parseFloat(item.lineTotal) || (parseInt(item.quantity) * (parseFloat(item.unitPrice) || 0))).toFixed(2)}`
-                            : "-"}
-                        </TableCell>
-                      </TableRow>
-                    )) : (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-sm text-muted-foreground text-center">No items</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                {(() => {
+                  const items = Array.isArray(selectedRequest.items) ? selectedRequest.items : [];
+                  const cassetteItems = items.filter(isCassetteItem);
+                  const hasCassette = cassetteItems.length > 0;
+                  const hasUncleared = items.some((item: any, idx: number) => isCassetteItem(item) && !cassetteSelections[idx] && !item.cassetteType);
+                  return (
+                    <>
+                      {hasUncleared && selectedRequest.status !== "converted" && (
+                        <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 rounded-lg">
+                          <span className="text-amber-600 dark:text-amber-400 mt-0.5 text-base">⚠️</span>
+                          <div>
+                            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Clarification needed</p>
+                            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                              One or more items contain "CASSETTE" — please confirm whether each is a <strong>Stripe Quilt Cassette</strong> or a plain <strong>Cassette</strong> before converting.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Product</TableHead>
+                            {hasCassette && <TableHead className="min-w-[180px]">Cassette Type</TableHead>}
+                            <TableHead className="text-right">Qty</TableHead>
+                            <TableHead className="text-right">Unit Price</TableHead>
+                            <TableHead className="text-right">Line Total</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {items.length > 0 ? items.map((item: any, idx: number) => (
+                            <TableRow key={idx}>
+                              <TableCell className="text-sm">
+                                {item.description || item.productName || "Item"}
+                                {item.sku && <span className="text-xs text-muted-foreground ml-1">({item.sku})</span>}
+                              </TableCell>
+                              {hasCassette && (
+                                <TableCell>
+                                  {isCassetteItem(item) ? (
+                                    <div className="flex flex-col gap-1">
+                                      <div className="flex gap-1">
+                                        {["Cassette", "Stripe Quilt Cassette"].map(opt => {
+                                          const current = cassetteSelections[idx] || item.cassetteType || "";
+                                          const isSelected = current === opt;
+                                          return (
+                                            <button
+                                              key={opt}
+                                              onClick={() => {
+                                                const updated = { ...cassetteSelections, [idx]: opt };
+                                                setCassetteSelections(updated);
+                                                cassetteMutation.mutate({ id: selectedRequest.id, cassetteTypes: updated });
+                                              }}
+                                              data-testid={`btn-cassette-${idx}-${opt.replace(/\s/g,"-")}`}
+                                              className={`text-xs px-2 py-1 rounded border transition-colors ${
+                                                isSelected
+                                                  ? "bg-primary text-primary-foreground border-primary font-medium"
+                                                  : "bg-background border-border text-muted-foreground hover:border-primary hover:text-foreground"
+                                              }`}
+                                            >
+                                              {opt}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                              )}
+                              <TableCell className="text-right text-sm">{item.quantity}</TableCell>
+                              <TableCell className="text-right text-sm">
+                                {parseFloat(item.unitPrice) > 0 ? `$${parseFloat(item.unitPrice).toFixed(2)}` : "-"}
+                              </TableCell>
+                              <TableCell className="text-right text-sm font-medium">
+                                {(parseFloat(item.lineTotal) || (parseInt(item.quantity) * (parseFloat(item.unitPrice) || 0))) > 0
+                                  ? `$${(parseFloat(item.lineTotal) || (parseInt(item.quantity) * (parseFloat(item.unitPrice) || 0))).toFixed(2)}`
+                                  : "-"}
+                              </TableCell>
+                            </TableRow>
+                          )) : (
+                            <TableRow>
+                              <TableCell colSpan={hasCassette ? 5 : 4} className="text-sm text-muted-foreground text-center">No items</TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </>
+                  );
+                })()}
                 {Array.isArray(selectedRequest.items) && itemTotal(selectedRequest.items) > 0 && (
                   <div className="flex justify-end">
                     <div className="text-sm font-semibold">

@@ -65,6 +65,8 @@ export default function ProductDetailPage() {
 
   const [editingStock, setEditingStock] = useState(false);
   const [stockValue, setStockValue] = useState("");
+  const [editingReserved, setEditingReserved] = useState(false);
+  const [reservedValue, setReservedValue] = useState("");
   const [showMovements, setShowMovements] = useState(false);
 
   const { data: stockMovements } = useQuery<any[]>({
@@ -78,10 +80,22 @@ export default function ProductDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products", params.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/dashboard"] });
-      toast({ title: "Stock updated" });
+      toast({ title: "Physical stock updated" });
       setEditingStock(false);
     },
     onError: () => toast({ title: "Failed to update stock", variant: "destructive" }),
+  });
+
+  const reservedMutation = useMutation({
+    mutationFn: (reservedStock: number) =>
+      apiRequest("PATCH", `/api/products/${params.id}/reserved-stock`, { reservedStock }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products", params.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory/dashboard"] });
+      toast({ title: "Reserved stock updated" });
+      setEditingReserved(false);
+    },
+    onError: () => toast({ title: "Failed to update reserved stock", variant: "destructive" }),
   });
 
   const formatCurrency = (value: string | number | null | undefined) => {
@@ -270,19 +284,26 @@ export default function ProductDetailPage() {
                 <History className="w-4 h-4 mr-1" />
                 {showMovements ? "Hide" : "History"}
               </Button>
+              {canEdit && !editingReserved && (
+                <Button variant="outline" size="sm" onClick={() => { setReservedValue(String((product as any).reservedStock ?? 0)); setEditingReserved(true); setEditingStock(false); }}
+                  data-testid="btn-edit-reserved">
+                  <Edit2 className="w-4 h-4 mr-1" />
+                  Set Reserved
+                </Button>
+              )}
               {canEdit && !editingStock && (
-                <Button variant="outline" size="sm" onClick={() => { setStockValue(String((product as any).physicalStock ?? 0)); setEditingStock(true); }}
+                <Button variant="outline" size="sm" onClick={() => { setStockValue(String((product as any).physicalStock ?? 0)); setEditingStock(true); setEditingReserved(false); }}
                   data-testid="btn-edit-stock">
                   <Edit2 className="w-4 h-4 mr-1" />
-                  Set Stock
+                  Set Physical
                 </Button>
               )}
             </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {editingStock ? (
-            <div className="flex items-center gap-3 mb-4">
+          {editingStock && (
+            <div className="flex items-center gap-3 mb-4 p-3 bg-muted/40 rounded-lg">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Physical Stock (units on hand)</p>
                 <div className="flex items-center gap-2">
@@ -310,7 +331,38 @@ export default function ProductDetailPage() {
                 </div>
               </div>
             </div>
-          ) : null}
+          )}
+          {editingReserved && (
+            <div className="flex items-center gap-3 mb-4 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+              <div>
+                <p className="text-sm text-amber-700 dark:text-amber-400 font-medium mb-1">Override Reserved Stock</p>
+                <p className="text-xs text-muted-foreground mb-2">This manually overrides the reserved count. Use only to correct errors — orders will still manage reservations automatically.</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    className="border rounded px-3 py-1.5 text-sm w-32 bg-background"
+                    value={reservedValue}
+                    onChange={e => setReservedValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") reservedMutation.mutate(parseInt(reservedValue) || 0);
+                      if (e.key === "Escape") setEditingReserved(false);
+                    }}
+                    autoFocus
+                    data-testid="input-reserved-stock"
+                  />
+                  <Button size="sm" onClick={() => reservedMutation.mutate(parseInt(reservedValue) || 0)}
+                    disabled={reservedMutation.isPending} data-testid="btn-save-reserved">
+                    <Check className="w-4 h-4 mr-1" />
+                    Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingReserved(false)} data-testid="btn-cancel-reserved">
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center p-3 rounded-lg bg-muted/50">
               <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Physical</p>
