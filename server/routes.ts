@@ -10,6 +10,7 @@ import { eq, ilike, and, sql, inArray } from "drizzle-orm";
 import express from "express";
 import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, insertQuoteSchema, emails as emailsTable, contacts, companies as companiesTable, outlookTokens as outlookTokensTable, crmSettings, portalUsers, attachments } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
+import { reserveOrderLines, releaseOrderLines, handleStatusChange, dispatchOrderLines, adjustStockManual, recalculateProductStock, adjustReservationForLine, isReservingStatus, isDispatchingStatus } from "./stockEngine";
 import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero, autoSyncXeroInvoices, repairMissingInvoiceRecords, getXeroSyncMapping, saveXeroSyncMapping } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks, fetchEmailAttachments, downloadAttachment } from "./outlook";
 
@@ -1663,6 +1664,110 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== INVENTORY / STOCK ROUTES ====================
+
+  app.patch("/api/products/:id/stock", requireEdit, async (req, res) => {
+    try {
+      const { physicalStock, notes } = req.body;
+      if (typeof physicalStock !== "number" || physicalStock < 0) {
+        return res.status(400).json({ message: "physicalStock must be a non-negative number" });
+      }
+      const product = await storage.getProduct(req.params.id);
+      if (!product) return res.status(404).json({ message: "Product not found" });
+
+      await adjustStockManual(req.params.id, physicalStock, pool, req.session.userId, notes);
+      const updated = await storage.getProduct(req.params.id);
+      res.json(updated);
+    } catch (error) {
+      console.error("Update stock error:", error);
+      res.status(500).json({ message: "Failed to update stock" });
+    }
+  });
+
+  app.get("/api/inventory/dashboard", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT
+          p.id, p.sku, p.name, p.category,
+          p.physical_stock, p.reserved_stock, p.available_stock,
+          p.reorder_point, p.safety_stock, p.lead_time_days,
+          COALESCE(
+            (SELECT SUM(ol.quantity)
+             FROM order_lines ol
+             JOIN orders o ON o.id = ol.order_id
+             WHERE ol.product_id = p.id
+               AND o.order_date >= NOW() - INTERVAL '90 days'
+               AND o.status NOT IN ('cancelled')), 0
+          ) AS units_sold_90d
+        FROM products p
+        WHERE p.active = true
+          AND (p.physical_stock > 0 OR p.reserved_stock > 0 OR p.reorder_point > 0)
+        ORDER BY p.category, p.name
+      `);
+
+      const rows = result.rows.map(r => ({
+        id: r.id,
+        sku: r.sku,
+        name: r.name,
+        category: r.category,
+        physicalStock: parseInt(r.physical_stock) || 0,
+        reservedStock: parseInt(r.reserved_stock) || 0,
+        availableStock: parseInt(r.available_stock) || 0,
+        reorderPoint: parseInt(r.reorder_point) || 0,
+        safetyStock: parseInt(r.safety_stock) || 0,
+        leadTimeDays: parseInt(r.lead_time_days) || 0,
+        unitsSold90d: parseInt(r.units_sold_90d) || 0,
+        avgMonthlySales: Math.round((parseInt(r.units_sold_90d) || 0) / 3),
+        dailyVelocity: parseFloat(((parseInt(r.units_sold_90d) || 0) / 90).toFixed(2)),
+        daysOfCover: (parseInt(r.available_stock) || 0) > 0 && (parseInt(r.units_sold_90d) || 0) > 0
+          ? Math.round((parseInt(r.available_stock) / (parseInt(r.units_sold_90d) / 90)))
+          : null,
+        stockStatus:
+          (parseInt(r.available_stock) || 0) <= 0 ? "out_of_stock" :
+          (parseInt(r.reorder_point) || 0) > 0 && (parseInt(r.available_stock) || 0) <= (parseInt(r.reorder_point) || 0) ? "low" :
+          "ok",
+      }));
+
+      res.json(rows);
+    } catch (error) {
+      console.error("Inventory dashboard error:", error);
+      res.status(500).json({ message: "Failed to load inventory" });
+    }
+  });
+
+  app.get("/api/products/:id/stock-movements", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT sm.*, p.name as product_name, p.sku
+         FROM stock_movements sm
+         JOIN products p ON p.id = sm.product_id
+         WHERE sm.product_id = $1
+         ORDER BY sm.created_at DESC
+         LIMIT 100`,
+        [req.params.id]
+      );
+      res.json(result.rows);
+    } catch (error) {
+      console.error("Stock movements error:", error);
+      res.status(500).json({ message: "Failed to load stock movements" });
+    }
+  });
+
+  app.post("/api/inventory/recalculate-all", requireAdmin, async (req, res) => {
+    try {
+      const allProducts = await pool.query(`SELECT id FROM products WHERE active = true`);
+      let count = 0;
+      for (const p of allProducts.rows) {
+        await recalculateProductStock(p.id, pool);
+        count++;
+      }
+      res.json({ message: `Recalculated stock for ${count} products` });
+    } catch (error) {
+      console.error("Recalculate all error:", error);
+      res.status(500).json({ message: "Failed to recalculate" });
+    }
+  });
+
   // ==================== QUOTES ROUTES ====================
   app.get("/api/quotes", requireAuth, async (req, res) => {
     try {
@@ -2094,6 +2199,8 @@ export async function registerRoutes(
         createdBy: req.session.userId,
       });
       recalcCompanyRevenue(data.companyId);
+      // Reserve stock for new order
+      try { await reserveOrderLines(order.id, pool, req.session.userId); } catch(e) { console.error("[STOCK] Reserve on create failed:", e); }
       res.status(201).json(order);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -2142,6 +2249,10 @@ export async function registerRoutes(
           content: `Status changed from ${before.status} to ${req.body.status}`,
           createdBy: req.session.userId,
         });
+        // Handle stock reservation changes on status transition
+        try {
+          await handleStatusChange(req.params.id, before.status, req.body.status, pool, req.session.userId);
+        } catch(e) { console.error("[STOCK] Status change stock update failed:", e); }
       }
       recalcCompanyRevenue(before.companyId);
       res.json(order);
@@ -2184,6 +2295,8 @@ export async function registerRoutes(
         total: total.toFixed(2),
       });
       recalcCompanyRevenue(order.companyId);
+      // Re-reserve stock after lines replaced
+      try { await reserveOrderLines(req.params.id, pool, req.session.userId); } catch(e) { console.error("[STOCK] Re-reserve on lines update failed:", e); }
       res.json(createdLines);
     } catch (error) {
       console.error("Update order lines error:", error);
@@ -6484,6 +6597,8 @@ Rules:
 
   app.delete("/api/orders/:id", requireAdmin, async (req, res) => {
     try {
+      // Release stock reservations before deletion
+      try { await releaseOrderLines(req.params.id, pool, req.session.userId); } catch(e) { console.error("[STOCK] Release on delete failed:", e); }
       const deleted = await storage.deleteOrder(req.params.id);
       if (!deleted) return res.status(404).json({ message: "Order not found" });
       await storage.createAuditLog({

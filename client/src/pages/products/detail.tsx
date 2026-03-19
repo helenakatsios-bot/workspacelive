@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import { useState, useMemo } from "react";
-import { ArrowLeft, Package, Edit, Trash2, CheckCircle, XCircle, Loader2, Layers, ListFilter } from "lucide-react";
+import { ArrowLeft, Package, Edit, Trash2, CheckCircle, XCircle, Loader2, Layers, ListFilter, Warehouse, TrendingDown, AlertTriangle, Edit2, X, Check, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +61,27 @@ export default function ProductDetailPage() {
     onError: () => {
       toast({ title: "Failed to delete product", variant: "destructive" });
     },
+  });
+
+  const [editingStock, setEditingStock] = useState(false);
+  const [stockValue, setStockValue] = useState("");
+  const [showMovements, setShowMovements] = useState(false);
+
+  const { data: stockMovements } = useQuery<any[]>({
+    queryKey: ["/api/products", params.id, "stock-movements"],
+    enabled: showMovements,
+  });
+
+  const stockMutation = useMutation({
+    mutationFn: (physicalStock: number) =>
+      apiRequest("PATCH", `/api/products/${params.id}/stock`, { physicalStock }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products", params.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory/dashboard"] });
+      toast({ title: "Stock updated" });
+      setEditingStock(false);
+    },
+    onError: () => toast({ title: "Failed to update stock", variant: "destructive" }),
   });
 
   const formatCurrency = (value: string | number | null | undefined) => {
@@ -234,6 +255,131 @@ export default function ProductDetailPage() {
           </Card>
         )}
       </div>
+
+      {/* Stock card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Warehouse className="w-5 h-5" />
+              Stock
+            </span>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { setShowMovements(v => !v); }}
+                data-testid="btn-toggle-movements">
+                <History className="w-4 h-4 mr-1" />
+                {showMovements ? "Hide" : "History"}
+              </Button>
+              {canEdit && !editingStock && (
+                <Button variant="outline" size="sm" onClick={() => { setStockValue(String((product as any).physicalStock ?? 0)); setEditingStock(true); }}
+                  data-testid="btn-edit-stock">
+                  <Edit2 className="w-4 h-4 mr-1" />
+                  Set Stock
+                </Button>
+              )}
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {editingStock ? (
+            <div className="flex items-center gap-3 mb-4">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Physical Stock (units on hand)</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    className="border rounded px-3 py-1.5 text-sm w-32 bg-background"
+                    value={stockValue}
+                    onChange={e => setStockValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") stockMutation.mutate(parseInt(stockValue) || 0);
+                      if (e.key === "Escape") setEditingStock(false);
+                    }}
+                    autoFocus
+                    data-testid="input-physical-stock"
+                  />
+                  <Button size="sm" onClick={() => stockMutation.mutate(parseInt(stockValue) || 0)}
+                    disabled={stockMutation.isPending} data-testid="btn-save-stock">
+                    <Check className="w-4 h-4 mr-1" />
+                    Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingStock(false)} data-testid="btn-cancel-stock">
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center p-3 rounded-lg bg-muted/50">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Physical</p>
+              <p className="text-2xl font-bold" data-testid="text-physical-stock">{(product as any).physicalStock ?? 0}</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Reserved</p>
+              <p className="text-2xl font-bold text-amber-600" data-testid="text-reserved-stock">{(product as any).reservedStock ?? 0}</p>
+            </div>
+            <div className={`text-center p-3 rounded-lg ${(product as any).availableStock <= 0 ? "bg-red-50 dark:bg-red-950/20" : "bg-green-50 dark:bg-green-950/20"}`}>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Available</p>
+              <p className={`text-2xl font-bold ${(product as any).availableStock <= 0 ? "text-red-600" : "text-green-600"}`} data-testid="text-available-stock">
+                {(product as any).availableStock ?? 0}
+              </p>
+            </div>
+          </div>
+          {((product as any).reorderPoint > 0) && (
+            <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+              <TrendingDown className="w-4 h-4" />
+              Reorder at {(product as any).reorderPoint} units
+              {(product as any).availableStock <= (product as any).reorderPoint && (
+                <Badge className="bg-amber-500 hover:bg-amber-500 gap-1 ml-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Reorder now
+                </Badge>
+              )}
+            </div>
+          )}
+          {showMovements && (
+            <div className="mt-4 border-t pt-4">
+              <p className="text-sm font-medium mb-2">Recent Stock Movements</p>
+              {!stockMovements ? (
+                <p className="text-sm text-muted-foreground">Loading...</p>
+              ) : stockMovements.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No movements recorded yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-muted-foreground border-b">
+                        <th className="pb-1 pr-3">Date</th>
+                        <th className="pb-1 pr-3">Type</th>
+                        <th className="pb-1 pr-3 text-right">Qty</th>
+                        <th className="pb-1 pr-3 text-right">After</th>
+                        <th className="pb-1">Note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stockMovements.slice(0, 20).map((m: any) => (
+                        <tr key={m.id} className="border-b border-muted/50">
+                          <td className="py-1 pr-3 text-muted-foreground text-xs">{new Date(m.created_at).toLocaleDateString("en-AU")}</td>
+                          <td className="py-1 pr-3">
+                            <Badge variant="outline" className="text-xs font-mono">{m.movement_type}</Badge>
+                          </td>
+                          <td className={`py-1 pr-3 text-right font-mono ${m.quantity_change > 0 ? "text-green-600" : "text-red-600"}`}>
+                            {m.quantity_change > 0 ? "+" : ""}{m.quantity_change}
+                          </td>
+                          <td className="py-1 pr-3 text-right font-mono">{m.quantity_after}</td>
+                          <td className="py-1 text-muted-foreground text-xs">{m.notes || ""}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {canViewPricing && (
         <Card>

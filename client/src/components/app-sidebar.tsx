@@ -28,6 +28,7 @@ import {
   Sparkles,
   Plug,
   CalendarCheck,
+  Warehouse,
   ShieldCheck,
   Blocks,
   Database,
@@ -369,6 +370,18 @@ export function AppSidebar() {
                       <Link href="/products" data-testid="nav-commerce-products">
                         <Package className="w-4 h-4" />
                         <span>Products</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive("/inventory")}
+                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                    >
+                      <Link href="/inventory" data-testid="nav-inventory">
+                        <Warehouse className="w-4 h-4" />
+                        <span>Inventory</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

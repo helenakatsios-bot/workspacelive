@@ -103,6 +103,13 @@ export const products = pgTable("products", {
   costPrice: decimal("cost_price", { precision: 12, scale: 2 }),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  // ── Stock fields ──
+  physicalStock: integer("physical_stock").notNull().default(0),
+  reservedStock: integer("reserved_stock").notNull().default(0),
+  availableStock: integer("available_stock").notNull().default(0),
+  reorderPoint: integer("reorder_point").default(0),
+  safetyStock: integer("safety_stock").default(0),
+  leadTimeDays: integer("lead_time_days").default(0),
 }, (table) => [
   index("products_sku_idx").on(table.sku),
   index("products_category_idx").on(table.category),
@@ -210,11 +217,46 @@ export const orderLines = pgTable("order_lines", {
   unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
   discount: decimal("discount", { precision: 5, scale: 2 }).default("0"),
   lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
+  // ── Stock reservation tracking ──
+  qtyReserved: integer("qty_reserved").notNull().default(0),
+  qtyDispatched: integer("qty_dispatched").notNull().default(0),
+  qtyCancelled: integer("qty_cancelled").notNull().default(0),
+  sku: text("sku"),
+  filling: text("filling"),
+  weight: text("weight"),
 });
 
 export const insertOrderLineSchema = createInsertSchema(orderLines).omit({ id: true });
 export type InsertOrderLine = z.infer<typeof insertOrderLineSchema>;
 export type OrderLine = typeof orderLines.$inferSelect;
+
+// ============ STOCK MOVEMENTS (Audit Log) ============
+export const stockMovements = pgTable("stock_movements", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  productId: varchar("product_id", { length: 36 }).notNull().references(() => products.id, { onDelete: "cascade" }),
+  movementType: text("movement_type").notNull(),
+  // RESERVE | RELEASE | DISPATCH | RECEIPT | ADJUSTMENT | ORDER_EDIT_INCREASE | ORDER_EDIT_DECREASE | CANCELLATION_RELEASE
+  quantity: integer("quantity").notNull(),
+  physicalBefore: integer("physical_before").notNull().default(0),
+  physicalAfter: integer("physical_after").notNull().default(0),
+  reservedBefore: integer("reserved_before").notNull().default(0),
+  reservedAfter: integer("reserved_after").notNull().default(0),
+  availableBefore: integer("available_before").notNull().default(0),
+  availableAfter: integer("available_after").notNull().default(0),
+  referenceType: text("reference_type"), // ORDER | MANUAL | DISPATCH | PURCHASE
+  referenceId: varchar("reference_id", { length: 36 }),
+  notes: text("notes"),
+  createdBy: varchar("created_by", { length: 36 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  tenantId: varchar("tenant_id", { length: 36 }).notNull().default("00000000-0000-0000-0000-000000000001"),
+}, (table) => [
+  index("stock_movements_product_idx").on(table.productId),
+  index("stock_movements_created_at_idx").on(table.createdAt),
+]);
+
+export const insertStockMovementSchema = createInsertSchema(stockMovements).omit({ id: true, createdAt: true });
+export type InsertStockMovement = z.infer<typeof insertStockMovementSchema>;
+export type StockMovement = typeof stockMovements.$inferSelect;
 
 // ============ INVOICES ============
 export const invoices = pgTable("invoices", {

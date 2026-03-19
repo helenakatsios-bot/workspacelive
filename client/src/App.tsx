@@ -75,6 +75,7 @@ import EmailsPage from "@/pages/emails/index";
 import PublicOrderFormPage from "@/pages/public/order-form";
 import PublicFormPage from "@/pages/public/form";
 import CustomerPortalApp from "@/pages/portal/index";
+import InventoryPage from "@/pages/inventory/index";
 import NotFound from "@/pages/not-found";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -186,6 +187,7 @@ function AuthenticatedApp() {
         <Route path="/reporting/reports" component={ReportingReportsPage} />
         <Route path="/reporting/goals" component={ReportingGoalsPage} />
         <Route path="/reports/clients-since-july-2021" component={ClientsSinceJuly2021Page} />
+        <Route path="/inventory" component={InventoryPage} />
         <Route path="/admin" component={AdminPage} />
         <Route path="/admin/price-lists" component={PriceListsPage} />
         <Route component={NotFound} />

@@ -36,6 +36,7 @@ Preferred communication style: Simple, everyday language.
 - **Recurring Orders**: Per-company recurring order templates stored as JSONB in `portal_users.recurring_items`. Admins configure the template from the company detail page (copy from an existing order). Portal users see a "Recurring" tab (only when a template is configured) with pre-filled quantities they can adjust before placing.
 - **Portal Password Convention**: All portal users use password `admin123`. The startup migration (`runStartupTasks` in `server/index.ts`) verifies this on every restart and resets all portal passwords if they don't match. Admin CRM password is also `admin123`.
 - **Email-to-Order Webhook**: A public, secret-authenticated webhook for forwarding email content to create order requests, designed for Power Automate integration.
+- **Stock Reservation Engine (Phase 1)**: Real-time stock tracking with physical/reserved/available stock per product. Orders in RESERVING_STATUSES (new, confirmed, in_production, ready) hold reservations; dispatch or cancel releases them. Stock movements are audit-logged in `stock_movements`. Core logic in `server/stockEngine.ts`. Inventory dashboard at `/inventory`. Product detail pages show stock and movement history. Admin can set physical stock via `PATCH /api/products/:id/stock`.
 
 ### Feature Specifications
 - **Reporting Section**: Dashboards, categorized reports, revenue/order tracking goals, "Clients Since July 2021" report with CSV export.
