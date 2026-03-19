@@ -1666,6 +1666,34 @@ export async function registerRoutes(
 
   // ==================== INVENTORY / STOCK ROUTES ====================
 
+  app.patch("/api/products/:id/manufactured-stock", requireEdit, async (req, res) => {
+    try {
+      const { delta, set } = req.body;
+      const product = await storage.getProduct(req.params.id);
+      if (!product) return res.status(404).json({ message: "Product not found" });
+
+      let newValue: number;
+      if (typeof set === "number") {
+        newValue = set;
+      } else if (typeof delta === "number") {
+        const current = (product as any).manufacturedStock ?? 0;
+        newValue = current + delta;
+      } else {
+        return res.status(400).json({ message: "Provide 'set' (absolute) or 'delta' (relative) number" });
+      }
+
+      await pool.query(
+        `UPDATE products SET manufactured_stock = $1 WHERE id = $2`,
+        [newValue, req.params.id]
+      );
+      const updated = await storage.getProduct(req.params.id);
+      res.json(updated);
+    } catch (error) {
+      console.error("Update manufactured stock error:", error);
+      res.status(500).json({ message: "Failed to update manufactured stock" });
+    }
+  });
+
   app.patch("/api/products/:id/stock", requireEdit, async (req, res) => {
     try {
       const { physicalStock, notes } = req.body;
@@ -1691,6 +1719,7 @@ export async function registerRoutes(
           p.id, p.sku, p.name, p.category,
           p.physical_stock, p.reserved_stock, p.available_stock,
           p.reorder_point, p.safety_stock, p.lead_time_days,
+          p.manufactured_stock,
           COALESCE(
             (SELECT SUM(ol.quantity)
              FROM order_lines ol
@@ -1701,7 +1730,7 @@ export async function registerRoutes(
           ) AS units_sold_90d
         FROM products p
         WHERE p.active = true
-          AND (p.physical_stock > 0 OR p.reserved_stock > 0 OR p.reorder_point > 0)
+          AND (p.physical_stock > 0 OR p.reserved_stock > 0 OR p.reorder_point > 0 OR p.manufactured_stock != 0)
         ORDER BY p.category, p.name
       `);
 
@@ -1716,6 +1745,7 @@ export async function registerRoutes(
         reorderPoint: parseInt(r.reorder_point) || 0,
         safetyStock: parseInt(r.safety_stock) || 0,
         leadTimeDays: parseInt(r.lead_time_days) || 0,
+        manufacturedStock: parseInt(r.manufactured_stock) || 0,
         unitsSold90d: parseInt(r.units_sold_90d) || 0,
         avgMonthlySales: Math.round((parseInt(r.units_sold_90d) || 0) / 3),
         dailyVelocity: parseFloat(((parseInt(r.units_sold_90d) || 0) / 90).toFixed(2)),
