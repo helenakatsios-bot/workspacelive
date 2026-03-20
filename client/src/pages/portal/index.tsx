@@ -958,6 +958,7 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
   const [customQuiltLines, setCustomQuiltLines] = useState<{ id: string; description: string; qty: number }[]>([{ id: crypto.randomUUID(), description: "", qty: 0 }]);
   const [weights, setWeights] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
+  const [packagingNotes, setPackagingNotes] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerOrderNumber, setCustomerOrderNumber] = useState("");
@@ -1117,12 +1118,17 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
 
     const rawNotes = editRequest.customerNotes || "";
     const poMatch = rawNotes.match(/^PO\/Order #:\s*(.+?)$/m);
+    const packagingMatch = rawNotes.match(/^Packaging \/ Boxing Notes:\s*([\s\S]+?)(?=\n\n[A-Z]|$)/m);
+    let remainingNotes = rawNotes;
     if (poMatch) {
       setCustomerOrderNumber(poMatch[1].trim());
-      setNotes(rawNotes.replace(/^PO\/Order #:\s*.+?\n?\n?/m, "").trim());
-    } else {
-      setNotes(rawNotes);
+      remainingNotes = remainingNotes.replace(/^PO\/Order #:\s*.+?\n?\n?/m, "").trim();
     }
+    if (packagingMatch) {
+      setPackagingNotes(packagingMatch[1].trim());
+      remainingNotes = remainingNotes.replace(/^Packaging \/ Boxing Notes:\s*[\s\S]+?(?=\n\n[A-Z]|$)/m, "").trim();
+    }
+    setNotes(remainingNotes);
 
     setDeliveryAddress(editRequest.shippingAddress || "");
     setCustomerName(editRequest.contactName || "");
@@ -1467,7 +1473,8 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
         ...(weightSelections.length > 0 ? ["Weight selections: " + weightSelections.join(", ")] : []),
         ...(customSizeNotes.length > 0 ? ["Custom inserts: " + customSizeNotes.join(", ")] : []),
       ];
-      const fullNotes = [notes, ...extraNotes].filter(Boolean).join("\n\n");
+      const packagingSection = packagingNotes.trim() ? `Packaging / Boxing Notes:\n${packagingNotes.trim()}` : "";
+      const fullNotes = [notes, packagingSection, ...extraNotes].filter(Boolean).join("\n\n");
       const activeCustomLines = customLines.filter((l) => l.size && l.qty > 0);
       const activeCustomQuiltLines = customQuiltLines.filter((l) => l.description.trim() && l.qty > 0);
       const payload = {
@@ -2404,6 +2411,24 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
                   onChange={(e) => setDeliveryAddress(e.target.value)}
                   rows={3}
                   data-testid="input-delivery-address"
+                />
+              </div>
+
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Package className="w-4 h-4 text-amber-600" />
+                  <Label htmlFor="packaging-notes" className="font-semibold">Packaging / Boxing Notes</Label>
+                  <span className="text-xs text-muted-foreground">(optional)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Let us know how many boxes you need, any packing preferences, or other packaging instructions.</p>
+                <Textarea
+                  id="packaging-notes"
+                  placeholder="e.g. Please pack in 3 separate boxes of 10 units each..."
+                  value={packagingNotes}
+                  onChange={(e) => setPackagingNotes(e.target.value)}
+                  rows={3}
+                  className="resize-none"
+                  data-testid="input-packaging-notes"
                 />
               </div>
 
