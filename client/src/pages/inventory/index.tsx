@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { Package, AlertTriangle, CheckCircle, Search, RefreshCw, BarChart3, Edit2, X, Check, Wrench, Plus, Minus } from "lucide-react";
+import { Package, AlertTriangle, CheckCircle, Search, RefreshCw, BarChart3, Edit2, X, Check, Wrench, Plus, Minus, ShoppingBag } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -128,7 +128,13 @@ export default function InventoryPage() {
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/inventory/dashboard"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/inventory/unmatched-sales"] });
   };
+
+  interface UnmatchedSale { description: string; totalQty: number; orderCount: number; firstOrder: string; lastOrder: string; }
+  const { data: unmatchedSales = [] } = useQuery<UnmatchedSale[]>({
+    queryKey: ["/api/inventory/unmatched-sales"],
+  });
 
   const recalcMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/inventory/recalculate-all", {}),
@@ -374,6 +380,42 @@ export default function InventoryPage() {
         <p><strong>Physical / Reserved / Available</strong> — tracks bought or received goods. Reserved is managed automatically by orders.</p>
         <p><strong className="text-purple-600">Made In-House</strong> — a separate counter for goods you manufacture yourself. Goes negative when you've sold more than you've made. Not linked to the order engine.</p>
       </div>
+
+      {unmatchedSales.length > 0 && (
+        <Card className="border-orange-200 dark:border-orange-800">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <ShoppingBag className="w-4 h-4 text-orange-600" />
+              <h2 className="font-semibold text-orange-700 dark:text-orange-400">Unmatched Sales Since 1 Mar 2026</h2>
+              <span className="text-xs text-muted-foreground">— these order lines couldn't be automatically linked to a product in the catalogue</span>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="text-center w-[100px]">Units Sold</TableHead>
+                  <TableHead className="text-center w-[100px]">Orders</TableHead>
+                  <TableHead className="text-center w-[160px]">Date Range</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {unmatchedSales.map((row, i) => (
+                  <TableRow key={i} data-testid={`row-unmatched-${i}`}>
+                    <TableCell className="text-sm font-medium">{row.description}</TableCell>
+                    <TableCell className="text-center font-semibold">{row.totalQty}</TableCell>
+                    <TableCell className="text-center text-muted-foreground text-sm">{row.orderCount}</TableCell>
+                    <TableCell className="text-center text-xs text-muted-foreground">
+                      {row.firstOrder === row.lastOrder
+                        ? new Date(row.firstOrder).toLocaleDateString("en-AU", { day: "2-digit", month: "short" })
+                        : `${new Date(row.firstOrder).toLocaleDateString("en-AU", { day: "2-digit", month: "short" })} – ${new Date(row.lastOrder).toLocaleDateString("en-AU", { day: "2-digit", month: "short" })}`}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -1848,6 +1848,39 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/inventory/unmatched-sales", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT
+          ol.description_override AS description,
+          SUM(ol.quantity) AS total_qty,
+          COUNT(DISTINCT o.id) AS order_count,
+          MIN(o.order_date) AS first_order,
+          MAX(o.order_date) AS last_order
+        FROM order_lines ol
+        JOIN orders o ON o.id = ol.order_id
+        WHERE o.order_date >= '2026-03-01'
+          AND o.status NOT IN ('cancelled')
+          AND ol.product_id IS NULL
+          AND ol.description_override IS NOT NULL
+          AND ol.description_override <> ''
+        GROUP BY ol.description_override
+        ORDER BY SUM(ol.quantity) DESC
+      `);
+      res.setHeader("Cache-Control", "no-store");
+      res.json(result.rows.map(r => ({
+        description: r.description,
+        totalQty: parseInt(r.total_qty) || 0,
+        orderCount: parseInt(r.order_count) || 0,
+        firstOrder: r.first_order,
+        lastOrder: r.last_order,
+      })));
+    } catch (error) {
+      console.error("Unmatched sales error:", error);
+      res.status(500).json({ message: "Failed to load unmatched sales" });
+    }
+  });
+
   app.get("/api/products/:id/stock-movements", requireAuth, async (req, res) => {
     try {
       const result = await pool.query(
