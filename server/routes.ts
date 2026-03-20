@@ -7116,7 +7116,16 @@ Rules:
   app.get("/api/portal/orders", requirePortalAuth, async (req, res) => {
     try {
       const result = await pool.query(`
-        SELECT o.*, c.legal_name as company_name
+        SELECT o.*, c.legal_name as company_name,
+          CASE
+            WHEN o.payment_status = 'paid' THEN 'paid'
+            WHEN EXISTS (
+              SELECT 1 FROM invoices i
+              WHERE (i.order_id = o.id OR (o.xero_invoice_id IS NOT NULL AND i.xero_invoice_id = o.xero_invoice_id))
+                AND i.status = 'paid'
+            ) THEN 'paid'
+            ELSE o.payment_status
+          END AS effective_payment_status
         FROM orders o
         LEFT JOIN companies c ON c.id = o.company_id
         WHERE o.company_id = $1
@@ -7126,7 +7135,7 @@ Rules:
         id: r.id,
         orderNumber: r.order_number,
         status: r.status,
-        paymentStatus: r.payment_status,
+        paymentStatus: r.effective_payment_status,
         orderDate: r.order_date,
         subtotal: r.subtotal,
         tax: r.tax,
@@ -7146,7 +7155,16 @@ Rules:
   app.get("/api/portal/orders/:id", requirePortalAuth, async (req, res) => {
     try {
       const result = await pool.query(`
-        SELECT o.*, c.legal_name as company_name
+        SELECT o.*, c.legal_name as company_name,
+          CASE
+            WHEN o.payment_status = 'paid' THEN 'paid'
+            WHEN EXISTS (
+              SELECT 1 FROM invoices i
+              WHERE (i.order_id = o.id OR (o.xero_invoice_id IS NOT NULL AND i.xero_invoice_id = o.xero_invoice_id))
+                AND i.status = 'paid'
+            ) THEN 'paid'
+            ELSE o.payment_status
+          END AS effective_payment_status
         FROM orders o
         LEFT JOIN companies c ON c.id = o.company_id
         WHERE o.id = $1 AND o.company_id = $2
@@ -7163,7 +7181,7 @@ Rules:
         id: r.id,
         orderNumber: r.order_number,
         status: r.status,
-        paymentStatus: r.payment_status,
+        paymentStatus: r.effective_payment_status,
         orderDate: r.order_date,
         requestedShipDate: r.requested_ship_date,
         subtotal: r.subtotal,
@@ -7961,9 +7979,19 @@ Rules:
         FROM invoices WHERE company_id = $1
       `, [companyId]);
       const recentOrders = await pool.query(`
-        SELECT id, order_number, status, order_date, total, customer_name, payment_status
-        FROM orders WHERE company_id = $1
-        ORDER BY order_date DESC LIMIT 5
+        SELECT o.id, o.order_number, o.status, o.order_date, o.total, o.customer_name,
+          CASE
+            WHEN o.payment_status = 'paid' THEN 'paid'
+            WHEN EXISTS (
+              SELECT 1 FROM invoices i
+              WHERE (i.order_id = o.id OR (o.xero_invoice_id IS NOT NULL AND i.xero_invoice_id = o.xero_invoice_id))
+                AND i.status = 'paid'
+            ) THEN 'paid'
+            ELSE o.payment_status
+          END AS effective_payment_status
+        FROM orders o
+        WHERE o.company_id = $1
+        ORDER BY o.order_date DESC LIMIT 5
       `, [companyId]);
       res.json({
         totalOrders: parseInt(ordersResult.rows[0].total_orders),
@@ -7980,7 +8008,7 @@ Rules:
           orderDate: r.order_date,
           total: r.total,
           customerName: r.customer_name,
-          paymentStatus: r.payment_status,
+          paymentStatus: r.effective_payment_status,
         })),
       });
     } catch (error) {

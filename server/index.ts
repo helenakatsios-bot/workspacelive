@@ -1649,6 +1649,25 @@ async function runStartupTasks() {
     console.error("[STARTUP] Error restoring Puradown orders:", err.message);
   }
 
+  // Reconcile payment_status on orders where a linked invoice is marked paid
+  try {
+    const reconciled = await pool.query(`
+      UPDATE orders o
+      SET payment_status = 'paid', updated_at = NOW()
+      WHERE o.payment_status != 'paid'
+        AND EXISTS (
+          SELECT 1 FROM invoices i
+          WHERE (i.order_id = o.id OR (o.xero_invoice_id IS NOT NULL AND i.xero_invoice_id = o.xero_invoice_id))
+            AND i.status = 'paid'
+        )
+    `);
+    if ((reconciled.rowCount ?? 0) > 0) {
+      console.log(`[STARTUP] Reconciled payment_status to 'paid' on ${reconciled.rowCount} orders where linked invoice is paid`);
+    }
+  } catch (err: any) {
+    console.error("[STARTUP] Error reconciling order payment_status:", err.message);
+  }
+
   console.log("All startup tasks completed");
 }
 

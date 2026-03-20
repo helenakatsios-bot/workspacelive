@@ -688,7 +688,22 @@ export async function autoSyncXeroInvoices(accessToken: string, tenantId: string
         if (!companyId) continue;
 
         const existingMapping = await getXeroSyncMappingByXeroId("order", xInv.InvoiceID);
-        const orderId = existingMapping?.localId || null;
+        let orderId: string | null = existingMapping?.localId || null;
+
+        // If no explicit mapping, try to match by invoice number = order number (same company)
+        if (!orderId && invNumber) {
+          const orderMatch = await db.select({ id: orders.id }).from(orders)
+            .where(and(eq(orders.companyId, companyId), eq(orders.orderNumber, invNumber)))
+            .limit(1);
+          if (orderMatch.length > 0) {
+            orderId = orderMatch[0].id;
+            // If Xero invoice is paid, update the matched order's payment_status
+            if (invoiceStatus === "paid") {
+              await db.update(orders).set({ paymentStatus: "paid" })
+                .where(and(eq(orders.id, orderId), sql`${orders.paymentStatus} != 'paid'`));
+            }
+          }
+        }
 
         await createInvoiceFromXero(xInv, companyId, orderId || "", invNumber, accessToken, tenantId);
         created++;
