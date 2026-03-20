@@ -122,9 +122,13 @@ export default function InventoryPage() {
   const [editingMadeId, setEditingMadeId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "low" | "out_of_stock">("all");
 
-  const { data: items = [], isLoading, refetch } = useQuery<InventoryItem[]>({
+  const { data: items = [], isLoading } = useQuery<InventoryItem[]>({
     queryKey: ["/api/inventory/dashboard"],
   });
+
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/inventory/dashboard"] });
+  };
 
   const recalcMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/inventory/recalculate-all", {}),
@@ -162,7 +166,7 @@ export default function InventoryPage() {
           <p className="text-sm text-muted-foreground mt-0.5">Real-time stock tracking · Sales velocity calculated from 1 Mar 2026</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="btn-refresh-inventory">
+          <Button variant="outline" size="sm" onClick={handleRefresh} data-testid="btn-refresh-inventory">
             <RefreshCw className="w-4 h-4 mr-1" />Refresh
           </Button>
           {canEdit && (
