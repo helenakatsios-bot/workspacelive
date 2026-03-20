@@ -159,7 +159,7 @@ export default function InventoryPage() {
             <BarChart3 className="w-6 h-6" />
             Inventory
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Real-time stock tracking</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Real-time stock tracking · Sales velocity calculated from 1 Mar 2026</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="btn-refresh-inventory">
@@ -267,7 +267,7 @@ export default function InventoryPage() {
                   </span>
                 </TableHead>
                 <TableHead className="text-center">Reorder Pt.</TableHead>
-                <TableHead className="text-center">Days Cover</TableHead>
+                <TableHead className="text-center" title="Days of stock remaining at current sell rate (from 1 Mar 2026)">Days Cover</TableHead>
                 <TableHead className="text-center">Status</TableHead>
               </TableRow>
             </TableHeader>

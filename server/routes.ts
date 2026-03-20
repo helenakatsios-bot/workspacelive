@@ -1772,6 +1772,11 @@ export async function registerRoutes(
 
   app.get("/api/inventory/dashboard", requireAuth, async (req, res) => {
     try {
+      const CALC_START = new Date("2026-03-01T00:00:00.000Z");
+      const now = new Date();
+      const daysSinceStart = Math.max(1, Math.round((now.getTime() - CALC_START.getTime()) / (1000 * 60 * 60 * 24)));
+      const monthsSinceStart = daysSinceStart / 30.44;
+
       const result = await pool.query(`
         SELECT
           p.id, p.sku, p.name, p.category,
@@ -1783,39 +1788,45 @@ export async function registerRoutes(
              FROM order_lines ol
              JOIN orders o ON o.id = ol.order_id
              WHERE ol.product_id = p.id
-               AND o.order_date >= NOW() - INTERVAL '90 days'
+               AND o.order_date >= '2026-03-01'
                AND o.status NOT IN ('cancelled')), 0
-          ) AS units_sold_90d
+          ) AS units_sold_since_march
         FROM products p
         WHERE p.active = true
           AND (p.physical_stock > 0 OR p.reserved_stock > 0 OR p.reorder_point > 0 OR p.manufactured_stock != 0)
         ORDER BY p.category, p.name
       `);
 
-      const rows = result.rows.map(r => ({
-        id: r.id,
-        sku: r.sku,
-        name: r.name,
-        category: r.category,
-        physicalStock: parseInt(r.physical_stock) || 0,
-        reservedStock: parseInt(r.reserved_stock) || 0,
-        availableStock: parseInt(r.available_stock) || 0,
-        reorderPoint: parseInt(r.reorder_point) || 0,
-        safetyStock: parseInt(r.safety_stock) || 0,
-        leadTimeDays: parseInt(r.lead_time_days) || 0,
-        manufacturedStock: parseInt(r.manufactured_stock) || 0,
-        inventoryCategory: r.inventory_category || null,
-        unitsSold90d: parseInt(r.units_sold_90d) || 0,
-        avgMonthlySales: Math.round((parseInt(r.units_sold_90d) || 0) / 3),
-        dailyVelocity: parseFloat(((parseInt(r.units_sold_90d) || 0) / 90).toFixed(2)),
-        daysOfCover: (parseInt(r.available_stock) || 0) > 0 && (parseInt(r.units_sold_90d) || 0) > 0
-          ? Math.round((parseInt(r.available_stock) / (parseInt(r.units_sold_90d) / 90)))
-          : null,
-        stockStatus:
-          (parseInt(r.available_stock) || 0) <= 0 ? "out_of_stock" :
-          (parseInt(r.reorder_point) || 0) > 0 && (parseInt(r.available_stock) || 0) <= (parseInt(r.reorder_point) || 0) ? "low" :
-          "ok",
-      }));
+      const rows = result.rows.map(r => {
+        const unitsSold = parseInt(r.units_sold_since_march) || 0;
+        const dailyVelocity = parseFloat((unitsSold / daysSinceStart).toFixed(2));
+        const avgMonthlySales = Math.round(unitsSold / monthsSinceStart);
+        const availableStock = parseInt(r.available_stock) || 0;
+        return {
+          id: r.id,
+          sku: r.sku,
+          name: r.name,
+          category: r.category,
+          physicalStock: parseInt(r.physical_stock) || 0,
+          reservedStock: parseInt(r.reserved_stock) || 0,
+          availableStock,
+          reorderPoint: parseInt(r.reorder_point) || 0,
+          safetyStock: parseInt(r.safety_stock) || 0,
+          leadTimeDays: parseInt(r.lead_time_days) || 0,
+          manufacturedStock: parseInt(r.manufactured_stock) || 0,
+          inventoryCategory: r.inventory_category || null,
+          unitsSold90d: unitsSold,
+          avgMonthlySales,
+          dailyVelocity,
+          daysOfCover: availableStock > 0 && dailyVelocity > 0
+            ? Math.round(availableStock / dailyVelocity)
+            : null,
+          stockStatus:
+            availableStock <= 0 ? "out_of_stock" :
+            (parseInt(r.reorder_point) || 0) > 0 && availableStock <= (parseInt(r.reorder_point) || 0) ? "low" :
+            "ok",
+        };
+      });
 
       res.json(rows);
     } catch (error) {
