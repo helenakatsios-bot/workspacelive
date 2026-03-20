@@ -39,6 +39,7 @@ import {
   GripVertical,
   ListOrdered,
   RotateCcw,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -3420,6 +3421,20 @@ function PortalLayout() {
           </div>
         </div>
       </header>
+
+      {(company as any)?.accountOverdue && (
+        <div className="bg-amber-50 dark:bg-amber-950 border-b border-amber-300 dark:border-amber-700" data-testid="banner-account-overdue">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-800 dark:text-amber-200">Your account is overdue.</p>
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                Please pay your outstanding balance as soon as possible. Contact us if you have any questions.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {renderPage()}

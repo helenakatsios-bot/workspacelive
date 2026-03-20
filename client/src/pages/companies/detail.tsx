@@ -69,6 +69,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -89,6 +99,8 @@ export default function CompanyDetailPage() {
   const [attachmentsOpen, setAttachmentsOpen] = useState(true);
   const [keyInfoOpen, setKeyInfoOpen] = useState(true);
   const [activeTab, setActiveTab] = useState("about");
+
+  const [overdueDialogOpen, setOverdueDialogOpen] = useState(false);
 
   const [activityDialog, setActivityDialog] = useState<{ open: boolean; type: string }>({ open: false, type: "" });
   const [activityContent, setActivityContent] = useState("");
@@ -476,6 +488,22 @@ export default function CompanyDetailPage() {
     },
   });
 
+  const toggleOverdueMutation = useMutation({
+    mutationFn: async (overdue: boolean) => {
+      return apiRequest("PATCH", `/api/companies/${params?.id}`, { accountOverdue: overdue });
+    },
+    onSuccess: (_data, overdue) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      toast({
+        title: overdue ? "Account flagged as overdue" : "Overdue flag cleared",
+        description: overdue
+          ? "The customer will see an overdue warning when they log in to the portal."
+          : "The overdue warning has been removed from the customer portal.",
+      });
+    },
+  });
+
   const addActivityMutation = useMutation({
     mutationFn: async ({ type, content }: { type: string; content: string }) => {
       return apiRequest("POST", `/api/companies/${params?.id}/activities`, {
@@ -744,6 +772,22 @@ export default function CompanyDetailPage() {
             )}
             {isAdmin && (
               <DropdownMenuItem
+                onClick={() => {
+                  if ((company as any).accountOverdue) {
+                    toggleOverdueMutation.mutate(false);
+                  } else {
+                    setOverdueDialogOpen(true);
+                  }
+                }}
+                className={(company as any).accountOverdue ? "" : "text-amber-600 focus:text-amber-600"}
+                data-testid="menu-toggle-overdue"
+              >
+                <AlertTriangle className="w-4 h-4 mr-2" />
+                {(company as any).accountOverdue ? "Clear overdue flag" : "Flag as overdue"}
+              </DropdownMenuItem>
+            )}
+            {isAdmin && (
+              <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 onClick={() => {
                   if (confirm(`Are you sure you want to delete ${company.tradingName || company.legalName}? All related records must be removed first.`)) {
@@ -774,6 +818,12 @@ export default function CompanyDetailPage() {
                 <h1 className="text-base font-bold leading-tight" data-testid="text-company-name">
                   {(company.tradingName || company.legalName).toUpperCase()}
                 </h1>
+                {(company as any).accountOverdue && (
+                  <Badge className="mt-1 gap-1 bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900 dark:text-amber-200" data-testid="badge-account-overdue">
+                    <AlertTriangle className="w-3 h-3" />
+                    Account Overdue
+                  </Badge>
+                )}
               </div>
             </div>
 
@@ -2555,6 +2605,30 @@ export default function CompanyDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={overdueDialogOpen} onOpenChange={setOverdueDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Flag account as overdue?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will show a prominent overdue warning in the customer portal for{" "}
+              <strong>{company?.tradingName || company?.legalName}</strong> every time they log in.
+              They can still place orders — this is a payment reminder only.
+              You can clear this flag at any time from the same menu.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-overdue-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => toggleOverdueMutation.mutate(true)}
+              data-testid="button-overdue-confirm"
+            >
+              Yes, flag as overdue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

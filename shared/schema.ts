@@ -29,6 +29,7 @@ export const companies = pgTable("companies", {
   shippingAddress: text("shipping_address"),
   paymentTerms: text("payment_terms").default("Net 30"),
   creditStatus: text("credit_status").notNull().default("active"), // active, on_hold
+  accountOverdue: boolean("account_overdue").notNull().default(false),
   phone: text("phone"),
   emailAddresses: text("email_addresses").array(),
   tags: text("tags").array(),
