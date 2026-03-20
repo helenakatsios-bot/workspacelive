@@ -1793,7 +1793,19 @@ export async function registerRoutes(
           ) AS units_sold_since_march
         FROM products p
         WHERE p.active = true
-          AND (p.physical_stock > 0 OR p.reserved_stock > 0 OR p.reorder_point > 0 OR p.manufactured_stock != 0)
+          AND (
+            p.physical_stock > 0
+            OR p.reserved_stock > 0
+            OR p.reorder_point > 0
+            OR p.manufactured_stock != 0
+            OR EXISTS (
+              SELECT 1 FROM order_lines ol
+              JOIN orders o ON o.id = ol.order_id
+              WHERE ol.product_id = p.id
+                AND o.order_date >= '2026-03-01'
+                AND o.status NOT IN ('cancelled')
+            )
+          )
         ORDER BY p.category, p.name
       `);
 
