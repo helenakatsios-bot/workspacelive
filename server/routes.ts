@@ -1840,6 +1840,7 @@ export async function registerRoutes(
         };
       });
 
+      res.setHeader("Cache-Control", "no-store");
       res.json(rows);
     } catch (error) {
       console.error("Inventory dashboard error:", error);
