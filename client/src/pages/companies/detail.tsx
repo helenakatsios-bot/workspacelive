@@ -101,6 +101,7 @@ export default function CompanyDetailPage() {
   const [activeTab, setActiveTab] = useState("about");
 
   const [overdueDialogOpen, setOverdueDialogOpen] = useState(false);
+  const [overdueAmountInput, setOverdueAmountInput] = useState("");
 
   const [activityDialog, setActivityDialog] = useState<{ open: boolean; type: string }>({ open: false, type: "" });
   const [activityContent, setActivityContent] = useState("");
@@ -489,12 +490,17 @@ export default function CompanyDetailPage() {
   });
 
   const toggleOverdueMutation = useMutation({
-    mutationFn: async (overdue: boolean) => {
-      return apiRequest("PATCH", `/api/companies/${params?.id}`, { accountOverdue: overdue });
+    mutationFn: async ({ overdue, amount }: { overdue: boolean; amount?: string }) => {
+      return apiRequest("PATCH", `/api/companies/${params?.id}`, {
+        accountOverdue: overdue,
+        overdueAmount: overdue ? (amount || null) : null,
+      });
     },
-    onSuccess: (_data, overdue) => {
+    onSuccess: (_data, { overdue }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      setOverdueDialogOpen(false);
+      setOverdueAmountInput("");
       toast({
         title: overdue ? "Account flagged as overdue" : "Overdue flag cleared",
         description: overdue
@@ -774,8 +780,9 @@ export default function CompanyDetailPage() {
               <DropdownMenuItem
                 onClick={() => {
                   if ((company as any).accountOverdue) {
-                    toggleOverdueMutation.mutate(false);
+                    toggleOverdueMutation.mutate({ overdue: false });
                   } else {
+                    setOverdueAmountInput((company as any).overdueAmount ? String((company as any).overdueAmount) : "");
                     setOverdueDialogOpen(true);
                   }
                 }}
@@ -821,7 +828,7 @@ export default function CompanyDetailPage() {
                 {(company as any).accountOverdue && (
                   <Badge className="mt-1 gap-1 bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900 dark:text-amber-200" data-testid="badge-account-overdue">
                     <AlertTriangle className="w-3 h-3" />
-                    Account Overdue
+                    Account Overdue{(company as any).overdueAmount ? ` — $${parseFloat((company as any).overdueAmount).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}
                   </Badge>
                 )}
               </div>
@@ -2610,18 +2617,40 @@ export default function CompanyDetailPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Flag account as overdue?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will show an overdue warning in the customer portal for{" "}
-              <strong>{company?.tradingName || company?.legalName}</strong> every time they log in.
-              Orders can still be placed, but the customer will be told no orders will be actioned until their account has been paid.
-              You can clear this flag at any time from the same menu.
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  This will show an overdue warning in the customer portal for{" "}
+                  <strong>{company?.tradingName || company?.legalName}</strong> every time they log in.
+                  Orders can still be placed, but the customer will be told no orders will be actioned until their account has been paid.
+                </p>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">
+                    Overdue amount (optional)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="e.g. 1250.00"
+                      value={overdueAmountInput}
+                      onChange={(e) => setOverdueAmountInput(e.target.value)}
+                      className="pl-7"
+                      data-testid="input-overdue-amount"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">If entered, this amount will be shown to the customer in the portal.</p>
+                </div>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-overdue-cancel">Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-amber-600 hover:bg-amber-700 text-white"
-              onClick={() => toggleOverdueMutation.mutate(true)}
+              onClick={() => toggleOverdueMutation.mutate({ overdue: true, amount: overdueAmountInput })}
               data-testid="button-overdue-confirm"
             >
               Yes, flag as overdue
