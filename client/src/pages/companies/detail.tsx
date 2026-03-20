@@ -2611,9 +2611,9 @@ export default function CompanyDetailPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Flag account as overdue?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will show a prominent overdue warning in the customer portal for{" "}
+              This will show an overdue warning in the customer portal for{" "}
               <strong>{company?.tradingName || company?.legalName}</strong> every time they log in.
-              They can still place orders — this is a payment reminder only.
+              Orders can still be placed, but the customer will be told no orders will be actioned until their account has been paid.
               You can clear this flag at any time from the same menu.
             </AlertDialogDescription>
           </AlertDialogHeader>
