@@ -103,6 +103,8 @@ export default function CompanyDetailPage() {
   const [overdueDialogOpen, setOverdueDialogOpen] = useState(false);
   const [overdueAmountInput, setOverdueAmountInput] = useState("");
   const [overdueDaysInput, setOverdueDaysInput] = useState("");
+  const [overdueBalanceLoading, setOverdueBalanceLoading] = useState(false);
+  const [overdueBalanceHint, setOverdueBalanceHint] = useState<string | null>(null);
 
   const [activityDialog, setActivityDialog] = useState<{ open: boolean; type: string }>({ open: false, type: "" });
   const [activityContent, setActivityContent] = useState("");
@@ -798,9 +800,24 @@ export default function CompanyDetailPage() {
                   if ((company as any).accountOverdue) {
                     toggleOverdueMutation.mutate({ overdue: false });
                   } else {
-                    setOverdueAmountInput((company as any).overdueAmount ? String((company as any).overdueAmount) : "");
+                    const existingAmount = (company as any).overdueAmount ? String(parseFloat((company as any).overdueAmount)) : "";
+                    setOverdueAmountInput(existingAmount);
                     setOverdueDaysInput("");
+                    setOverdueBalanceHint(null);
                     setOverdueDialogOpen(true);
+                    // Auto-fetch outstanding balance from Xero-synced invoices
+                    setOverdueBalanceLoading(true);
+                    fetch(`/api/companies/${company.id}/outstanding-balance`, { credentials: "include" })
+                      .then((r) => r.json())
+                      .then((data) => {
+                        if (data.total > 0) {
+                          const formatted = data.total.toFixed(2);
+                          setOverdueBalanceHint(formatted);
+                          if (!existingAmount) setOverdueAmountInput(formatted);
+                        }
+                      })
+                      .catch(() => {})
+                      .finally(() => setOverdueBalanceLoading(false));
                   }
                 }}
                 className={(company as any).accountOverdue ? "" : "text-amber-600 focus:text-amber-600"}
@@ -2675,7 +2692,15 @@ export default function CompanyDetailPage() {
                       data-testid="input-overdue-amount"
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">If entered, this amount will be shown to the customer in the portal.</p>
+                  {overdueBalanceLoading ? (
+                    <p className="text-xs text-blue-500 animate-pulse">Checking Xero for outstanding balance…</p>
+                  ) : overdueBalanceHint ? (
+                    <p className="text-xs text-emerald-600">
+                      Xero shows <strong>${parseFloat(overdueBalanceHint).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> outstanding on unpaid invoices — pre-filled above.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">If entered, this amount will be shown to the customer in the portal.</p>
+                  )}
                 </div>
               </div>
             </AlertDialogDescription>

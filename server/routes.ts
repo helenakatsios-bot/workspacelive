@@ -537,6 +537,24 @@ export async function registerRoutes(
     }
   });
 
+  // Returns total outstanding balance for a company based on unsynced invoices (for overdue dialog pre-fill)
+  app.get("/api/companies/:id/outstanding-balance", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT COALESCE(SUM(balance_due::numeric), 0) AS total
+         FROM invoices
+         WHERE company_id = $1
+           AND status NOT IN ('paid', 'void')`,
+        [req.params.id]
+      );
+      const total = parseFloat(result.rows[0]?.total ?? "0");
+      res.json({ total, hasSyncedData: total > 0 });
+    } catch (error) {
+      console.error("Outstanding balance error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/companies/:id/deals", requireAuth, async (req, res) => {
     try {
       const deals = await storage.getDealsByCompany(req.params.id);
