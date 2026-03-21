@@ -53,6 +53,7 @@ import CustomerAgentPage from "@/pages/service/customer-agent";
 import ChatflowsPage from "@/pages/service/chatflows";
 import KnowledgeBasePage from "@/pages/service/knowledge-base";
 import CustomerPortalPage from "@/pages/service/customer-portal";
+import OverdueAccountsPage from "@/pages/service/overdue-accounts";
 import ServiceAnalyticsPage from "@/pages/service/service-analytics";
 import DataAgentPage from "@/pages/data-management/data-agent";
 import DataIntegrationPage from "@/pages/data-management/data-integration";
@@ -175,6 +176,7 @@ function AuthenticatedApp() {
         <Route path="/service/chatflows" component={ChatflowsPage} />
         <Route path="/service/knowledge-base" component={KnowledgeBasePage} />
         <Route path="/service/customer-portal" component={CustomerPortalPage} />
+        <Route path="/service/overdue-accounts" component={OverdueAccountsPage} />
         <Route path="/service/analytics" component={ServiceAnalyticsPage} />
         <Route path="/data-management/data-agent" component={DataAgentPage} />
         <Route path="/data-management/data-integration" component={DataIntegrationPage} />

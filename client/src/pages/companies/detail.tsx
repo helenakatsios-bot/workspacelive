@@ -102,6 +102,7 @@ export default function CompanyDetailPage() {
 
   const [overdueDialogOpen, setOverdueDialogOpen] = useState(false);
   const [overdueAmountInput, setOverdueAmountInput] = useState("");
+  const [overdueDaysInput, setOverdueDaysInput] = useState("");
 
   const [activityDialog, setActivityDialog] = useState<{ open: boolean; type: string }>({ open: false, type: "" });
   const [activityContent, setActivityContent] = useState("");
@@ -490,17 +491,32 @@ export default function CompanyDetailPage() {
   });
 
   const toggleOverdueMutation = useMutation({
-    mutationFn: async ({ overdue, amount }: { overdue: boolean; amount?: string }) => {
+    mutationFn: async ({ overdue, amount, days }: { overdue: boolean; amount?: string; days?: string }) => {
+      let overdueSince: string | null = null;
+      if (overdue && days) {
+        const d = parseInt(days, 10);
+        if (!isNaN(d) && d > 0) {
+          const since = new Date();
+          since.setDate(since.getDate() - d);
+          overdueSince = since.toISOString();
+        }
+      }
+      if (overdue && !overdueSince) {
+        overdueSince = new Date().toISOString();
+      }
       return apiRequest("PATCH", `/api/companies/${params?.id}`, {
         accountOverdue: overdue,
         overdueAmount: overdue ? (amount || null) : null,
+        overdueSince: overdue ? overdueSince : null,
       });
     },
     onSuccess: (_data, { overdue }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/companies", params?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overdue-accounts"] });
       setOverdueDialogOpen(false);
       setOverdueAmountInput("");
+      setOverdueDaysInput("");
       toast({
         title: overdue ? "Account flagged as overdue" : "Overdue flag cleared",
         description: overdue
@@ -783,6 +799,7 @@ export default function CompanyDetailPage() {
                     toggleOverdueMutation.mutate({ overdue: false });
                   } else {
                     setOverdueAmountInput((company as any).overdueAmount ? String((company as any).overdueAmount) : "");
+                    setOverdueDaysInput("");
                     setOverdueDialogOpen(true);
                   }
                 }}
@@ -2626,6 +2643,23 @@ export default function CompanyDetailPage() {
                 </p>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">
+                    How many days are they already overdue?
+                  </label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="e.g. 15"
+                      value={overdueDaysInput}
+                      onChange={(e) => setOverdueDaysInput(e.target.value)}
+                      data-testid="input-overdue-days"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">The counter will keep ticking up from today automatically. Leave blank to start from today.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">
                     Overdue amount (optional)
                   </label>
                   <div className="relative">
@@ -2650,7 +2684,7 @@ export default function CompanyDetailPage() {
             <AlertDialogCancel data-testid="button-overdue-cancel">Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-amber-600 hover:bg-amber-700 text-white"
-              onClick={() => toggleOverdueMutation.mutate({ overdue: true, amount: overdueAmountInput })}
+              onClick={() => toggleOverdueMutation.mutate({ overdue: true, amount: overdueAmountInput, days: overdueDaysInput })}
               data-testid="button-overdue-confirm"
             >
               Yes, flag as overdue

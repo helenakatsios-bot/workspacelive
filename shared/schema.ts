@@ -31,6 +31,7 @@ export const companies = pgTable("companies", {
   creditStatus: text("credit_status").notNull().default("active"), // active, on_hold
   accountOverdue: boolean("account_overdue").notNull().default(false),
   overdueAmount: decimal("overdue_amount", { precision: 12, scale: 2 }),
+  overdueSince: timestamp("overdue_since"),
   phone: text("phone"),
   emailAddresses: text("email_addresses").array(),
   tags: text("tags").array(),

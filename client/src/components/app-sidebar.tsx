@@ -49,6 +49,7 @@ import {
   BookOpenCheck,
   Globe,
   ClipboardCheck,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Sidebar,
@@ -118,6 +119,7 @@ const serviceItems = [
   { title: "Chatflows", url: "/service/chatflows", icon: MessageCircle },
   { title: "Knowledge Base", url: "/service/knowledge-base", icon: BookOpenCheck },
   { title: "Customer Portal", url: "/service/customer-portal", icon: Globe },
+  { title: "Overdue Accounts", url: "/service/overdue-accounts", icon: AlertTriangle },
   { title: "Service Analytics", url: "/service/analytics", icon: BarChart3 },
 ];
 

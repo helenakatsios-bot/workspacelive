@@ -223,6 +223,52 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/overdue-accounts", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT id, legal_name, trading_name, account_overdue, overdue_amount, overdue_since, credit_status
+        FROM companies
+        WHERE account_overdue = true
+        ORDER BY overdue_since ASC NULLS LAST, legal_name ASC
+      `);
+      res.json(result.rows.map((r: any) => ({
+        id: r.id,
+        legalName: r.legal_name,
+        tradingName: r.trading_name,
+        accountOverdue: r.account_overdue,
+        overdueAmount: r.overdue_amount,
+        overdueSince: r.overdue_since,
+        creditStatus: r.credit_status,
+      })));
+    } catch (error) {
+      console.error("Overdue accounts error:", error);
+      res.status(500).json({ message: "Failed to fetch overdue accounts" });
+    }
+  });
+
+  app.patch("/api/overdue-accounts/:id", requireEdit, async (req, res) => {
+    try {
+      const { overdueAmount, overdueSince, accountOverdue } = req.body;
+      const updates: string[] = [];
+      const values: any[] = [];
+      let idx = 1;
+      if (overdueAmount !== undefined) { updates.push(`overdue_amount = $${idx++}`); values.push(overdueAmount || null); }
+      if (overdueSince !== undefined) { updates.push(`overdue_since = $${idx++}`); values.push(overdueSince || null); }
+      if (accountOverdue !== undefined) { updates.push(`account_overdue = $${idx++}`); values.push(accountOverdue); }
+      if (updates.length === 0) return res.status(400).json({ message: "Nothing to update" });
+      updates.push(`updated_at = NOW()`);
+      values.push(req.params.id);
+      await pool.query(
+        `UPDATE companies SET ${updates.join(", ")} WHERE id = $${idx}`,
+        values
+      );
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Update overdue account error:", error);
+      res.status(500).json({ message: "Failed to update" });
+    }
+  });
+
   app.get("/api/companies/:id", requireAuth, async (req, res) => {
     try {
       const company = await storage.getCompany(req.params.id);
