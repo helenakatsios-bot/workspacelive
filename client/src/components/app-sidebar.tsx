@@ -80,6 +80,7 @@ const mainNavItems = [
   { title: "Products", url: "/products", icon: Package },
   { title: "Email", url: "/marketing/email", icon: Mail },
   { title: "Customer Portal", url: "/service/customer-portal", icon: Globe },
+  { title: "Overdue Accounts", url: "/service/overdue-accounts", icon: AlertTriangle },
 ];
 
 const crmItems = [
