@@ -500,6 +500,18 @@ export default function OrderDetailPage() {
     },
   });
 
+  const sendAttachmentToMiloMutation = useMutation({
+    mutationFn: async (attachmentId: string) => {
+      return apiRequest("POST", `/api/orders/${params?.id}/attachments/${attachmentId}/send-to-milo`);
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Sent to Milo", description: `${data?.fileName || "File"} sent to Milo for printing.` });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to send to Milo", description: error?.message || "Could not send file to Milo.", variant: "destructive" });
+    },
+  });
+
   const addNoteMutation = useMutation({
     mutationFn: async (content: string) => {
       return apiRequest("POST", `/api/orders/${params?.id}/activities`, {
@@ -1828,6 +1840,22 @@ export default function OrderDetailPage() {
                                   <Download className="w-4 h-4" />
                                 </a>
                               </Button>
+                              {canEdit && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Send to Milo"
+                                  data-testid={`button-send-to-milo-attachment-${file.id}`}
+                                  disabled={sendAttachmentToMiloMutation.isPending}
+                                  onClick={() => sendAttachmentToMiloMutation.mutate(file.id)}
+                                >
+                                  {sendAttachmentToMiloMutation.isPending ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Send className="w-4 h-4 text-blue-500" />
+                                  )}
+                                </Button>
+                              )}
                               {canEdit && (
                                 <Button
                                   variant="ghost"
