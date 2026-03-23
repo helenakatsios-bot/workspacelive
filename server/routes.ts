@@ -8135,6 +8135,15 @@ Rules:
           COALESCE(SUM(balance_due) FILTER (WHERE status NOT IN ('paid', 'void')), 0) as outstanding_balance
         FROM invoices WHERE company_id = $1
       `, [companyId]);
+
+      // Use Xero-sourced overdue_amount if available — it's more accurate than local invoice sum
+      const companyBalanceResult = await pool.query(
+        `SELECT overdue_amount FROM companies WHERE id = $1`,
+        [companyId]
+      );
+      const xeroOverdueAmount = companyBalanceResult.rows[0]?.overdue_amount
+        ? parseFloat(companyBalanceResult.rows[0].overdue_amount)
+        : null;
       const recentOrders = await pool.query(`
         SELECT o.id, o.order_number, o.status, o.order_date, o.total, o.customer_name,
           CASE
@@ -8157,7 +8166,7 @@ Rules:
         lastOrderDate: ordersResult.rows[0].last_order_date,
         totalInvoices: parseInt(invoicesResult.rows[0].total_invoices),
         unpaidInvoices: parseInt(invoicesResult.rows[0].unpaid_invoices),
-        outstandingBalance: parseFloat(invoicesResult.rows[0].outstanding_balance),
+        outstandingBalance: xeroOverdueAmount !== null ? xeroOverdueAmount : parseFloat(invoicesResult.rows[0].outstanding_balance),
         recentOrders: recentOrders.rows.map((r: any) => ({
           id: r.id,
           orderNumber: r.order_number,

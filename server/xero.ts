@@ -719,6 +719,25 @@ export async function autoSyncXeroInvoices(accessToken: string, tenantId: string
 
   await saveLastXeroSyncTime(new Date());
 
+  // After syncing, refresh overdue_amount on all companies from the local invoices table
+  // This keeps the portal dashboard "Outstanding" card accurate without a live Xero API call
+  try {
+    await db.execute(sql`
+      UPDATE companies c
+      SET overdue_amount = sub.total
+      FROM (
+        SELECT company_id, COALESCE(SUM(balance_due::numeric), 0) AS total
+        FROM invoices
+        WHERE status NOT IN ('paid', 'void')
+        GROUP BY company_id
+      ) sub
+      WHERE c.id = sub.company_id
+        AND sub.total > 0
+    `);
+  } catch (refreshErr) {
+    console.error("[XERO-AUTOSYNC] Could not refresh overdue_amount on companies:", refreshErr);
+  }
+
   return { updated, created };
 }
 
