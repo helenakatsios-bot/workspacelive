@@ -2153,6 +2153,86 @@ export async function registerRoutes(
     }
   });
 
+  // Send a single attachment (e.g. freight docket) to Milo for printing
+  app.post("/api/orders/:id/attachments/:attachmentId/send-to-milo", requireEdit, async (req, res) => {
+    try {
+      const { id: orderId, attachmentId } = req.params;
+      const puraxApiUrl = process.env.PURAX_APP_EMAIL ? "https://app.puraxfeather.com.au" : "https://app.puraxfeather.com.au";
+      const puraxApiKey = process.env.PURAX_API_KEY;
+
+      // Fetch the order for context
+      const order = await storage.getOrder(orderId);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+      const company = order.companyId ? await storage.getCompany(order.companyId) : null;
+
+      // Fetch the attachment
+      const attResult = await pool.query(
+        `SELECT file_name, file_type, file_data, storage_path FROM attachments WHERE id = $1`,
+        [attachmentId]
+      );
+      const att = attResult.rows[0];
+      if (!att) return res.status(404).json({ message: "Attachment not found" });
+
+      let fileBuffer: Buffer | null = null;
+      if (att.file_data) {
+        fileBuffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+      } else if (att.storage_path && !att.storage_path.startsWith("db://")) {
+        try {
+          const fsModule = await import("fs");
+          fileBuffer = await fsModule.promises.readFile(att.storage_path);
+        } catch { /* ignore */ }
+      }
+      if (!fileBuffer) return res.status(400).json({ message: "File content not available" });
+
+      const companyName = company?.tradingName || company?.legalName || "Unknown";
+      const payload = {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        companyName,
+        customerName: companyName,
+        customerAddress: "",
+        customerPhone: "",
+        customerEmail: "",
+        deliveryMethod: "",
+        paymentMethod: "",
+        shippingCost: "0",
+        orderDetails: `Freight docket for Order ${order.orderNumber} — ${att.file_name}`,
+        notes: `Freight docket attachment: ${att.file_name}`,
+        subtotal: "$0",
+        tax: "$0",
+        totalAmount: "$0",
+        pdfData: fileBuffer.toString("base64"),
+        attachments: [],
+        isUrgent: false,
+        callbackUrl: "",
+      };
+
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (puraxApiKey) headers["x-api-key"] = puraxApiKey;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      const response = await fetch(`${puraxApiUrl}/api/webhook/orders`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const txt = await response.text().catch(() => "");
+        console.error(`[MILO-ATTACHMENT] Failed to send ${att.file_name}: ${response.status} ${txt}`);
+        return res.status(502).json({ message: `Milo returned ${response.status}` });
+      }
+      console.log(`[MILO-ATTACHMENT] Sent ${att.file_name} for order ${order.orderNumber} to Milo`);
+      res.json({ success: true, fileName: att.file_name });
+    } catch (error: any) {
+      console.error("Send attachment to Milo error:", error);
+      res.status(500).json({ message: error?.message || "Failed to send to Milo" });
+    }
+  });
+
   app.post("/api/orders/:id/attachments", requireEdit, async (req, res) => {
     try {
       const orderId = req.params.id;
