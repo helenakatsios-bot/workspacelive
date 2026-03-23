@@ -106,6 +106,8 @@ export default function CustomerPortalPage() {
   const [newPassword, setNewPassword] = useState("");
   const [newCompanyId, setNewCompanyId] = useState("");
   const [newPriceListId, setNewPriceListId] = useState("");
+  const [newPaymentTerms, setNewPaymentTerms] = useState("Net 30");
+  const [editPaymentTerms, setEditPaymentTerms] = useState("Net 30");
   const [resetPassword, setResetPassword] = useState("");
 
   const { data: portalUsers, isLoading } = useQuery<PortalUserAdmin[]>({
@@ -122,8 +124,11 @@ export default function CustomerPortalPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: { name: string; email: string; password: string; companyId: string }) => {
-      if (newPriceListId && newPriceListId !== "none" && data.companyId) {
-        await apiRequest("PATCH", `/api/companies/${data.companyId}`, { priceListId: newPriceListId });
+      const companyUpdates: any = {};
+      if (newPriceListId && newPriceListId !== "none") companyUpdates.priceListId = newPriceListId;
+      if (newPaymentTerms) companyUpdates.paymentTerms = newPaymentTerms;
+      if (data.companyId && Object.keys(companyUpdates).length > 0) {
+        await apiRequest("PATCH", `/api/companies/${data.companyId}`, companyUpdates);
       }
       const res = await apiRequest("POST", "/api/admin/portal-users", data);
       return res.json();
@@ -138,6 +143,7 @@ export default function CustomerPortalPage() {
       setNewPassword("");
       setNewCompanyId("");
       setNewPriceListId("");
+      setNewPaymentTerms("Net 30");
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message || "Failed to create portal user", variant: "destructive" });
@@ -172,9 +178,11 @@ export default function CustomerPortalPage() {
   });
 
   const editMutation = useMutation({
-    mutationFn: async ({ id, name, email, companyId, priceListId, newPassword }: { id: string; name: string; email: string; companyId: string; priceListId: string; newPassword?: string }) => {
-      if (priceListId && companyId) {
-        await apiRequest("PATCH", `/api/companies/${companyId}`, { priceListId: priceListId === "none" ? null : priceListId });
+    mutationFn: async ({ id, name, email, companyId, priceListId, paymentTerms, newPassword }: { id: string; name: string; email: string; companyId: string; priceListId: string; paymentTerms: string; newPassword?: string }) => {
+      if (companyId) {
+        const companyUpdates: any = { priceListId: priceListId === "none" ? null : priceListId };
+        if (paymentTerms) companyUpdates.paymentTerms = paymentTerms;
+        await apiRequest("PATCH", `/api/companies/${companyId}`, companyUpdates);
       }
       const body: any = { name, email };
       if (newPassword && newPassword.length >= 6) body.password = newPassword;
@@ -354,6 +362,7 @@ export default function CustomerPortalPage() {
                   <TableHead>Email</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead>Price List</TableHead>
+                  <TableHead>Payment Terms</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Last Login</TableHead>
                   <TableHead>Created</TableHead>
@@ -373,6 +382,7 @@ export default function CustomerPortalPage() {
                       setEditNewPassword("");
                       const userCompany = companies?.find((c) => c.id === user.companyId);
                       setEditPriceListId(userCompany?.priceListId || "none");
+                      setEditPaymentTerms(user.paymentTerms || "Net 30");
                     }}
                   >
                     <TableCell className="font-medium" data-testid={`text-user-name-${user.id}`}>
@@ -391,6 +401,19 @@ export default function CustomerPortalPage() {
                         const pl = priceLists?.find((p: any) => p.id === userCompany.priceListId);
                         return pl?.name || "-";
                       })()}
+                    </TableCell>
+                    <TableCell data-testid={`text-user-paymentterms-${user.id}`}>
+                      {user.paymentTerms ? (
+                        <Badge
+                          className={
+                            user.paymentTerms === "COD"
+                              ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
+                              : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                          }
+                        >
+                          {user.paymentTerms === "Net 30" ? "30 Days" : user.paymentTerms}
+                        </Badge>
+                      ) : "-"}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -430,6 +453,7 @@ export default function CustomerPortalPage() {
                             setEditNewPassword("");
                             const userCompany = companies?.find((c) => c.id === user.companyId);
                             setEditPriceListId(userCompany?.priceListId || "none");
+                            setEditPaymentTerms(user.paymentTerms || "Net 30");
                           }}
                           title="Edit name/email"
                           data-testid={`button-edit-${user.id}`}
@@ -568,6 +592,18 @@ export default function CustomerPortalPage() {
               />
             </div>
             <div className="space-y-2">
+              <Label>Payment Terms</Label>
+              <Select value={newPaymentTerms} onValueChange={setNewPaymentTerms}>
+                <SelectTrigger data-testid="select-portal-payment-terms">
+                  <SelectValue placeholder="Select payment terms..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="COD">COD (Cash on Delivery)</SelectItem>
+                  <SelectItem value="Net 30">30 Days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="portal-password">Password</Label>
               <Input
                 id="portal-password"
@@ -642,7 +678,7 @@ export default function CustomerPortalPage() {
             onSubmit={(e) => {
               e.preventDefault();
               if (showEditDialog) {
-                editMutation.mutate({ id: showEditDialog.id, name: editName, email: editEmail, companyId: showEditDialog.companyId, priceListId: editPriceListId, newPassword: editNewPassword || undefined });
+                editMutation.mutate({ id: showEditDialog.id, name: editName, email: editEmail, companyId: showEditDialog.companyId, priceListId: editPriceListId, paymentTerms: editPaymentTerms, newPassword: editNewPassword || undefined });
               }
             }}
             className="space-y-4"
@@ -697,6 +733,18 @@ export default function CustomerPortalPage() {
                       {pl.name}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Payment Terms</Label>
+              <Select value={editPaymentTerms} onValueChange={setEditPaymentTerms}>
+                <SelectTrigger data-testid="select-edit-payment-terms">
+                  <SelectValue placeholder="Select payment terms..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="COD">COD (Cash on Delivery)</SelectItem>
+                  <SelectItem value="Net 30">30 Days</SelectItem>
                 </SelectContent>
               </Select>
             </div>
