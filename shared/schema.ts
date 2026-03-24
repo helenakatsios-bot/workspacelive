@@ -439,6 +439,23 @@ export const insertEmailSchema = createInsertSchema(emails).omit({ id: true, cre
 export type InsertEmail = z.infer<typeof insertEmailSchema>;
 export type Email = typeof emails.$inferSelect;
 
+// ============ PRODUCTION SCHEDULE LIST ============
+export const productionScheduleItems = pgTable("production_schedule_items", {
+  id: serial("id").primaryKey(),
+  productId: varchar("product_id", { length: 36 }).references(() => products.id, { onDelete: "set null" }),
+  productName: text("product_name").notNull(),
+  category: text("category"),
+  qtyNeeded: integer("qty_needed").notNull().default(0),
+  notes: text("notes"),
+  status: text("status").notNull().default("pending"), // pending | sent
+  addedAt: timestamp("added_at").notNull().defaultNow(),
+  sentAt: timestamp("sent_at"),
+});
+
+export const insertProductionScheduleItemSchema = createInsertSchema(productionScheduleItems).omit({ id: true, addedAt: true, sentAt: true });
+export type InsertProductionScheduleItem = z.infer<typeof insertProductionScheduleItemSchema>;
+export type ProductionScheduleItem = typeof productionScheduleItems.$inferSelect;
+
 // ============ CUSTOMER ORDER REQUESTS (PUBLIC FORM SUBMISSIONS) ============
 export const customerOrderRequests = pgTable("customer_order_requests", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),

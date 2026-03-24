@@ -38,6 +38,7 @@ import ReportingDashboardsPage from "@/pages/reporting/dashboards";
 import ReportingReportsPage from "@/pages/reporting/reports";
 import ReportingGoalsPage from "@/pages/reporting/goals";
 import IntelligenceHubPage from "@/pages/intelligence";
+import ProductionListPage from "@/pages/production-list";
 import SalesWorkspacePage from "@/pages/sales/workspace";
 import SalesDocumentsPage from "@/pages/sales/documents";
 import SalesActivityFeedPage from "@/pages/sales/activity-feed";
@@ -190,6 +191,7 @@ function AuthenticatedApp() {
         <Route path="/reporting/reports" component={ReportingReportsPage} />
         <Route path="/reporting/goals" component={ReportingGoalsPage} />
         <Route path="/intelligence" component={IntelligenceHubPage} />
+        <Route path="/production-list" component={ProductionListPage} />
         <Route path="/reports/clients-since-july-2021" component={ClientsSinceJuly2021Page} />
         <Route path="/inventory" component={InventoryPage} />
         <Route path="/admin" component={AdminPage} />

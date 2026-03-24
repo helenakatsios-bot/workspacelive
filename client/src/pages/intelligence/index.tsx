@@ -1,5 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -12,8 +17,9 @@ import {
 import {
   TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Package,
   Users, DollarSign, Clock, Activity, Zap, Brain, BarChart2,
-  ArrowUp, ArrowDown, Minus,
+  ArrowUp, ArrowDown, Minus, ClipboardList, Plus,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { format, parseISO } from "date-fns";
 
 const COLORS = ["#6366f1", "#8b5cf6", "#06b6d4", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#14b8a6"];
@@ -645,7 +651,29 @@ function StockIntelligence() {
 
 // ── Production Planning Tab ───────────────────────────────────────────────────
 function ProductionPlanning() {
+  const { toast } = useToast();
   const { data, isLoading } = useQuery<any[]>({ queryKey: ["/api/analytics/stock-forecast"] });
+  const { data: listItems = [] } = useQuery<any[]>({ queryKey: ["/api/production-list"] });
+
+  const [dialogItem, setDialogItem] = useState<any | null>(null);
+  const [dialogQty, setDialogQty] = useState("");
+  const [dialogNotes, setDialogNotes] = useState("");
+
+  const addMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/production-list", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/production-list"] });
+      setDialogItem(null);
+      toast({ title: `Added to production list`, description: `View your list to send it to your supplier when ready.` });
+    },
+    onError: () => toast({ title: "Failed to add item", variant: "destructive" }),
+  });
+
+  const openDialog = (p: any) => {
+    setDialogItem(p);
+    setDialogQty(String(parseInt(p.suggested_reorder_qty) || ""));
+    setDialogNotes("");
+  };
 
   if (isLoading) return <Skeleton className="h-96" />;
   if (!data) return null;
@@ -655,6 +683,8 @@ function ProductionPlanning() {
     const days = p.days_remaining !== null ? parseInt(p.days_remaining) : 999;
     return days <= 60 && p.avg_daily_usage > 0;
   });
+
+  const pendingCount = listItems.filter((i: any) => i.status === "pending").length;
 
   const categoryRecommendations = needProduction.reduce((acc: Record<string, { count: number; urgentCount: number; totalReorder: number }>, p) => {
     const cat = p.category || "Other";
@@ -667,6 +697,25 @@ function ProductionPlanning() {
 
   return (
     <div className="space-y-6">
+      {/* Production list shortcut banner */}
+      <div className="flex items-center justify-between bg-purple-50 dark:bg-purple-950/20 border border-purple-200 rounded-lg p-4">
+        <div className="flex items-center gap-3">
+          <ClipboardList className="w-5 h-5 text-purple-600" />
+          <div>
+            <p className="font-medium text-sm">Your Supplier Production Order List</p>
+            <p className="text-xs text-muted-foreground">
+              {pendingCount > 0 ? `${pendingCount} item${pendingCount !== 1 ? "s" : ""} waiting to send` : "Click "Schedule Now" on any product below to start building your list"}
+            </p>
+          </div>
+        </div>
+        <Link href="/production-list">
+          <Button size="sm" variant={pendingCount > 0 ? "default" : "outline"} data-testid="btn-view-production-list">
+            {pendingCount > 0 && <span className="w-5 h-5 rounded-full bg-white text-purple-700 text-xs font-bold flex items-center justify-center mr-1.5">{pendingCount}</span>}
+            View List
+          </Button>
+        </Link>
+      </div>
+
       <Card className="bg-purple-50 dark:bg-purple-950/10 border-purple-200">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2 text-purple-700 dark:text-purple-400">
@@ -694,7 +743,7 @@ function ProductionPlanning() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Production Priority Queue (Stock Running Low)</CardTitle>
-          <CardDescription>Ordered by urgency — products running out soonest</CardDescription>
+          <CardDescription>Click <strong>Schedule Now</strong> to add a product to your supplier order list</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -706,14 +755,15 @@ function ProductionPlanning() {
                   <th className="text-left p-3 font-medium">Category</th>
                   <th className="text-right p-3 font-medium">Days Left</th>
                   <th className="text-right p-3 font-medium">Daily Usage</th>
-                  <th className="text-right p-3 font-medium">Suggested Production Run</th>
+                  <th className="text-right p-3 font-medium">Suggested Run</th>
                   <th className="text-center p-3 font-medium">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {needProduction.slice(0, 30).map((p, i) => {
+                {needProduction.slice(0, 30).map((p) => {
                   const days = parseInt(p.days_remaining);
                   const priority = days <= 7 ? "🔴 CRITICAL" : days <= 14 ? "🟠 HIGH" : days <= 30 ? "🟡 MEDIUM" : "🟢 PLAN";
+                  const alreadyAdded = listItems.some((i: any) => i.product_id === p.id && i.status === "pending");
                   return (
                     <tr key={p.id} className={`border-b hover:bg-muted/20 ${days <= 14 ? "bg-red-50 dark:bg-red-950/10" : days <= 30 ? "bg-amber-50 dark:bg-amber-950/10" : ""}`}>
                       <td className="p-3 text-sm font-medium">{priority}</td>
@@ -727,10 +777,15 @@ function ProductionPlanning() {
                       <td className="p-3 text-right">{parseFloat(p.avg_daily_usage).toFixed(1)}/day</td>
                       <td className="p-3 text-right text-blue-600 font-semibold">{parseInt(p.suggested_reorder_qty).toLocaleString()} units</td>
                       <td className="p-3 text-center">
-                        <Link href={`/products/${p.id}`}
-                          className={`text-xs px-2 py-1 rounded font-medium cursor-pointer hover:opacity-80 transition-opacity ${days <= 14 ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}>
-                          {days <= 14 ? "Schedule Now" : "Schedule Soon"}
-                        </Link>
+                        {alreadyAdded ? (
+                          <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-700 font-medium">✓ On List</span>
+                        ) : (
+                          <button onClick={() => openDialog(p)}
+                            className={`text-xs px-2 py-1 rounded font-medium cursor-pointer hover:opacity-80 transition-opacity ${days <= 14 ? "bg-red-100 text-red-700" : "bg-purple-100 text-purple-700"}`}
+                            data-testid={`btn-schedule-${p.id}`}>
+                            {days <= 14 ? "Schedule Now" : "Schedule Soon"}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -760,6 +815,52 @@ function ProductionPlanning() {
           </ResponsiveContainer>
         </CardContent>
       </Card>
+
+      {/* Add to Production List Dialog */}
+      <Dialog open={!!dialogItem} onOpenChange={(open) => !open && setDialogItem(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-4 h-4 text-purple-600" /> Add to Supplier Order List
+            </DialogTitle>
+          </DialogHeader>
+          {dialogItem && (
+            <div className="space-y-4 py-2">
+              <div className="bg-muted/30 rounded-lg p-3">
+                <p className="font-semibold">{dialogItem.name}</p>
+                <p className="text-sm text-muted-foreground">{dialogItem.category || "No category"}</p>
+                <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+                  <span>Available: <strong>{dialogItem.available_stock}</strong></span>
+                  <span>Daily usage: <strong>{parseFloat(dialogItem.avg_daily_usage).toFixed(1)}/day</strong></span>
+                  <span className={parseInt(dialogItem.days_remaining) <= 14 ? "text-red-600 font-bold" : ""}>
+                    {dialogItem.days_remaining !== null ? `${parseInt(dialogItem.days_remaining)} days left` : "No usage data"}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="dialog-qty">Quantity to Order</Label>
+                <Input id="dialog-qty" type="number" value={dialogQty} onChange={e => setDialogQty(e.target.value)}
+                  placeholder="Enter quantity" className="mt-1" min={0} data-testid="input-dialog-qty" />
+                <p className="text-xs text-muted-foreground mt-1">Suggested: {parseInt(dialogItem.suggested_reorder_qty).toLocaleString()} units</p>
+              </div>
+              <div>
+                <Label htmlFor="dialog-notes">Notes for Supplier (optional)</Label>
+                <Input id="dialog-notes" value={dialogNotes} onChange={e => setDialogNotes(e.target.value)}
+                  placeholder="e.g. Priority delivery needed" className="mt-1" data-testid="input-dialog-notes" />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogItem(null)}>Cancel</Button>
+            <Button onClick={() => addMutation.mutate({
+              productId: dialogItem?.id, productName: dialogItem?.name, category: dialogItem?.category,
+              qtyNeeded: parseInt(dialogQty) || 0, notes: dialogNotes || null,
+            })} disabled={!dialogQty || addMutation.isPending} data-testid="btn-confirm-add-to-list">
+              {addMutation.isPending ? "Adding..." : "Add to Production List"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

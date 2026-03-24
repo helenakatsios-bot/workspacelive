@@ -9884,6 +9884,145 @@ Rules:
 
   registerChatRoutes(app);
 
+  // ── Production Schedule List ─────────────────────────────────────────────
+  app.get("/api/production-list", requireAuth, async (_req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT * FROM production_schedule_items
+        ORDER BY status ASC, added_at DESC
+      `);
+      res.json(result.rows);
+    } catch (err) {
+      console.error("Production list fetch error:", err);
+      res.status(500).json({ message: "Failed to fetch production list" });
+    }
+  });
+
+  app.post("/api/production-list", requireAuth, async (req, res) => {
+    try {
+      const { productId, productName, category, qtyNeeded, notes } = req.body;
+      if (!productName) return res.status(400).json({ message: "Product name required" });
+      const result = await pool.query(
+        `INSERT INTO production_schedule_items (product_id, product_name, category, qty_needed, notes, status)
+         VALUES ($1, $2, $3, $4, $5, 'pending')
+         RETURNING *`,
+        [productId || null, productName, category || null, qtyNeeded || 0, notes || null]
+      );
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error("Production list add error:", err);
+      res.status(500).json({ message: "Failed to add to production list" });
+    }
+  });
+
+  app.patch("/api/production-list/:id", requireAuth, async (req, res) => {
+    try {
+      const { qtyNeeded, notes } = req.body;
+      const result = await pool.query(
+        `UPDATE production_schedule_items SET qty_needed = $1, notes = $2 WHERE id = $3 RETURNING *`,
+        [qtyNeeded, notes || null, req.params.id]
+      );
+      if (result.rows.length === 0) return res.status(404).json({ message: "Item not found" });
+      res.json(result.rows[0]);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update item" });
+    }
+  });
+
+  app.delete("/api/production-list/:id", requireAuth, async (req, res) => {
+    try {
+      await pool.query("DELETE FROM production_schedule_items WHERE id = $1", [req.params.id]);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete item" });
+    }
+  });
+
+  app.post("/api/production-list/send-email", requireAuth, async (req, res) => {
+    try {
+      const { supplierEmail, supplierName, additionalNotes } = req.body;
+      if (!supplierEmail) return res.status(400).json({ message: "Supplier email required" });
+
+      const items = await pool.query(
+        `SELECT * FROM production_schedule_items WHERE status = 'pending' ORDER BY category, product_name`
+      );
+      if (items.rows.length === 0) return res.status(400).json({ message: "No pending items to send" });
+
+      // Build the email body
+      const today = new Date().toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+      const categories = [...new Set(items.rows.map((r: any) => r.category || "General"))];
+      let tableRows = "";
+      let grandTotal = 0;
+      categories.forEach(cat => {
+        const catItems = items.rows.filter((r: any) => (r.category || "General") === cat);
+        tableRows += `<tr><td colspan="3" style="background:#f3f4f6;font-weight:bold;padding:8px 12px;color:#374151;">${cat}</td></tr>`;
+        catItems.forEach((item: any) => {
+          tableRows += `<tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${item.product_name}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;">${item.qty_needed.toLocaleString()}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;">${item.notes || ""}</td>
+          </tr>`;
+          grandTotal += parseInt(item.qty_needed) || 0;
+        });
+      });
+
+      const emailBody = `
+        <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;color:#111827;">
+          <div style="background:#1e293b;color:white;padding:24px 32px;border-radius:8px 8px 0 0;">
+            <h1 style="margin:0;font-size:22px;">Production Order Request</h1>
+            <p style="margin:8px 0 0;opacity:0.75;font-size:14px;">Purax Feather Holdings — ${today}</p>
+          </div>
+          <div style="padding:24px 32px;background:#ffffff;border:1px solid #e5e7eb;">
+            <p>Dear ${supplierName || "Supplier"},</p>
+            <p>Please find below our current production order requirements. Could you please confirm availability and expected lead times for each item?</p>
+            ${additionalNotes ? `<div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px 16px;margin:16px 0;border-radius:0 4px 4px 0;"><strong>Additional Notes:</strong><br>${additionalNotes}</div>` : ""}
+            <table style="width:100%;border-collapse:collapse;margin:24px 0;font-size:14px;">
+              <thead>
+                <tr style="background:#f9fafb;">
+                  <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e5e7eb;color:#374151;">Product</th>
+                  <th style="padding:10px 12px;text-align:center;border-bottom:2px solid #e5e7eb;color:#374151;">Qty Required</th>
+                  <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e5e7eb;color:#374151;">Notes</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+              <tfoot>
+                <tr style="background:#f9fafb;">
+                  <td style="padding:10px 12px;font-weight:bold;">TOTAL</td>
+                  <td style="padding:10px 12px;text-align:center;font-weight:bold;">${grandTotal.toLocaleString()}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+            <p>Please reply with your availability, pricing, and estimated delivery dates.</p>
+            <p>Kind regards,<br><strong>Purax Feather Holdings</strong></p>
+          </div>
+          <div style="background:#f3f4f6;padding:12px 32px;border-radius:0 0 8px 8px;font-size:12px;color:#6b7280;text-align:center;">
+            This email was generated from the Purax CRM Production Planning system.
+          </div>
+        </div>`;
+
+      // Get Outlook token to send
+      const tokenRow = await pool.query("SELECT * FROM outlook_tokens LIMIT 1");
+      if (tokenRow.rows.length === 0) return res.status(400).json({ message: "No Outlook account connected. Please connect Outlook in Email settings." });
+
+      const { getStoredOutlookToken, refreshOutlookTokenIfNeeded } = await import("./outlook");
+      let tokenData = tokenRow.rows[0];
+      tokenData = await refreshOutlookTokenIfNeeded(tokenData);
+      const { sendEmail: sendOutlookEmail } = await import("./outlook");
+      await sendOutlookEmail(tokenData.access_token, [supplierEmail], `Production Order Request — ${today}`, emailBody);
+
+      // Mark all pending items as sent
+      await pool.query(
+        `UPDATE production_schedule_items SET status = 'sent', sent_at = NOW() WHERE status = 'pending'`
+      );
+
+      res.json({ success: true, itemsSent: items.rows.length });
+    } catch (err: any) {
+      console.error("Production list send email error:", err);
+      res.status(500).json({ message: err.message || "Failed to send email" });
+    }
+  });
+
   // ── Predictive Intelligence & Analytics Routes ──────────────────────────
   app.get("/api/analytics/stock-forecast", requireAuth, async (_req, res) => {
     try {

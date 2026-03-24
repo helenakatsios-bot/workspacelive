@@ -127,6 +127,7 @@ const serviceItems = [
 
 const reportingItems = [
   { title: "Intelligence Hub", url: "/intelligence", icon: Brain },
+  { title: "Supplier Order List", url: "/production-list", icon: ClipboardList },
   { title: "Dashboards", url: "/reporting/dashboards", icon: BarChart3 },
   { title: "Reports", url: "/reporting/reports", icon: FileText },
   { title: "Goals", url: "/reporting/goals", icon: Target },
@@ -154,7 +155,7 @@ export function AppSidebar() {
   const isCommerceActive = location.startsWith("/commerce");
   const isServiceActive = location.startsWith("/service");
   const isDataMgmtActive = location.startsWith("/data-management");
-  const isReportingActive = location.startsWith("/reporting") || location.startsWith("/reports") || location.startsWith("/intelligence");
+  const isReportingActive = location.startsWith("/reporting") || location.startsWith("/reports") || location.startsWith("/intelligence") || location.startsWith("/production-list");
 
   return (
     <Sidebar>
