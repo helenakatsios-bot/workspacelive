@@ -649,29 +649,125 @@ function StockIntelligence() {
   );
 }
 
+// ── Supplier Order Template Data (from Excel) ──────────────────────────────
+const SUPPLIER_TEMPLATE: Record<string, string[]> = {
+  "Cassettes": [
+    "DOUBLE - CASSETTE", "KING - CASSETTE", "SUPER KING - CASSETTE", "QUEEN - CASSETTE",
+    "SINGLE - CASSETTE", "KING SINGLE - CASSETTE",
+    "GOLD QUILT CASE", "SUPER KING - GOLD QUILT CASE", "QUEEN - GOLD QUILT CASE",
+    "KING - GOLD QUILT CASE", "SINGLE - GOLD QUILT CASE", "DOUBLE - GOLD QUILT CASE",
+    "KING - STRIPPED QUILT", "QUEEN - STRIPPED QUILT", "SUPER KING - STRIPPED QUILT",
+    "SINGLE - STRIPPED QUILT", "DOUBLE - STRIPPED QUILT",
+    "QUEEN - CHANNELS", "KING - CHANNELS", "COT - CHANNELS", "DOUBLE - CHANNELS",
+    "SINGLE - CHANNELS", "SUPER KING - CHANNELS", "KING SINGLE - CHANNELS",
+    "KING - CASSETTE 245X210 (248X213CM) [LINEN HOUSE]",
+  ],
+  "Mattress Toppers": [
+    "KING - 183 x 204 x 10 cm", "DOUBLE 184X214CM", "KING SINGLE – 107 x 204 x 10 cm",
+    "QUEEN – 153 x 204 x 10 cm", "SINGLE 140X214CM",
+  ],
+  "4 Seasons Quilts": [
+    "SUPER KING - 4 SEASONS FILLED", "QUEEN - 4 SEASONS FILLED",
+    "DOUBLE - 4 SEASONS FILLED", "SINGLE - 4 SEASONS FILLED", "KING - 4 SEASONS FILLED",
+  ],
+  "50% Mid Warm Quilts": [
+    "SINGLE - 50% MID WARM FILLED", "SUPER KING - 50% MID WARM FILLED",
+    "DOUBLE - 50% MID WARM FILLED", "QUEEN - 50% MID WARM FILLED", "KING - 50% MID WARM FILLED",
+  ],
+  "80% Mid Warm Quilts": [
+    "SINGLE - 80% MID WARM FILLED", "SUPER KING - 80% MID WARM FILLED",
+    "KING - 80% MID WARM FILLED", "DOUBLE - 80% MID WARM FILLED", "QUEEN - 80% MID WARM FILLED",
+  ],
+  "50% Duck Winter Quilts": [
+    "SUPER KING - 50% DUCK WINTER FILLED", "QUEEN - 50% DUCK WINTER FILLED",
+    "KING - 50% DUCK WINTER FILLED", "DOUBLE - 50% DUCK WINTER FILLED", "SINGLE - 50% DUCK WINTER FILLED",
+  ],
+  "80% Duck Winter Quilts": [
+    "SUPER KING - 80% DUCK WINTER FILLED", "DOUBLE - 80% DUCK WINTER FILLED",
+    "SINGLE - 80% DUCK WINTER FILLED", "QUEEN - 80% DUCK WINTER FILLED", "KING - 80% DUCK WINTER FILLED",
+  ],
+  "Microsoft Quilts": [
+    "DOUBLE 184X214CM - MICROSOFT", "QUEEN 214X214CM - MICROSOFT",
+    "SINGLE 140X214CM - MICROSOFT", "KING 244X214CM - MICROSOFT",
+  ],
+  "Blankets": ["BLANKETS"],
+  "Piped Pillows": [
+    "45X70CM - (48X73CM) - PIPED PILLOWS", "50X80CM - (53X83CM) - PIPED PILLOWS",
+    "50X90CM - (53X93CM) - PIPED PILLOWS", "65 X 65CM (68X68CM) - PIPED PILLOWS",
+    "45X70CM - (48X73CM) - PIPED RED PILLOWS", "50X90CM - (53X93CM) - PIPED GREEN PILLOWS",
+  ],
+  "Chamber Pillows": [
+    "50X90CM - (53X93CM) - CHAMBER PILLOW", "45X70CM - (48X73CM) - CHAMBER PILLOW",
+  ],
+  "Stripped Pillows": [
+    "45X70CM - (48X73CM) - STRIP PILLOW", "50X90CM - (53X93CM) - STRIP PILLOW",
+  ],
+  "Gold Pillows": [
+    "50X90CM - (53X93CM) - GOLD PILLOW CASE", "45X70CM - (48X73CM) - GOLD PILLOW CASE",
+  ],
+  "Inserts": [
+    "40X40CM - (43X43CM)", "40X80CM - (43X83CM)", "45X45CM - (48X48CM)",
+    "45X70CM - (48X73CM)", "50X30CM - (53X33CM)", "50X50CM - (53X53CM)",
+    "50X80CM - (53X83CM)", "50X90CM - (53X93CM)", "50X110CM - (53X113CM)",
+    "55X30CM - (58X33CM)", "55X55CM - (58X58CM)", "60X40CM - (63X43CM)",
+    "60X60CM - (63X63CM)", "65X40CM - (68X43CM)", "65X65CM - (68X68CM)",
+  ],
+  "Packaging": [
+    "SIENNA", "PURADOWN", "LINEN HOUSE", "SUPERIOR BAG", "65X65 PURADOWN BACK",
+    "OLD PACKAGING", "PURADOWN BOX",
+    "BOX 55CM WIDE X 46CM DEEP X 70CM HIGH", "BOX 63.5CM WIDE X 50CM DEEP X 86CM HIGH",
+    "BOX 50CM WIDE X 50CM LENGTH X 40CM HEIGHT",
+  ],
+  "Down & Feather": ["2-4CM WHITE", "80% DOWN DUCK WHITE", "80% DOWN DUCK GREY"],
+};
+
+type DialogConfig = {
+  name: string;
+  category?: string;
+  productId?: string;
+  suggestedQty?: number;
+  availableStock?: number;
+  avgDailyUsage?: number;
+  daysRemaining?: number | null;
+};
+
 // ── Production Planning Tab ───────────────────────────────────────────────────
 function ProductionPlanning() {
   const { toast } = useToast();
   const { data, isLoading } = useQuery<any[]>({ queryKey: ["/api/analytics/stock-forecast"] });
   const { data: listItems = [] } = useQuery<any[]>({ queryKey: ["/api/production-list"] });
 
-  const [dialogItem, setDialogItem] = useState<any | null>(null);
+  const [dialog, setDialog] = useState<DialogConfig | null>(null);
   const [dialogQty, setDialogQty] = useState("");
   const [dialogNotes, setDialogNotes] = useState("");
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [templateCategory, setTemplateCategory] = useState<string | null>(null);
 
   const addMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/production-list", data),
+    mutationFn: (payload: any) => apiRequest("POST", "/api/production-list", payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/production-list"] });
-      setDialogItem(null);
-      toast({ title: `Added to production list`, description: `View your list to send it to your supplier when ready.` });
+      setDialog(null);
+      toast({ title: "Added to production list", description: "View your list to send to your supplier." });
     },
     onError: () => toast({ title: "Failed to add item", variant: "destructive" }),
   });
 
-  const openDialog = (p: any) => {
-    setDialogItem(p);
+  const openForecastDialog = (p: any) => {
+    setDialog({
+      name: p.name, category: p.category, productId: p.id,
+      suggestedQty: parseInt(p.suggested_reorder_qty) || undefined,
+      availableStock: p.available_stock,
+      avgDailyUsage: parseFloat(p.avg_daily_usage),
+      daysRemaining: p.days_remaining !== null ? parseInt(p.days_remaining) : null,
+    });
     setDialogQty(String(parseInt(p.suggested_reorder_qty) || ""));
+    setDialogNotes("");
+  };
+
+  const openTemplateDialog = (name: string, category: string) => {
+    setDialog({ name, category });
+    setDialogQty("");
     setDialogNotes("");
   };
 
@@ -704,7 +800,7 @@ function ProductionPlanning() {
           <div>
             <p className="font-medium text-sm">Your Supplier Production Order List</p>
             <p className="text-xs text-muted-foreground">
-              {pendingCount > 0 ? `${pendingCount} item${pendingCount !== 1 ? "s" : ""} waiting to send` : "Click "Schedule Now" on any product below to start building your list"}
+              {pendingCount > 0 ? `${pendingCount} item${pendingCount !== 1 ? "s" : ""} waiting to send` : 'Click "Schedule Now" on any product below to start building your list'}
             </p>
           </div>
         </div>
@@ -780,7 +876,7 @@ function ProductionPlanning() {
                         {alreadyAdded ? (
                           <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-700 font-medium">✓ On List</span>
                         ) : (
-                          <button onClick={() => openDialog(p)}
+                          <button onClick={() => openForecastDialog(p)}
                             className={`text-xs px-2 py-1 rounded font-medium cursor-pointer hover:opacity-80 transition-opacity ${days <= 14 ? "bg-red-100 text-red-700" : "bg-purple-100 text-purple-700"}`}
                             data-testid={`btn-schedule-${p.id}`}>
                             {days <= 14 ? "Schedule Now" : "Schedule Soon"}
@@ -816,45 +912,134 @@ function ProductionPlanning() {
         </CardContent>
       </Card>
 
+      {/* ── Supplier Order Template ─────────────────────────────────────── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-blue-600" />
+                Full Supplier Order Template
+              </CardTitle>
+              <CardDescription>Every item you send to your supplier — click any row to add it to your order list</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Search items..."
+                value={templateSearch}
+                onChange={e => setTemplateSearch(e.target.value)}
+                className="h-8 w-44 text-sm"
+                data-testid="input-template-search"
+              />
+            </div>
+          </div>
+          {/* Category filter pills */}
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            <button
+              onClick={() => setTemplateCategory(null)}
+              className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${templateCategory === null ? "bg-blue-600 text-white" : "bg-muted hover:bg-muted/80"}`}>
+              All
+            </button>
+            {Object.keys(SUPPLIER_TEMPLATE).map(cat => (
+              <button key={cat}
+                onClick={() => setTemplateCategory(templateCategory === cat ? null : cat)}
+                className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${templateCategory === cat ? "bg-blue-600 text-white" : "bg-muted hover:bg-muted/80"}`}>
+                {cat}
+              </button>
+            ))}
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="divide-y max-h-[600px] overflow-y-auto">
+            {Object.entries(SUPPLIER_TEMPLATE)
+              .filter(([cat]) => !templateCategory || cat === templateCategory)
+              .map(([cat, items]) => {
+                const filteredItems = templateSearch
+                  ? items.filter(item => item.toLowerCase().includes(templateSearch.toLowerCase()))
+                  : items;
+                if (filteredItems.length === 0) return null;
+                return (
+                  <div key={cat}>
+                    <div className="sticky top-0 bg-muted/80 backdrop-blur-sm px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b z-10">
+                      {cat} <span className="text-xs font-normal normal-case">({filteredItems.length} items)</span>
+                    </div>
+                    {filteredItems.map(item => {
+                      const onList = listItems.some((i: any) => i.product_name === item && i.status === "pending");
+                      return (
+                        <div key={item}
+                          className={`flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors ${onList ? "bg-green-50 dark:bg-green-950/10" : ""}`}>
+                          <span className="text-sm font-medium">{item}</span>
+                          {onList ? (
+                            <span className="text-xs text-green-700 font-semibold flex items-center gap-1">
+                              <CheckCircle className="w-3.5 h-3.5" /> On List
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => openTemplateDialog(item, cat)}
+                              className="text-xs px-2.5 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 font-medium transition-colors flex items-center gap-1"
+                              data-testid={`btn-template-add-${item.slice(0, 20).replace(/\s/g, "-")}`}>
+                              <Plus className="w-3 h-3" /> Add
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Add to Production List Dialog */}
-      <Dialog open={!!dialogItem} onOpenChange={(open) => !open && setDialogItem(null)}>
+      <Dialog open={!!dialog} onOpenChange={(open) => !open && setDialog(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plus className="w-4 h-4 text-purple-600" /> Add to Supplier Order List
             </DialogTitle>
           </DialogHeader>
-          {dialogItem && (
+          {dialog && (
             <div className="space-y-4 py-2">
               <div className="bg-muted/30 rounded-lg p-3">
-                <p className="font-semibold">{dialogItem.name}</p>
-                <p className="text-sm text-muted-foreground">{dialogItem.category || "No category"}</p>
-                <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                  <span>Available: <strong>{dialogItem.available_stock}</strong></span>
-                  <span>Daily usage: <strong>{parseFloat(dialogItem.avg_daily_usage).toFixed(1)}/day</strong></span>
-                  <span className={parseInt(dialogItem.days_remaining) <= 14 ? "text-red-600 font-bold" : ""}>
-                    {dialogItem.days_remaining !== null ? `${parseInt(dialogItem.days_remaining)} days left` : "No usage data"}
-                  </span>
-                </div>
+                <p className="font-semibold">{dialog.name}</p>
+                <p className="text-sm text-muted-foreground">{dialog.category || "No category"}</p>
+                {dialog.availableStock !== undefined && (
+                  <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+                    <span>Available: <strong>{dialog.availableStock}</strong></span>
+                    <span>Daily usage: <strong>{dialog.avgDailyUsage?.toFixed(1)}/day</strong></span>
+                    <span className={dialog.daysRemaining !== null && (dialog.daysRemaining ?? 999) <= 14 ? "text-red-600 font-bold" : ""}>
+                      {dialog.daysRemaining !== null ? `${dialog.daysRemaining} days left` : "No usage data"}
+                    </span>
+                  </div>
+                )}
               </div>
               <div>
                 <Label htmlFor="dialog-qty">Quantity to Order</Label>
                 <Input id="dialog-qty" type="number" value={dialogQty} onChange={e => setDialogQty(e.target.value)}
-                  placeholder="Enter quantity" className="mt-1" min={0} data-testid="input-dialog-qty" />
-                <p className="text-xs text-muted-foreground mt-1">Suggested: {parseInt(dialogItem.suggested_reorder_qty).toLocaleString()} units</p>
+                  placeholder="Enter quantity" className="mt-1" min={0} data-testid="input-dialog-qty" autoFocus />
+                {dialog.suggestedQty && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Suggested: {dialog.suggestedQty.toLocaleString()} units
+                    <button onClick={() => setDialogQty(String(dialog.suggestedQty))} className="ml-2 text-blue-600 hover:underline">Use this</button>
+                  </p>
+                )}
               </div>
               <div>
                 <Label htmlFor="dialog-notes">Notes for Supplier (optional)</Label>
                 <Input id="dialog-notes" value={dialogNotes} onChange={e => setDialogNotes(e.target.value)}
-                  placeholder="e.g. Priority delivery needed" className="mt-1" data-testid="input-dialog-notes" />
+                  placeholder="e.g. Priority delivery, colour preference..." className="mt-1" data-testid="input-dialog-notes" />
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogItem(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDialog(null)}>Cancel</Button>
             <Button onClick={() => addMutation.mutate({
-              productId: dialogItem?.id, productName: dialogItem?.name, category: dialogItem?.category,
-              qtyNeeded: parseInt(dialogQty) || 0, notes: dialogNotes || null,
+              productId: dialog?.productId || null,
+              productName: dialog?.name,
+              category: dialog?.category,
+              qtyNeeded: parseInt(dialogQty) || 0,
+              notes: dialogNotes || null,
             })} disabled={!dialogQty || addMutation.isPending} data-testid="btn-confirm-add-to-list">
               {addMutation.isPending ? "Adding..." : "Add to Production List"}
             </Button>
