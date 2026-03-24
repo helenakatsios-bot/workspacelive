@@ -10393,13 +10393,20 @@ Rules:
       `);
 
       const dueSoonCustomers = await pool.query(`
-        WITH intervals AS (
-          SELECT o.company_id,
-            AVG(EXTRACT(EPOCH FROM (o.order_date - LAG(o.order_date) OVER (PARTITION BY o.company_id ORDER BY o.order_date))) / 86400) AS avg_days,
-            MAX(o.order_date) AS last_order
-          FROM orders o
-          WHERE o.status NOT IN ('cancelled')
-          GROUP BY o.company_id
+        WITH diffs AS (
+          SELECT company_id,
+            EXTRACT(EPOCH FROM (order_date - LAG(order_date) OVER (PARTITION BY company_id ORDER BY order_date))) / 86400 AS day_diff,
+            order_date
+          FROM orders
+          WHERE status NOT IN ('cancelled')
+        ),
+        intervals AS (
+          SELECT company_id,
+            AVG(day_diff) AS avg_days,
+            MAX(order_date) AS last_order,
+            COUNT(*) AS order_count
+          FROM diffs
+          GROUP BY company_id
           HAVING COUNT(*) >= 3
         )
         SELECT COALESCE(c.trading_name, c.legal_name) AS company_name,
