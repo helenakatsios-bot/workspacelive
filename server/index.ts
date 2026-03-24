@@ -136,6 +136,7 @@ async function runStartupTasks() {
       { email: "warehouse@lmhome.com.au", password: "warehouse" },
       { email: "erica.kelly61@gmail.com", password: "hotel@" },
       { email: "jessicak@comfortsleep.com.au", password: "comfort" },
+      { email: "sales@bigbedding.com.au", password: "purax!" },
       { email: "shop@magnoliainteriors.com.au", password: "magnolia" },
       { email: "p.weingartner@swisstrade.com.au", password: "swisstrade" },
       { email: "hilary@manonbis.com.au", password: "manonb" },
