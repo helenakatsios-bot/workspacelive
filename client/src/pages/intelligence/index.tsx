@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -198,7 +199,11 @@ function StockForecast() {
                     : daysLeft !== null && daysLeft <= 30 ? "bg-amber-50 dark:bg-amber-950/10" : "";
                   return (
                     <tr key={p.id} className={`border-b hover:bg-muted/30 ${rowBg}`}>
-                      <td className="p-3 font-medium">{p.name}</td>
+                      <td className="p-3 font-medium">
+                        <Link href={`/products/${p.id}`} className="hover:text-primary hover:underline transition-colors">
+                          {p.name}
+                        </Link>
+                      </td>
                       <td className="p-3 text-muted-foreground">{p.category || "—"}</td>
                       <td className="p-3 text-right">{p.available_stock.toLocaleString()}</td>
                       <td className="p-3 text-right text-amber-600">{p.reserved_stock.toLocaleString()}</td>
@@ -712,15 +717,20 @@ function ProductionPlanning() {
                   return (
                     <tr key={p.id} className={`border-b hover:bg-muted/20 ${days <= 14 ? "bg-red-50 dark:bg-red-950/10" : days <= 30 ? "bg-amber-50 dark:bg-amber-950/10" : ""}`}>
                       <td className="p-3 text-sm font-medium">{priority}</td>
-                      <td className="p-3 font-medium">{p.name}</td>
+                      <td className="p-3 font-medium">
+                        <Link href={`/products/${p.id}`} className="hover:text-primary hover:underline transition-colors">
+                          {p.name}
+                        </Link>
+                      </td>
                       <td className="p-3 text-muted-foreground">{p.category || "—"}</td>
                       <td className="p-3 text-right font-bold" style={{ color: days <= 14 ? "#ef4444" : days <= 30 ? "#f59e0b" : "#22c55e" }}>{days}d</td>
                       <td className="p-3 text-right">{parseFloat(p.avg_daily_usage).toFixed(1)}/day</td>
                       <td className="p-3 text-right text-blue-600 font-semibold">{parseInt(p.suggested_reorder_qty).toLocaleString()} units</td>
                       <td className="p-3 text-center">
-                        <span className={`text-xs px-2 py-1 rounded font-medium ${days <= 14 ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}>
+                        <Link href={`/products/${p.id}`}
+                          className={`text-xs px-2 py-1 rounded font-medium cursor-pointer hover:opacity-80 transition-opacity ${days <= 14 ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}>
                           {days <= 14 ? "Schedule Now" : "Schedule Soon"}
-                        </span>
+                        </Link>
                       </td>
                     </tr>
                   );
