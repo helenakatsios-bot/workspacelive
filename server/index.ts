@@ -85,16 +85,16 @@ app.use((req, res, next) => {
 });
 
 async function runStartupTasks() {
-  // PORTAL-FIX: Set default password purax! for all non-@portal.purax.com.au users.
+  // PORTAL-FIX: Set default password purax! for ALL portal users.
   // Custom passwords for specific users are then applied below, overriding this default.
   try {
     const bcryptFirst = await import("bcryptjs");
     const defaultHash = await bcryptFirst.default.hash('purax!', 10);
     const updated = await pool.query(
-      `UPDATE portal_users SET password_hash = $1 WHERE email NOT ILIKE '%@portal.purax.com.au' RETURNING id`,
+      `UPDATE portal_users SET password_hash = $1 RETURNING id`,
       [defaultHash]
     );
-    console.log(`[PORTAL-FIX] Set default password (purax!) for ${updated.rowCount} non-purax portal users`);
+    console.log(`[PORTAL-FIX] Set default password (purax!) for ${updated.rowCount} portal users`);
   } catch (err: any) {
     console.error("[PORTAL-FIX] Password reset error:", err.message);
   }
