@@ -59,9 +59,11 @@ export default function OrdersPage() {
   const filteredOrders = useMemo(() => {
     if (!orders) return [];
     return orders.filter((order) => {
+      const searchLower = search.toLowerCase();
       const matchesSearch =
-        order.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
-        (order.company?.tradingName || order.company?.legalName || "").toLowerCase().includes(search.toLowerCase());
+        order.orderNumber.toLowerCase().includes(searchLower) ||
+        (order.customerName || "").toLowerCase().includes(searchLower) ||
+        (order.company?.tradingName || order.company?.legalName || "").toLowerCase().includes(searchLower);
       const matchesStatus = statusFilter === "all" || order.status === statusFilter;
       const orderDate = new Date(order.orderDate);
       const matchesStartDate = !startDate || orderDate >= startDate;
@@ -136,7 +138,7 @@ export default function OrdersPage() {
       <PageHeader
         title="Orders"
         description="Manage customer orders and fulfillment"
-        searchPlaceholder="Search by order number or company..."
+        searchPlaceholder="Search by order number, customer or company..."
         searchValue={search}
         onSearchChange={setSearch}
         action={
