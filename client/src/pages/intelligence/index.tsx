@@ -736,12 +736,15 @@ function ProductionPlanning() {
   const { toast } = useToast();
   const { data, isLoading } = useQuery<any[]>({ queryKey: ["/api/analytics/stock-forecast"] });
   const { data: listItems = [] } = useQuery<any[]>({ queryKey: ["/api/production-list"] });
+  const { data: allProducts = [] } = useQuery<any[]>({ queryKey: ["/api/products"] });
 
   const [dialog, setDialog] = useState<DialogConfig | null>(null);
   const [dialogQty, setDialogQty] = useState("");
   const [dialogNotes, setDialogNotes] = useState("");
   const [templateSearch, setTemplateSearch] = useState("");
   const [templateCategory, setTemplateCategory] = useState<string | null>(null);
+  const [productSearch, setProductSearch] = useState("");
+  const [productCategory, setProductCategory] = useState<string | null>(null);
 
   const addMutation = useMutation({
     mutationFn: (payload: any) => apiRequest("POST", "/api/production-list", payload),
@@ -767,6 +770,17 @@ function ProductionPlanning() {
 
   const openTemplateDialog = (name: string, category: string) => {
     setDialog({ name, category });
+    setDialogQty("");
+    setDialogNotes("");
+  };
+
+  const openProductDialog = (p: any) => {
+    setDialog({
+      name: p.name,
+      category: p.category,
+      productId: String(p.id),
+      availableStock: p.available_stock ?? p.physicalStock ?? undefined,
+    });
     setDialogQty("");
     setDialogNotes("");
   };
@@ -990,6 +1004,103 @@ function ProductionPlanning() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ── Browse All Products ──────────────────────────────────────────── */}
+      {(() => {
+        const productCategories = Array.from(new Set(allProducts.map((p: any) => p.category).filter(Boolean))).sort() as string[];
+        const filteredProducts = allProducts.filter((p: any) => {
+          const matchSearch = !productSearch || p.name?.toLowerCase().includes(productSearch.toLowerCase());
+          const matchCat = !productCategory || p.category === productCategory;
+          return matchSearch && matchCat;
+        });
+        return (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Package className="w-4 h-4 text-emerald-600" />
+                    Browse All Products
+                  </CardTitle>
+                  <CardDescription>
+                    Every product in your catalogue — add anything to the order list, even if stock looks fine
+                  </CardDescription>
+                </div>
+                <Input
+                  placeholder="Search products..."
+                  value={productSearch}
+                  onChange={e => setProductSearch(e.target.value)}
+                  className="h-8 w-48 text-sm"
+                  data-testid="input-product-search"
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                <button
+                  onClick={() => setProductCategory(null)}
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${productCategory === null ? "bg-emerald-600 text-white" : "bg-muted hover:bg-muted/80"}`}>
+                  All ({allProducts.length})
+                </button>
+                {productCategories.map(cat => (
+                  <button key={cat}
+                    onClick={() => setProductCategory(productCategory === cat ? null : cat)}
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${productCategory === cat ? "bg-emerald-600 text-white" : "bg-muted hover:bg-muted/80"}`}>
+                    {cat} ({allProducts.filter((p: any) => p.category === cat).length})
+                  </button>
+                ))}
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {filteredProducts.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No products match your search.</p>
+              ) : (
+                <div className="divide-y max-h-[600px] overflow-y-auto">
+                  {filteredProducts.map((p: any) => {
+                    const onList = listItems.some((i: any) => i.product_id === p.id && i.status === "pending");
+                    const avail = p.available_stock ?? p.physical_stock ?? null;
+                    const isLow = avail !== null && avail < 50;
+                    return (
+                      <div key={p.id}
+                        className={`flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors ${onList ? "bg-green-50 dark:bg-green-950/10" : ""}`}>
+                        <div className="flex-1 min-w-0 mr-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Link href={`/products/${p.id}`} className="text-sm font-medium hover:text-primary hover:underline transition-colors truncate">
+                              {p.name}
+                            </Link>
+                            {p.category && (
+                              <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{p.category}</span>
+                            )}
+                            {isLow && (
+                              <span className="text-xs text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-medium">Low stock</span>
+                            )}
+                          </div>
+                          {avail !== null && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {avail} available
+                              {p.reserved_stock > 0 && ` · ${p.reserved_stock} reserved`}
+                            </p>
+                          )}
+                        </div>
+                        {onList ? (
+                          <span className="text-xs text-green-700 font-semibold flex items-center gap-1 whitespace-nowrap">
+                            <CheckCircle className="w-3.5 h-3.5" /> On List
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => openProductDialog(p)}
+                            className="text-xs px-2.5 py-1 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-medium transition-colors flex items-center gap-1 whitespace-nowrap"
+                            data-testid={`btn-product-add-${p.id}`}>
+                            <Plus className="w-3 h-3" /> Add to List
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Add to Production List Dialog */}
       <Dialog open={!!dialog} onOpenChange={(open) => !open && setDialog(null)}>
