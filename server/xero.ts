@@ -359,7 +359,7 @@ async function fetchXeroOnlineInvoiceUrl(accessToken: string, tenantId: string, 
 async function createInvoiceFromXero(
   xInv: XeroInvoiceRaw,
   companyId: string,
-  orderId: string,
+  orderId: string | null,
   invNumber: string,
   accessToken: string,
   tenantId: string,
@@ -705,7 +705,7 @@ export async function autoSyncXeroInvoices(accessToken: string, tenantId: string
           }
         }
 
-        await createInvoiceFromXero(xInv, companyId, orderId || "", invNumber, accessToken, tenantId);
+        await createInvoiceFromXero(xInv, companyId, orderId || null, invNumber, accessToken, tenantId);
         created++;
       }
     }

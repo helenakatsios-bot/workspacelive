@@ -9860,8 +9860,9 @@ Rules:
       await execAsync2(`pg_dump "${process.env.DATABASE_URL}" > "${filepath}"`);
       const stat = fsBackup.default.statSync(filepath);
       res.json({ name: filename, size: stat.size, createdAt: stat.mtime.toISOString() });
-    } catch (err) {
-      res.status(500).json({ message: "Backup failed" });
+    } catch (err: any) {
+      console.error("[BACKUP] Manual backup failed:", err?.message || err);
+      res.status(500).json({ message: "Backup failed", detail: err?.message || String(err) });
     }
   });
 
