@@ -9884,5 +9884,418 @@ Rules:
 
   registerChatRoutes(app);
 
+  // ── Predictive Intelligence & Analytics Routes ──────────────────────────
+  app.get("/api/analytics/stock-forecast", requireAuth, async (_req, res) => {
+    try {
+      const result = await pool.query(`
+        WITH sales_90 AS (
+          SELECT ol.product_id,
+            SUM(ol.quantity) AS qty_sold_90d,
+            SUM(ol.quantity)::numeric / 90 AS avg_daily_usage
+          FROM order_lines ol
+          JOIN orders o ON o.id = ol.order_id
+          WHERE o.order_date >= NOW() - INTERVAL '90 days'
+            AND o.status NOT IN ('cancelled')
+          GROUP BY ol.product_id
+        ),
+        sales_30 AS (
+          SELECT ol.product_id, SUM(ol.quantity) AS qty_sold_30d
+          FROM order_lines ol
+          JOIN orders o ON o.id = ol.order_id
+          WHERE o.order_date >= NOW() - INTERVAL '30 days'
+            AND o.status NOT IN ('cancelled')
+          GROUP BY ol.product_id
+        )
+        SELECT
+          p.id, p.name, p.sku, p.category,
+          p.available_stock, p.physical_stock, p.reserved_stock,
+          p.reorder_point, p.safety_stock, p.lead_time_days,
+          COALESCE(s90.qty_sold_90d, 0)::integer AS qty_sold_90d,
+          COALESCE(s30.qty_sold_30d, 0)::integer AS qty_sold_30d,
+          ROUND(COALESCE(s90.avg_daily_usage, 0), 3) AS avg_daily_usage,
+          CASE
+            WHEN COALESCE(s90.avg_daily_usage, 0) > 0
+            THEN ROUND(p.available_stock / s90.avg_daily_usage, 0)
+            ELSE NULL
+          END AS days_remaining,
+          CASE
+            WHEN COALESCE(s90.avg_daily_usage, 0) > 0
+            THEN CEIL(s90.avg_daily_usage * 30 * GREATEST(COALESCE(p.lead_time_days, 14), 7) / 30.0 * 1.3)
+            ELSE 0
+          END AS suggested_reorder_qty,
+          CASE
+            WHEN COALESCE(s90.qty_sold_90d, 0) = 0 THEN 'inactive'
+            WHEN COALESCE(s30.qty_sold_30d, 0) >= COALESCE(s90.qty_sold_90d, 0) * 0.3 THEN 'fast'
+            WHEN COALESCE(s30.qty_sold_30d, 0) >= COALESCE(s90.qty_sold_90d, 0) * 0.1 THEN 'medium'
+            ELSE 'slow'
+          END AS velocity
+        FROM products p
+        LEFT JOIN sales_90 s90 ON s90.product_id = p.id
+        LEFT JOIN sales_30 s30 ON s30.product_id = p.id
+        WHERE p.available_stock > 0 OR COALESCE(s90.qty_sold_90d, 0) > 0
+        ORDER BY
+          CASE WHEN COALESCE(s90.avg_daily_usage, 0) > 0
+               THEN p.available_stock / s90.avg_daily_usage ELSE 99999 END ASC
+        LIMIT 200
+      `);
+      res.json(result.rows);
+    } catch (err) {
+      console.error("Stock forecast error:", err);
+      res.status(500).json({ message: "Failed to compute stock forecast" });
+    }
+  });
+
+  app.get("/api/analytics/customer-patterns", requireAuth, async (_req, res) => {
+    try {
+      const result = await pool.query(`
+        WITH customer_orders AS (
+          SELECT
+            c.id AS company_id,
+            COALESCE(c.trading_name, c.legal_name) AS company_name,
+            o.id AS order_id,
+            o.order_date,
+            o.total,
+            LAG(o.order_date) OVER (PARTITION BY c.id ORDER BY o.order_date) AS prev_order_date
+          FROM companies c
+          JOIN orders o ON o.company_id = c.id
+          WHERE o.status NOT IN ('cancelled')
+          ORDER BY c.id, o.order_date
+        ),
+        intervals AS (
+          SELECT
+            company_id, company_name,
+            AVG(EXTRACT(EPOCH FROM (order_date - prev_order_date)) / 86400)::numeric AS avg_interval_days,
+            COUNT(*) FILTER (WHERE prev_order_date IS NOT NULL) AS interval_count
+          FROM customer_orders
+          WHERE prev_order_date IS NOT NULL
+          GROUP BY company_id, company_name
+        ),
+        totals AS (
+          SELECT
+            o.company_id,
+            COUNT(*) AS total_orders,
+            MAX(o.order_date) AS last_order_date,
+            ROUND(AVG(o.total::numeric), 2) AS avg_order_value,
+            ROUND(SUM(o.total::numeric), 2) AS total_revenue
+          FROM orders o
+          WHERE o.status NOT IN ('cancelled')
+          GROUP BY o.company_id
+        )
+        SELECT
+          i.company_id,
+          i.company_name,
+          ROUND(i.avg_interval_days, 1) AS avg_interval_days,
+          i.interval_count,
+          t.total_orders,
+          t.last_order_date,
+          t.avg_order_value,
+          t.total_revenue,
+          (t.last_order_date + (i.avg_interval_days * INTERVAL '1 day'))::date AS next_expected_order,
+          (CURRENT_DATE - t.last_order_date::date) AS days_since_last_order,
+          CASE
+            WHEN (CURRENT_DATE - t.last_order_date::date) >= ROUND(i.avg_interval_days) - 10
+              AND (CURRENT_DATE - t.last_order_date::date) <= ROUND(i.avg_interval_days) + 10
+            THEN true ELSE false
+          END AS is_due_soon
+        FROM intervals i
+        JOIN totals t ON t.company_id = i.company_id
+        WHERE i.interval_count >= 2
+        ORDER BY next_expected_order ASC
+        LIMIT 100
+      `);
+      res.json(result.rows);
+    } catch (err) {
+      console.error("Customer patterns error:", err);
+      res.status(500).json({ message: "Failed to compute customer patterns" });
+    }
+  });
+
+  app.get("/api/analytics/revenue-forecast", requireAuth, async (_req, res) => {
+    try {
+      const monthly = await pool.query(`
+        SELECT
+          TO_CHAR(DATE_TRUNC('month', order_date), 'YYYY-MM') AS month,
+          ROUND(SUM(total::numeric), 2) AS revenue,
+          COUNT(*) AS order_count,
+          ROUND(AVG(total::numeric), 2) AS avg_order_value
+        FROM orders
+        WHERE status NOT IN ('cancelled')
+          AND order_date >= NOW() - INTERVAL '24 months'
+        GROUP BY DATE_TRUNC('month', order_date)
+        ORDER BY month ASC
+      `);
+
+      const confirmed = await pool.query(`
+        SELECT ROUND(SUM(total::numeric), 2) AS value
+        FROM orders
+        WHERE status IN ('confirmed', 'in_production', 'ready')
+          AND order_date >= DATE_TRUNC('month', NOW())
+      `);
+
+      const lastYearSameMonth = await pool.query(`
+        SELECT ROUND(AVG(monthly_rev), 2) AS avg_same_month_revenue
+        FROM (
+          SELECT DATE_TRUNC('month', order_date) AS m,
+            SUM(total::numeric) AS monthly_rev
+          FROM orders
+          WHERE status NOT IN ('cancelled')
+            AND EXTRACT(MONTH FROM order_date) = EXTRACT(MONTH FROM NOW())
+            AND order_date < DATE_TRUNC('month', NOW())
+          GROUP BY DATE_TRUNC('month', order_date)
+          LIMIT 3
+        ) sub
+      `);
+
+      const topProducts = await pool.query(`
+        SELECT p.name, p.category,
+          SUM(ol.quantity) AS total_qty,
+          ROUND(SUM(ol.line_total::numeric), 2) AS total_revenue
+        FROM order_lines ol
+        JOIN products p ON p.id = ol.product_id
+        JOIN orders o ON o.id = ol.order_id
+        WHERE o.status NOT IN ('cancelled')
+          AND o.order_date >= NOW() - INTERVAL '90 days'
+        GROUP BY p.id, p.name, p.category
+        ORDER BY total_revenue DESC
+        LIMIT 10
+      `);
+
+      res.json({
+        monthly: monthly.rows,
+        confirmedThisMonth: parseFloat(confirmed.rows[0]?.value || "0"),
+        avgSameMonthRevenue: parseFloat(lastYearSameMonth.rows[0]?.avg_same_month_revenue || "0"),
+        topProducts: topProducts.rows,
+      });
+    } catch (err) {
+      console.error("Revenue forecast error:", err);
+      res.status(500).json({ message: "Failed to compute revenue forecast" });
+    }
+  });
+
+  app.get("/api/analytics/order-efficiency", requireAuth, async (_req, res) => {
+    try {
+      const lifecycle = await pool.query(`
+        SELECT
+          status,
+          COUNT(*) AS count,
+          ROUND(AVG(EXTRACT(EPOCH FROM (NOW() - created_at)) / 86400)::numeric, 1) AS avg_age_days
+        FROM orders
+        WHERE created_at >= NOW() - INTERVAL '90 days'
+        GROUP BY status
+        ORDER BY count DESC
+      `);
+
+      const completion = await pool.query(`
+        SELECT
+          ROUND(AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 86400)::numeric, 1) AS avg_completion_days,
+          MIN(EXTRACT(EPOCH FROM (updated_at - created_at)) / 86400)::integer AS min_days,
+          MAX(EXTRACT(EPOCH FROM (updated_at - created_at)) / 86400)::integer AS max_days,
+          COUNT(*) AS completed_count
+        FROM orders
+        WHERE status IN ('completed', 'dispatched')
+          AND created_at >= NOW() - INTERVAL '90 days'
+          AND updated_at > created_at
+      `);
+
+      const weeklyVolume = await pool.query(`
+        SELECT
+          TO_CHAR(DATE_TRUNC('week', order_date), 'YYYY-MM-DD') AS week,
+          COUNT(*) AS order_count,
+          ROUND(SUM(total::numeric), 2) AS revenue
+        FROM orders
+        WHERE status NOT IN ('cancelled')
+          AND order_date >= NOW() - INTERVAL '16 weeks'
+        GROUP BY DATE_TRUNC('week', order_date)
+        ORDER BY week ASC
+      `);
+
+      const statusDistribution = await pool.query(`
+        SELECT status, COUNT(*) AS count
+        FROM orders
+        WHERE status NOT IN ('cancelled')
+        GROUP BY status
+        ORDER BY count DESC
+      `);
+
+      res.json({
+        lifecycle: lifecycle.rows,
+        completion: completion.rows[0],
+        weeklyVolume: weeklyVolume.rows,
+        statusDistribution: statusDistribution.rows,
+      });
+    } catch (err) {
+      console.error("Order efficiency error:", err);
+      res.status(500).json({ message: "Failed to compute order efficiency" });
+    }
+  });
+
+  app.get("/api/analytics/stock-intelligence", requireAuth, async (_req, res) => {
+    try {
+      const overview = await pool.query(`
+        SELECT
+          COUNT(*) AS total_products,
+          SUM(physical_stock) AS total_physical,
+          SUM(reserved_stock) AS total_reserved,
+          SUM(available_stock) AS total_available,
+          COUNT(*) FILTER (WHERE available_stock <= 0 AND physical_stock > 0) AS out_of_available,
+          COUNT(*) FILTER (WHERE physical_stock <= 0) AS out_of_stock,
+          COUNT(*) FILTER (WHERE reorder_point > 0 AND available_stock <= reorder_point) AS below_reorder
+        FROM products
+        WHERE physical_stock > 0 OR reserved_stock > 0 OR available_stock > 0
+      `);
+
+      const byCategory = await pool.query(`
+        SELECT
+          COALESCE(category, 'Uncategorised') AS category,
+          COUNT(*) AS product_count,
+          SUM(physical_stock) AS total_physical,
+          SUM(reserved_stock) AS total_reserved,
+          SUM(available_stock) AS total_available
+        FROM products
+        WHERE physical_stock > 0 OR reserved_stock > 0
+        GROUP BY category
+        ORDER BY total_physical DESC
+      `);
+
+      const movements = await pool.query(`
+        SELECT
+          TO_CHAR(DATE_TRUNC('week', created_at), 'YYYY-MM-DD') AS week,
+          SUM(CASE WHEN movement_type IN ('reserve', 'dispatch') THEN ABS(quantity) ELSE 0 END) AS outflow,
+          SUM(CASE WHEN movement_type IN ('manual_adjust', 'release') AND quantity > 0 THEN quantity ELSE 0 END) AS inflow
+        FROM stock_movements
+        WHERE created_at >= NOW() - INTERVAL '12 weeks'
+        GROUP BY DATE_TRUNC('week', created_at)
+        ORDER BY week ASC
+      `);
+
+      const alerts = await pool.query(`
+        SELECT p.id, p.name, p.sku, p.category,
+          p.available_stock, p.physical_stock, p.reserved_stock,
+          p.reorder_point,
+          CASE
+            WHEN p.physical_stock <= 0 THEN 'out_of_stock'
+            WHEN p.available_stock <= 0 THEN 'fully_reserved'
+            WHEN p.reorder_point > 0 AND p.available_stock <= p.reorder_point THEN 'below_reorder'
+            ELSE 'ok'
+          END AS alert_type
+        FROM products p
+        WHERE (p.physical_stock <= 0 OR p.available_stock <= 0
+          OR (p.reorder_point > 0 AND p.available_stock <= p.reorder_point))
+          AND (p.physical_stock > 0 OR p.reserved_stock > 0)
+        ORDER BY p.physical_stock ASC
+        LIMIT 50
+      `);
+
+      res.json({
+        overview: overview.rows[0],
+        byCategory: byCategory.rows,
+        movements: movements.rows,
+        alerts: alerts.rows,
+      });
+    } catch (err) {
+      console.error("Stock intelligence error:", err);
+      res.status(500).json({ message: "Failed to compute stock intelligence" });
+    }
+  });
+
+  app.get("/api/analytics/business-overview", requireAuth, async (_req, res) => {
+    try {
+      const revenueThisMonth = await pool.query(`
+        SELECT ROUND(SUM(total::numeric), 2) AS value, COUNT(*) AS orders
+        FROM orders
+        WHERE status NOT IN ('cancelled')
+          AND DATE_TRUNC('month', order_date) = DATE_TRUNC('month', NOW())
+      `);
+
+      const revenueLastMonth = await pool.query(`
+        SELECT ROUND(SUM(total::numeric), 2) AS value, COUNT(*) AS orders
+        FROM orders
+        WHERE status NOT IN ('cancelled')
+          AND DATE_TRUNC('month', order_date) = DATE_TRUNC('month', NOW() - INTERVAL '1 month')
+      `);
+
+      const openOrders = await pool.query(`
+        SELECT COUNT(*) AS count, ROUND(SUM(total::numeric), 2) AS value
+        FROM orders
+        WHERE status NOT IN ('completed', 'dispatched', 'cancelled')
+      `);
+
+      const topCustomers = await pool.query(`
+        SELECT COALESCE(c.trading_name, c.legal_name) AS company_name,
+          COUNT(o.id) AS order_count,
+          ROUND(SUM(o.total::numeric), 2) AS revenue_90d
+        FROM orders o
+        JOIN companies c ON c.id = o.company_id
+        WHERE o.status NOT IN ('cancelled')
+          AND o.order_date >= NOW() - INTERVAL '90 days'
+        GROUP BY c.id, c.trading_name, c.legal_name
+        ORDER BY revenue_90d DESC
+        LIMIT 8
+      `);
+
+      const stockAlertCount = await pool.query(`
+        SELECT COUNT(*) AS critical_count
+        FROM products
+        WHERE physical_stock <= 0 OR (reorder_point > 0 AND available_stock <= reorder_point)
+      `);
+
+      const categoryRevenue = await pool.query(`
+        SELECT COALESCE(p.category, 'Other') AS category,
+          ROUND(SUM(ol.line_total::numeric), 2) AS revenue,
+          SUM(ol.quantity) AS qty_sold
+        FROM order_lines ol
+        JOIN products p ON p.id = ol.product_id
+        JOIN orders o ON o.id = ol.order_id
+        WHERE o.status NOT IN ('cancelled')
+          AND o.order_date >= NOW() - INTERVAL '90 days'
+        GROUP BY p.category
+        ORDER BY revenue DESC
+        LIMIT 8
+      `);
+
+      const dueSoonCustomers = await pool.query(`
+        WITH intervals AS (
+          SELECT o.company_id,
+            AVG(EXTRACT(EPOCH FROM (o.order_date - LAG(o.order_date) OVER (PARTITION BY o.company_id ORDER BY o.order_date))) / 86400) AS avg_days,
+            MAX(o.order_date) AS last_order
+          FROM orders o
+          WHERE o.status NOT IN ('cancelled')
+          GROUP BY o.company_id
+          HAVING COUNT(*) >= 3
+        )
+        SELECT COALESCE(c.trading_name, c.legal_name) AS company_name,
+          ROUND(i.avg_days::numeric, 0) AS avg_interval,
+          i.last_order,
+          (i.last_order + (i.avg_days * INTERVAL '1 day'))::date AS next_expected
+        FROM intervals i
+        JOIN companies c ON c.id = i.company_id
+        WHERE i.avg_days IS NOT NULL
+          AND (i.last_order + (i.avg_days * INTERVAL '1 day'))::date BETWEEN CURRENT_DATE AND CURRENT_DATE + 14
+        ORDER BY next_expected ASC
+        LIMIT 10
+      `);
+
+      const thisMonthVal = parseFloat(revenueThisMonth.rows[0]?.value || "0");
+      const lastMonthVal = parseFloat(revenueLastMonth.rows[0]?.value || "0");
+      const growthPct = lastMonthVal > 0 ? ((thisMonthVal - lastMonthVal) / lastMonthVal) * 100 : 0;
+
+      res.json({
+        revenueThisMonth: thisMonthVal,
+        ordersThisMonth: parseInt(revenueThisMonth.rows[0]?.orders || "0"),
+        revenueLastMonth: lastMonthVal,
+        ordersLastMonth: parseInt(revenueLastMonth.rows[0]?.orders || "0"),
+        revenueGrowthPct: Math.round(growthPct * 10) / 10,
+        openOrders: { count: parseInt(openOrders.rows[0]?.count || "0"), value: parseFloat(openOrders.rows[0]?.value || "0") },
+        stockAlertCount: parseInt(stockAlertCount.rows[0]?.critical_count || "0"),
+        topCustomers: topCustomers.rows,
+        categoryRevenue: categoryRevenue.rows,
+        dueSoonCustomers: dueSoonCustomers.rows,
+      });
+    } catch (err) {
+      console.error("Business overview error:", err);
+      res.status(500).json({ message: "Failed to compute business overview" });
+    }
+  });
+
   return httpServer;
 }

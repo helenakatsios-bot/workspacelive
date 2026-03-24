@@ -28,6 +28,7 @@ import {
   Sparkles,
   Plug,
   CalendarCheck,
+  Brain,
   Warehouse,
   ShieldCheck,
   Blocks,
@@ -125,6 +126,7 @@ const serviceItems = [
 ];
 
 const reportingItems = [
+  { title: "Intelligence Hub", url: "/intelligence", icon: Brain },
   { title: "Dashboards", url: "/reporting/dashboards", icon: BarChart3 },
   { title: "Reports", url: "/reporting/reports", icon: FileText },
   { title: "Goals", url: "/reporting/goals", icon: Target },
@@ -152,7 +154,7 @@ export function AppSidebar() {
   const isCommerceActive = location.startsWith("/commerce");
   const isServiceActive = location.startsWith("/service");
   const isDataMgmtActive = location.startsWith("/data-management");
-  const isReportingActive = location.startsWith("/reporting") || location.startsWith("/reports");
+  const isReportingActive = location.startsWith("/reporting") || location.startsWith("/reports") || location.startsWith("/intelligence");
 
   return (
     <Sidebar>
