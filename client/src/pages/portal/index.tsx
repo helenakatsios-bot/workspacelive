@@ -376,9 +376,9 @@ function PortalDashboard({ onNavigate }: { onNavigate: (page: string) => void })
 
         {/* Account Balance — total of all unpaid invoices */}
         {(dashboard?.accountBalance || 0) > 0 && (
-          <div className="shrink-0 flex flex-col items-end justify-center py-3 px-1 min-w-[110px]" data-testid="stat-account-balance">
-            <p className="text-sm font-semibold text-muted-foreground">Account Balance</p>
-            <p className="text-2xl font-bold">
+          <div className="shrink-0 flex flex-col items-start justify-center py-3 pl-2 min-w-[130px]" data-testid="stat-account-balance">
+            <p className="text-sm font-semibold text-muted-foreground leading-tight">Account Balance</p>
+            <p className="text-3xl font-bold leading-tight mt-1">
               ${Math.round(dashboard?.accountBalance || 0).toLocaleString("en-AU")}
             </p>
           </div>
