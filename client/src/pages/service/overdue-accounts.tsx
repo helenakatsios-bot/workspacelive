@@ -133,7 +133,11 @@ export default function OverdueAccountsPage() {
     } else {
       // Turning ON — show dialog
       setFlagDays("");
-      setFlagAmount(account.invoiceOutstanding > 0 ? fmtAud(account.invoiceOutstanding) : "");
+      // Pre-fill with the Xero-synced overdue amount shown in the table, fall back to local invoice sum
+      const prefilledAmount = account.overdueAmount && parseFloat(account.overdueAmount) > 0
+        ? fmtAud(parseFloat(account.overdueAmount))
+        : account.invoiceOutstanding > 0 ? fmtAud(account.invoiceOutstanding) : "";
+      setFlagAmount(prefilledAmount);
       setFlagDialog({
         id: account.id,
         name: account.tradingName || account.legalName,
