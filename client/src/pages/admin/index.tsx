@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2, Webhook, Key, Globe, Building2, Pencil, Save, AlertCircle, Database } from "lucide-react";
+import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2, Webhook, Key, Globe, Building2, Pencil, Save, AlertCircle, Database, Github } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -569,6 +569,20 @@ export default function AdminPage() {
     },
     onError: () => {
       toast({ title: "Backup failed", description: "Could not create backup.", variant: "destructive" });
+    },
+  });
+
+  const [showGitBackupDialog, setShowGitBackupDialog] = useState(false);
+  const gitBackupMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/system/backup", {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Backed up to GitHub", description: data.message || "Code pushed successfully." });
+    },
+    onError: (err: any) => {
+      toast({ title: "GitHub backup failed", description: err?.message || "Could not push to GitHub.", variant: "destructive" });
     },
   });
 
@@ -1411,6 +1425,51 @@ export default function AdminPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* GitHub Code Backup */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Github className="w-5 h-5" />
+                Code Backup (GitHub)
+              </CardTitle>
+              <CardDescription>
+                Push the current codebase to GitHub. Safe to run at any time — if there's nothing new, it will still succeed.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                variant="outline"
+                onClick={() => setShowGitBackupDialog(true)}
+                disabled={gitBackupMutation.isPending}
+                data-testid="button-git-backup"
+              >
+                {gitBackupMutation.isPending
+                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Backing up…</>
+                  : <><Github className="w-4 h-4 mr-2" />Backup to GitHub</>}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <AlertDialog open={showGitBackupDialog} onOpenChange={setShowGitBackupDialog}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Backup code to GitHub?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will commit all current changes and push them to the main branch on GitHub. The website will keep running normally during this process.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => { setShowGitBackupDialog(false); gitBackupMutation.mutate(); }}
+                  data-testid="button-confirm-git-backup"
+                >
+                  Yes, back up now
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* Data Exports */}
           <Card>

@@ -9926,6 +9926,25 @@ Rules:
     }
   });
 
+  app.post("/api/system/backup", requireAdmin, async (_req, res) => {
+    try {
+      await execAsync2("git add .");
+      try {
+        await execAsync2('git commit -m "manual backup"');
+      } catch (commitErr: any) {
+        const msg = commitErr?.message || String(commitErr);
+        if (!msg.includes("nothing to commit") && !msg.includes("nothing added")) {
+          throw commitErr;
+        }
+      }
+      await execAsync2("git push origin main");
+      res.json({ success: true, message: "Backup pushed to GitHub successfully." });
+    } catch (err: any) {
+      console.error("[GIT-BACKUP] Failed:", err?.message || err);
+      res.status(500).json({ success: false, message: err?.message || "Git backup failed." });
+    }
+  });
+
   registerChatRoutes(app);
 
   // ── Production Schedule List ─────────────────────────────────────────────
