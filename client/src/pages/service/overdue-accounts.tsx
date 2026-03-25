@@ -535,19 +535,6 @@ export default function OverdueAccountsPage() {
             )}
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">How many days are they already overdue?</label>
-              <Input
-                type="number"
-                min="0"
-                step="1"
-                placeholder="e.g. 15 — leave blank to start from today"
-                value={flagDays}
-                onChange={(e) => setFlagDays(e.target.value)}
-                data-testid="input-flag-days"
-              />
-            </div>
-
-            <div className="space-y-1.5">
               <label className="text-sm font-medium">Amount to show customer (optional)</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
