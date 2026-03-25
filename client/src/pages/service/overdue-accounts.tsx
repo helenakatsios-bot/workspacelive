@@ -66,9 +66,29 @@ export default function OverdueAccountsPage() {
   const [flagDays, setFlagDays] = useState("");
   const [flagAmount, setFlagAmount] = useState("");
 
+  const [isXeroRefreshing, setIsXeroRefreshing] = useState(false);
+
   const { data: accounts = [], isLoading, refetch } = useQuery<AccountRow[]>({
     queryKey: ["/api/overdue-accounts"],
   });
+
+  const handleRefreshFromXero = async () => {
+    setIsXeroRefreshing(true);
+    try {
+      const resp = await apiRequest("POST", "/api/xero/refresh-overdue", {});
+      const data = await resp.json();
+      if (data.success) {
+        toast({ title: `Synced from Xero — ${data.updated} companies updated` });
+      } else {
+        toast({ title: data.message || "Xero refresh failed", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Could not reach Xero", variant: "destructive" });
+    } finally {
+      setIsXeroRefreshing(false);
+      refetch();
+    }
+  };
 
   const flagMutation = useMutation({
     mutationFn: async ({
@@ -160,9 +180,9 @@ export default function OverdueAccountsPage() {
             Everyone with outstanding invoices from Xero. Use the toggle to choose who sees a warning in the customer portal.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2 shrink-0">
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh
+        <Button variant="outline" size="sm" onClick={handleRefreshFromXero} disabled={isXeroRefreshing} className="gap-2 shrink-0">
+          <RefreshCw className={`w-3.5 h-3.5 ${isXeroRefreshing ? "animate-spin" : ""}`} />
+          {isXeroRefreshing ? "Syncing..." : "Refresh from Xero"}
         </Button>
       </div>
 

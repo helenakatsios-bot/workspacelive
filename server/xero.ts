@@ -724,47 +724,92 @@ export async function autoSyncXeroInvoices(accessToken: string, tenantId: string
 
   await saveLastXeroSyncTime(new Date());
 
-  // After syncing, refresh overdue_amount on all companies from the local invoices table
-  // This keeps the portal dashboard "Outstanding" card accurate without a live Xero API call
+  // Pull overdue balances directly from Xero Contacts API — this matches exactly what Xero shows
   try {
-    await db.execute(sql`
-      UPDATE companies c
-      SET overdue_amount = sub.total
-      FROM (
-        SELECT company_id, COALESCE(SUM(balance_due::numeric), 0) AS total
-        FROM invoices
-        WHERE (
-          status = 'overdue'
-          OR (status = 'sent' AND due_date IS NOT NULL AND due_date < NOW())
-        )
-        AND balance_due::numeric > 0
-        GROUP BY company_id
-        HAVING SUM(balance_due::numeric) > 0
-      ) sub
-      WHERE c.id = sub.company_id
-    `);
-    // Zero out companies that no longer have any overdue invoices,
-    // but ONLY if they are NOT manually flagged (account_overdue = false)
+    const result = await refreshOverdueFromXeroContacts(accessToken, tenantId);
+    console.log(`[XERO-AUTOSYNC] Overdue balances refreshed from Xero Contacts API: ${result.updated} companies updated`);
+  } catch (refreshErr) {
+    console.error("[XERO-AUTOSYNC] Could not refresh overdue_amount from Xero Contacts API:", refreshErr);
+  }
+
+  return { updated, created };
+}
+
+export async function refreshOverdueFromXeroContacts(accessToken: string, tenantId: string): Promise<{ updated: number }> {
+  let contactPage = 1;
+  let contactHasMore = true;
+  let overdueUpdated = 0;
+  const overdueMap: Record<string, number> = {}; // xeroContactId → overdue amount
+  let currentToken = accessToken;
+
+  while (contactHasMore) {
+    const freshToken = await getFreshXeroToken(tenantId);
+    if (freshToken) currentToken = freshToken;
+
+    const contactResp = await fetch(
+      `https://api.xero.com/api.xro/2.0/Contacts?page=${contactPage}&includeArchived=false&summaryOnly=false`,
+      {
+        headers: {
+          "Authorization": `Bearer ${currentToken}`,
+          "Xero-Tenant-Id": tenantId,
+          "Accept": "application/json",
+        },
+      }
+    );
+
+    if (!contactResp.ok) {
+      const errText = await contactResp.text();
+      console.error(`[XERO] Contacts API error (page ${contactPage}):`, errText);
+      throw new Error(`Xero Contacts API error: ${contactResp.status}`);
+    }
+
+    const contactData = await contactResp.json();
+    const xeroContacts: any[] = contactData.Contacts || [];
+
+    for (const contact of xeroContacts) {
+      const overdueAmt = contact.Balances?.AccountsReceivable?.Overdue ?? 0;
+      if (contact.ContactID && overdueAmt > 0) {
+        overdueMap[contact.ContactID] = overdueAmt;
+      }
+    }
+
+    if (xeroContacts.length < 100) {
+      contactHasMore = false;
+    } else {
+      contactPage++;
+    }
+  }
+
+  // Apply overdue amounts to matching companies
+  const mappedIds: string[] = [];
+  for (const [xeroContactId, overdueAmt] of Object.entries(overdueMap)) {
+    const mapping = await getXeroSyncMappingByXeroId("company", xeroContactId);
+    if (mapping?.localId) {
+      await db.execute(sql`
+        UPDATE companies SET overdue_amount = ${overdueAmt} WHERE id = ${mapping.localId}
+      `);
+      mappedIds.push(mapping.localId);
+      overdueUpdated++;
+    }
+  }
+
+  // Zero out companies with no Xero overdue balance (only non-manually-flagged ones)
+  if (mappedIds.length > 0) {
     await db.execute(sql`
       UPDATE companies
       SET overdue_amount = 0
       WHERE account_overdue = false
-        AND id NOT IN (
-          SELECT DISTINCT company_id FROM invoices
-          WHERE (
-            status = 'overdue'
-            OR (status = 'sent' AND due_date IS NOT NULL AND due_date < NOW())
-          )
-          AND company_id IS NOT NULL
-          AND balance_due::numeric > 0
-        )
+        AND id NOT IN (${sql.raw(mappedIds.map(id => `'${id}'`).join(","))})
         AND overdue_amount > 0
     `);
-  } catch (refreshErr) {
-    console.error("[XERO-AUTOSYNC] Could not refresh overdue_amount on companies:", refreshErr);
+  } else {
+    // No overdue contacts at all from Xero — clear all non-flagged companies
+    await db.execute(sql`
+      UPDATE companies SET overdue_amount = 0 WHERE account_overdue = false AND overdue_amount > 0
+    `);
   }
 
-  return { updated, created };
+  return { updated: overdueUpdated };
 }
 
 let xeroSyncInterval: ReturnType<typeof setInterval> | null = null;

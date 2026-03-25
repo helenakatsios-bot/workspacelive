@@ -11,7 +11,7 @@ import express from "express";
 import { loginSchema, insertCompanySchema, insertContactSchema, insertDealSchema, insertProductSchema, insertOrderSchema, insertOrderLineSchema, insertActivitySchema, insertQuoteSchema, emails as emailsTable, contacts, companies as companiesTable, outlookTokens as outlookTokensTable, crmSettings, portalUsers, attachments } from "@shared/schema";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { reserveOrderLines, releaseOrderLines, handleStatusChange, dispatchOrderLines, adjustStockManual, recalculateProductStock, adjustReservationForLine, isReservingStatus, isDispatchingStatus } from "./stockEngine";
-import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero, autoSyncXeroInvoices, repairMissingInvoiceRecords, getXeroSyncMapping, saveXeroSyncMapping } from "./xero";
+import { createXeroClient, getStoredToken, saveXeroToken, deleteXeroToken, refreshTokenIfNeeded, importContactsFromXero, syncInvoiceToXero, importInvoicesFromXero, autoSyncXeroInvoices, repairMissingInvoiceRecords, getXeroSyncMapping, saveXeroSyncMapping, refreshOverdueFromXeroContacts } from "./xero";
 import { getOutlookAuthUrl, exchangeCodeForTokens, getStoredOutlookToken, saveOutlookToken, deleteOutlookToken, refreshOutlookTokenIfNeeded, syncEmailsToDatabase, sendEmail, replyToEmail, getEmailsForCompany, getEmailsForContact, getAllEmails, backfillEmailCompanyLinks, fetchEmailAttachments, downloadAttachment } from "./outlook";
 
 declare module "express-session" {
@@ -4400,6 +4400,32 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Xero sync invoice error:", error);
       res.status(500).json({ message: "Failed to sync invoice to Xero" });
+    }
+  });
+
+  // Refresh overdue amounts from Xero Contacts API (exact match to what Xero shows)
+  app.post("/api/xero/refresh-overdue", requireAdmin, async (req, res) => {
+    try {
+      const token = await getStoredToken();
+      if (!token) {
+        return res.status(400).json({ message: "Xero not connected" });
+      }
+      const baseUrl = process.env.APP_URL || `${req.headers["x-forwarded-proto"] || req.protocol}://${req.headers["x-forwarded-host"] || req.headers.host}`;
+      const redirectUri = `${baseUrl}/api/xero/callback`;
+      const xero = createXeroClient(redirectUri);
+      const refreshed = await refreshTokenIfNeeded(xero, token);
+      if (!refreshed) {
+        await deleteXeroToken();
+        return res.status(401).json({ message: "Xero session expired. Please reconnect Xero in Admin > Integrations." });
+      }
+      const freshToken = await getStoredToken();
+      const accessToken = freshToken?.accessToken || token.accessToken;
+      const tenantId = freshToken?.tenantId || token.tenantId;
+      const result = await refreshOverdueFromXeroContacts(accessToken, tenantId);
+      res.json({ success: true, updated: result.updated });
+    } catch (error: any) {
+      console.error("Xero refresh-overdue error:", error);
+      res.status(500).json({ message: error?.message || "Failed to refresh overdue from Xero" });
     }
   });
 
