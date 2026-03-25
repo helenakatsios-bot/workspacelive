@@ -1,6 +1,28 @@
 import express, { type Request, Response, NextFunction } from "express";
 import fs from "fs";
 import path from "path";
+import { exec as execCb } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(execCb);
+
+async function runAutoDeployBackup(): Promise<void> {
+  try {
+    await execAsync("git add -A", { timeout: 15000 });
+    try {
+      await execAsync('git commit -m "auto deploy backup"', { timeout: 15000 });
+    } catch (commitErr: any) {
+      const msg = commitErr?.message || String(commitErr);
+      if (!msg.includes("nothing to commit") && !msg.includes("nothing added")) {
+        throw commitErr;
+      }
+    }
+    await execAsync("git push origin main", { timeout: 60000 });
+    console.log("[AUTO-BACKUP] Deploy backup pushed to GitHub successfully.");
+  } catch (err: any) {
+    console.error("[AUTO-BACKUP] Failed to push deploy backup to GitHub:", err?.message || err);
+  }
+}
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -1718,6 +1740,11 @@ async function runStartupTasks() {
       startAutoXeroInvoiceSync(15);
       startRecurringOrderScheduler();
       startBackupScheduler();
+
+      // Auto-backup to GitHub on every production deploy
+      if (process.env.NODE_ENV === "production") {
+        runAutoDeployBackup();
+      }
 
       // Run all startup database tasks in the background after port is open
       runStartupTasks().catch(err => console.error("Startup tasks error:", err));
