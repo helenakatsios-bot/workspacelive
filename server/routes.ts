@@ -7938,7 +7938,8 @@ Rules:
       if (existing.rows.length === 0) {
         return res.status(404).json({ message: "Order request not found" });
       }
-      if (existing.rows[0].status !== "pending") {
+      const editableStatuses = ["pending", "reviewed"];
+      if (!editableStatuses.includes(existing.rows[0].status)) {
         return res.status(400).json({ message: "This order has already been accepted and can no longer be edited" });
       }
 

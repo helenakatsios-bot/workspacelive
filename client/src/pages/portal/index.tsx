@@ -588,7 +588,7 @@ function PortalOrders({ onNavigate }: { onNavigate: (page: string) => void }) {
                       <TableCell className="text-right text-sm">{estTotal > 0 ? `$${estTotal.toLocaleString("en-AU", { minimumFractionDigits: 2 })}` : "-"}</TableCell>
                       <TableCell className="w-8">
                         <div className="flex items-center gap-1">
-                          {req.status === "pending" && (
+                          {(req.status === "pending" || req.status === "reviewed") && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -972,6 +972,9 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
   const [editLoaded, setEditLoaded] = useState(false);
   const [showReorderModal, setShowReorderModal] = useState(false);
   const [reorderDraft, setReorderDraft] = useState<string[]>([]);
+  const [showExitDialog, setShowExitDialog] = useState(false);
+
+  const DRAFT_KEY = "portal_order_draft";
 
   const { data: categoryOrderData } = useQuery<{ order: string[]; source: string }>({
     queryKey: ["/api/portal/category-order"],
@@ -1022,9 +1025,52 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
     setExpandedCategories(new Set());
   }, [editRequestId]);
 
+  // Auto-save draft to localStorage whenever cart changes (only for new orders)
+  useEffect(() => {
+    if (isEditMode) return;
+    const hasItems = Object.keys(cart).length > 0 || customLines.some((l) => l.size && l.qty > 0) || customQuiltLines.some((l) => l.description.trim() && l.qty > 0);
+    if (hasItems) {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({
+          cart, fillings, weights, notes, packagingNotes, deliveryAddress,
+          customerName, customerOrderNumber, customLines, customQuiltLines,
+          sizeGroupFillings, insertGroupSelections,
+        }));
+      } catch {}
+    } else {
+      localStorage.removeItem(DRAFT_KEY);
+    }
+  }, [cart, fillings, weights, notes, packagingNotes, deliveryAddress, customerName, customerOrderNumber, customLines, customQuiltLines, sizeGroupFillings, insertGroupSelections]);
+
+  // Restore draft from localStorage on mount (new orders only)
+  useEffect(() => {
+    if (isEditMode) return;
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (!saved) return;
+      const draft = JSON.parse(saved);
+      if (draft.cart && Object.keys(draft.cart).length > 0) {
+        setCart(draft.cart);
+        setFillings(draft.fillings || {});
+        setWeights(draft.weights || {});
+        setNotes(draft.notes || "");
+        setPackagingNotes(draft.packagingNotes || "");
+        setDeliveryAddress(draft.deliveryAddress || "");
+        setCustomerName(draft.customerName || "");
+        setCustomerOrderNumber(draft.customerOrderNumber || "");
+        if (draft.customLines?.length) setCustomLines(draft.customLines);
+        if (draft.customQuiltLines?.length) setCustomQuiltLines(draft.customQuiltLines);
+        setSizeGroupFillings(draft.sizeGroupFillings || {});
+        setInsertGroupSelections(draft.insertGroupSelections || {});
+        toast({ title: "Draft restored", description: "Your saved order has been restored. Continue where you left off." });
+      }
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!isEditMode || !editRequest || !products || editLoaded) return;
-    if (editRequest.status !== "pending") {
+    if (editRequest.status !== "pending" && editRequest.status !== "reviewed") {
       toast({ title: "Cannot edit", description: "This order has already been accepted and can no longer be edited.", variant: "destructive" });
       onNavigate("orders");
       return;
@@ -1420,6 +1466,15 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
 
   const cartTotal = cartItems.reduce((sum, item) => sum + item.qty * parseFloat(item.effectivePrice || item.unitPrice || "0"), 0);
 
+  const handleBack = () => {
+    const hasItems = Object.keys(cart).length > 0 || customLines.some((l) => l.size && l.qty > 0) || customQuiltLines.some((l) => l.description.trim() && l.qty > 0);
+    if (!isEditMode && hasItems) {
+      setShowExitDialog(true);
+    } else {
+      onNavigate("orders");
+    }
+  };
+
   const handleSubmit = async () => {
     const hasCustomLines = customLines.some((l) => l.size && l.qty > 0);
     const hasCustomQuiltLines = customQuiltLines.some((l) => l.description.trim() && l.qty > 0);
@@ -1540,6 +1595,8 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/orders"] });
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/order-requests"] });
       portalQueryClient.invalidateQueries({ queryKey: ["/api/portal/dashboard"] });
+      // Clear saved draft on successful submit
+      try { localStorage.removeItem(DRAFT_KEY); } catch {}
       toast({
         title: isEditMode ? "Order updated" : "Order submitted",
         description: isEditMode
@@ -1597,11 +1654,15 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4 flex-wrap">
-        <Button variant="ghost" size="icon" onClick={() => onNavigate("orders")} data-testid="button-back-to-orders">
+        <Button variant="ghost" size="icon" onClick={handleBack} data-testid="button-back-to-orders">
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <h1 className="text-2xl font-semibold" data-testid="text-new-order-title">{isEditMode ? "Edit Order" : "New Order"}</h1>
-        {isEditMode && <Badge variant="outline" className="text-amber-600 border-amber-300">Pending Review</Badge>}
+        {isEditMode && (
+          <Badge variant="outline" className={editRequest?.status === "reviewed" ? "text-blue-600 border-blue-300" : "text-amber-600 border-amber-300"}>
+            {editRequest?.status === "reviewed" ? "Under Review" : "Pending Review"}
+          </Badge>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -2567,6 +2628,41 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
               data-testid="button-save-category-order"
             >
               {saveOrderMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Order"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Exit / draft dialog */}
+      <Dialog open={showExitDialog} onOpenChange={setShowExitDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Save your order as a draft?</DialogTitle>
+            <DialogDescription>
+              You have items in your cart. We can save your order so you can come back and finish it later.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 justify-end pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                try { localStorage.removeItem(DRAFT_KEY); } catch {}
+                setShowExitDialog(false);
+                onNavigate("orders");
+              }}
+              data-testid="button-discard-draft"
+            >
+              Discard order
+            </Button>
+            <Button
+              onClick={() => {
+                setShowExitDialog(false);
+                toast({ title: "Draft saved", description: "Your order has been saved. Return to New Order to continue." });
+                onNavigate("orders");
+              }}
+              data-testid="button-save-draft"
+            >
+              Save as draft
             </Button>
           </div>
         </DialogContent>
