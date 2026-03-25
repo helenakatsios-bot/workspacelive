@@ -1944,7 +1944,8 @@ export default function AdminPage() {
               </CardTitle>
               <CardDescription>
                 Push the current codebase to GitHub. Safe to run at any time —
-                if there's nothing new, it will still succeed.
+                if the code is already up to date, it will do nothing, but will
+                still succeed.
               </CardDescription>
             </CardHeader>
             <CardContent>
