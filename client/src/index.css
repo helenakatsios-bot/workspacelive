@@ -196,12 +196,24 @@
   border-right: 1px solid rgba(255, 255, 255, 0.4) !important;
 }
 
-/* Top header bar glass */
+/* Top header bar glass — CRM */
 header.flex.items-center {
   background: rgba(240, 246, 252, 0.85) !important;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.35) !important;
+}
+
+/* Top header bar glass — Customer Portal */
+header.portal-glass-header {
+  background: rgba(240, 246, 252, 0.85) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35) !important;
+}
+
+.dark header.portal-glass-header {
+  background: rgba(12, 18, 30, 0.88) !important;
 }
 
 /* Cards and panels glass */
