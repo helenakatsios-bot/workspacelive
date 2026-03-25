@@ -184,6 +184,11 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
+                <SidebarMenuButton asChild data-active={isActive("/orders") && !isActive("/orders/requests")} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
+                  <Link href="/orders" data-testid="nav-orders"><ShoppingCart className="w-4 h-4" /><span className="flex-1">Orders</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
                 <SidebarMenuButton asChild data-active={isActive("/orders/requests")} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
                   <Link href="/orders/requests" data-testid="nav-order-requests">
                     <ClipboardCheck className="w-4 h-4" />
@@ -192,6 +197,21 @@ export function AppSidebar() {
                       <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[20px] justify-center">{pendingRequestCount.count}</Badge>
                     ) : null}
                   </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild data-active={isActive("/products")} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
+                  <Link href="/products" data-testid="nav-products"><Package className="w-4 h-4" /><span className="flex-1">Products</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild data-active={isActive("/service/customer-portal")} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
+                  <Link href="/service/customer-portal" data-testid="nav-customer-portal"><Globe className="w-4 h-4" /><span className="flex-1">Customer Portal</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild data-active={isActive("/service/overdue-accounts")} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
+                  <Link href="/service/overdue-accounts" data-testid="nav-overdue-accounts"><AlertTriangle className="w-4 h-4" /><span className="flex-1">Overdue Accounts</span></Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
