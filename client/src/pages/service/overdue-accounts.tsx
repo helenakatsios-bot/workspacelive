@@ -12,12 +12,14 @@ import {
   BellOff,
   CheckCircle,
   RefreshCw,
+  Receipt,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -58,14 +60,10 @@ interface FlagDialogState {
 export default function OverdueAccountsPage() {
   const { toast } = useToast();
 
-  // Which row's amount is being inline-edited
   const [editingAmount, setEditingAmount] = useState<{ id: string; value: string } | null>(null);
-
-  // Flag dialog — shown when toggling ON
   const [flagDialog, setFlagDialog] = useState<FlagDialogState | null>(null);
   const [flagDays, setFlagDays] = useState("");
   const [flagAmount, setFlagAmount] = useState("");
-
   const [isXeroRefreshing, setIsXeroRefreshing] = useState(false);
 
   const { data: accounts = [], isLoading, refetch } = useQuery<AccountRow[]>({
@@ -101,28 +99,30 @@ export default function OverdueAccountsPage() {
       accountOverdue: boolean;
       overdueAmount?: string | null;
       overdueSince?: string | null;
-    }) => apiRequest("PATCH", `/api/overdue-accounts/${id}`, { accountOverdue, overdueAmount, overdueSince }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/overdue-accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
-      setFlagDialog(null);
+    }) => {
+      await apiRequest("PATCH", `/api/overdue-accounts/${id}`, {
+        accountOverdue,
+        overdueAmount,
+        overdueSince,
+      });
     },
-    onError: () => toast({ title: "Failed to update", variant: "destructive" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/overdue-accounts"] }),
+    onError: () => toast({ title: "Failed to update account", variant: "destructive" }),
   });
 
   const amountMutation = useMutation({
-    mutationFn: async ({ id, overdueAmount }: { id: string; overdueAmount: string | null }) =>
-      apiRequest("PATCH", `/api/overdue-accounts/${id}`, { overdueAmount }),
+    mutationFn: async ({ id, overdueAmount }: { id: string; overdueAmount: string | null }) => {
+      await apiRequest("PATCH", `/api/overdue-accounts/${id}`, { overdueAmount });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/overdue-accounts"] });
       setEditingAmount(null);
     },
-    onError: () => toast({ title: "Failed to update amount", variant: "destructive" }),
+    onError: () => toast({ title: "Failed to save amount", variant: "destructive" }),
   });
 
   const handleToggle = (account: AccountRow) => {
     if (account.accountOverdue) {
-      // Turning OFF — clear immediately
       flagMutation.mutate({
         id: account.id,
         accountOverdue: false,
@@ -131,9 +131,7 @@ export default function OverdueAccountsPage() {
       });
       toast({ title: `Portal warning removed for ${account.tradingName || account.legalName}` });
     } else {
-      // Turning ON — show dialog
       setFlagDays("");
-      // Pre-fill with the Xero-synced overdue amount shown in the table, fall back to local invoice sum
       const prefilledAmount = account.overdueAmount && parseFloat(account.overdueAmount) > 0
         ? fmtAud(parseFloat(account.overdueAmount))
         : account.invoiceOutstanding > 0 ? fmtAud(account.invoiceOutstanding) : "";
@@ -156,7 +154,7 @@ export default function OverdueAccountsPage() {
       overdueAmount: flagAmount || null,
       overdueSince: since,
     });
-    toast({ title: `Portal warning enabled for ${flagDialog.name}` });
+    setFlagDialog(null);
   };
 
   const saveAmount = (id: string) => {
@@ -165,11 +163,13 @@ export default function OverdueAccountsPage() {
   };
 
   const flaggedAccounts = accounts.filter((a) => a.accountOverdue);
-  const totalFlaggedOutstanding = flaggedAccounts.reduce(
-    (s, a) => s + (a.overdueAmount ? parseFloat(a.overdueAmount) : a.invoiceOutstanding),
-    0
-  );
   const totalInvoiceOutstanding = accounts.reduce((s, a) => s + a.invoiceOutstanding, 0);
+  const totalInvoiceTotalAll = accounts.reduce((s, a) => s + (a.invoiceTotalAll ?? 0), 0);
+
+  // Outstanding tab: all accounts with any unpaid amount, sorted largest first
+  const outstandingAccounts = [...accounts]
+    .filter((a) => (a.invoiceTotalAll ?? 0) > 0 || a.invoiceOutstanding > 0)
+    .sort((a, b) => (b.invoiceTotalAll ?? 0) - (a.invoiceTotalAll ?? 0));
 
   return (
     <div className="space-y-6">
@@ -191,10 +191,10 @@ export default function OverdueAccountsPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-1 pt-4 px-4">
-            <CardTitle className="text-xs text-muted-foreground font-medium">With overdue invoices</CardTitle>
+            <CardTitle className="text-xs text-muted-foreground font-medium">Accounts with overdue</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <p className="text-3xl font-bold">{accounts.length}</p>
@@ -202,18 +202,23 @@ export default function OverdueAccountsPage() {
         </Card>
         <Card>
           <CardHeader className="pb-1 pt-4 px-4">
-            <CardTitle className="text-xs text-muted-foreground font-medium">Total overdue (Xero)</CardTitle>
+            <CardTitle className="text-xs text-muted-foreground font-medium">Total overdue</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <p className="text-3xl font-bold text-red-600">
               {totalInvoiceOutstanding > 0 ? `$${fmtAud(totalInvoiceOutstanding)}` : "—"}
             </p>
-            {(() => {
-              const totalAll = accounts.reduce((s, a) => s + (a.invoiceTotalAll ?? 0), 0);
-              return totalAll > totalInvoiceOutstanding ? (
-                <p className="text-xs text-muted-foreground mt-1">${fmtAud(totalAll)} total unpaid incl. not-yet-due</p>
-              ) : null;
-            })()}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1 pt-4 px-4">
+            <CardTitle className="text-xs text-muted-foreground font-medium">Total outstanding</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <p className="text-3xl font-bold text-blue-600">
+              {totalInvoiceTotalAll > 0 ? `$${fmtAud(totalInvoiceTotalAll)}` : "—"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">incl. not-yet-due</p>
           </CardContent>
         </Card>
         <Card>
@@ -226,180 +231,287 @@ export default function OverdueAccountsPage() {
         </Card>
       </div>
 
-      {/* Table */}
-      {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground">Loading...</div>
-      ) : accounts.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-            <CheckCircle className="w-12 h-12 text-emerald-400" />
-            <p className="text-lg font-medium">No outstanding invoices</p>
-            <p className="text-sm text-muted-foreground">
-              When Xero syncs invoices with a balance due, they'll appear here.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="rounded-lg border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Company</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Overdue (Xero)</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Shown to customer</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Flagged since</th>
-                <th className="text-center px-4 py-3 font-medium text-muted-foreground">Notify in portal</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {accounts.map((account) => {
-                const name = account.tradingName || account.legalName;
-                const days = calcDays(account.overdueSince);
-                const isEditAmt = editingAmount?.id === account.id;
+      <Tabs defaultValue="overdue" data-testid="tabs-overdue-accounts">
+        <TabsList>
+          <TabsTrigger value="overdue" data-testid="tab-overdue">
+            Overdue
+            {accounts.length > 0 && (
+              <Badge variant="destructive" className="ml-2 text-xs px-1.5 py-0">{accounts.length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="outstanding" data-testid="tab-outstanding">
+            Outstanding
+            {outstandingAccounts.length > 0 && (
+              <Badge variant="secondary" className="ml-2 text-xs px-1.5 py-0">{outstandingAccounts.length}</Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-                return (
-                  <tr
-                    key={account.id}
-                    className={`bg-background hover:bg-muted/30 transition-colors ${account.accountOverdue ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}
-                  >
-                    {/* Company */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                        <div>
-                          <Link
-                            href={`/companies/${account.id}`}
-                            className="font-medium hover:underline flex items-center gap-1"
-                            data-testid={`link-company-${account.id}`}
-                          >
-                            {name}
-                            <ExternalLink className="w-3 h-3 text-muted-foreground" />
-                          </Link>
-                          {account.tradingName && account.tradingName !== account.legalName && (
-                            <p className="text-xs text-muted-foreground">{account.legalName}</p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
+        {/* ── OVERDUE TAB ── */}
+        <TabsContent value="overdue" className="mt-4">
+          {isLoading ? (
+            <div className="text-center py-12 text-muted-foreground">Loading...</div>
+          ) : accounts.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+                <CheckCircle className="w-12 h-12 text-emerald-400" />
+                <p className="text-lg font-medium">No overdue invoices</p>
+                <p className="text-sm text-muted-foreground">
+                  When Xero syncs invoices with a balance due, they'll appear here.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="rounded-lg border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Company</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Overdue (Xero)</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Shown to customer</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Flagged since</th>
+                    <th className="text-center px-4 py-3 font-medium text-muted-foreground">Notify in portal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {accounts.map((account) => {
+                    const name = account.tradingName || account.legalName;
+                    const days = calcDays(account.overdueSince);
+                    const isEditAmt = editingAmount?.id === account.id;
 
-                    {/* Xero overdue */}
-                    <td className="px-4 py-3">
-                      {(() => {
-                        const xeroAmt = account.invoiceOutstanding > 0
-                          ? account.invoiceOutstanding
-                          : parseFloat(account.overdueAmount || "0");
-                        return xeroAmt > 0 ? (
-                          <div>
-                            <span className="font-semibold text-red-600">${fmtAud(xeroAmt)}</span>
-                            {account.invoiceOutstanding <= 0 && (
-                              <p className="text-xs text-muted-foreground mt-0.5">manually recorded</p>
-                            )}
-                            {account.invoiceOutstanding > 0 && (account.invoiceTotalAll ?? 0) > account.invoiceOutstanding && (
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                ${fmtAud(account.invoiceTotalAll)} total unpaid
-                              </p>
-                            )}
+                    return (
+                      <tr
+                        key={account.id}
+                        className={`bg-background hover:bg-muted/30 transition-colors ${account.accountOverdue ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                            <div>
+                              <Link
+                                href={`/companies/${account.id}`}
+                                className="font-medium hover:underline flex items-center gap-1"
+                                data-testid={`link-company-${account.id}`}
+                              >
+                                {name}
+                                <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                              </Link>
+                              {account.tradingName && account.tradingName !== account.legalName && (
+                                <p className="text-xs text-muted-foreground">{account.legalName}</p>
+                              )}
+                            </div>
                           </div>
-                        ) : (
-                          <span className="text-muted-foreground text-xs italic">No overdue invoices</span>
-                        );
-                      })()}
-                    </td>
+                        </td>
 
-                    {/* Amount shown to customer — inline editable */}
-                    <td className="px-4 py-3">
-                      {!account.accountOverdue ? (
-                        <span className="text-muted-foreground text-xs italic">Not flagged</span>
-                      ) : isEditAmt ? (
-                        <div className="flex items-center gap-1.5">
-                          <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={editingAmount.value}
-                              onChange={(e) => setEditingAmount({ ...editingAmount, value: e.target.value })}
-                              className="w-28 h-7 text-sm pl-5"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") saveAmount(account.id);
-                                if (e.key === "Escape") setEditingAmount(null);
-                              }}
-                              data-testid={`input-amount-${account.id}`}
+                        <td className="px-4 py-3">
+                          {(() => {
+                            const xeroAmt = account.invoiceOutstanding > 0
+                              ? account.invoiceOutstanding
+                              : parseFloat(account.overdueAmount || "0");
+                            return xeroAmt > 0 ? (
+                              <div>
+                                <span className="font-semibold text-red-600">${fmtAud(xeroAmt)}</span>
+                                {account.invoiceOutstanding <= 0 && (
+                                  <p className="text-xs text-muted-foreground mt-0.5">manually recorded</p>
+                                )}
+                                {account.invoiceOutstanding > 0 && (account.invoiceTotalAll ?? 0) > account.invoiceOutstanding && (
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    ${fmtAud(account.invoiceTotalAll)} total unpaid
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-xs italic">No overdue invoices</span>
+                            );
+                          })()}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          {!account.accountOverdue ? (
+                            <span className="text-muted-foreground text-xs italic">Not flagged</span>
+                          ) : isEditAmt ? (
+                            <div className="flex items-center gap-1.5">
+                              <div className="relative">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={editingAmount.value}
+                                  onChange={(e) => setEditingAmount({ ...editingAmount, value: e.target.value })}
+                                  className="w-28 h-7 text-sm pl-5"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") saveAmount(account.id);
+                                    if (e.key === "Escape") setEditingAmount(null);
+                                  }}
+                                  data-testid={`input-amount-${account.id}`}
+                                />
+                              </div>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-emerald-600" onClick={() => saveAmount(account.id)}>
+                                <Check className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => setEditingAmount(null)}>
+                                <X className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                setEditingAmount({
+                                  id: account.id,
+                                  value: account.overdueAmount ? String(parseFloat(account.overdueAmount)) : "",
+                                })
+                              }
+                              className="cursor-pointer text-left"
+                              title="Click to edit amount shown to customer"
+                              data-testid={`button-edit-amount-${account.id}`}
+                            >
+                              {account.overdueAmount ? (
+                                <span className="font-semibold text-amber-700 dark:text-amber-400">
+                                  ${fmtAud(parseFloat(account.overdueAmount))}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic underline underline-offset-2">
+                                  click to set
+                                </span>
+                              )}
+                            </button>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {account.accountOverdue && account.overdueSince ? (
+                            <div>
+                              <p>{format(parseISO(account.overdueSince), "d MMM yyyy")}</p>
+                              <p className="text-amber-600 font-medium">{days} {days === 1 ? "day" : "days"}</p>
+                            </div>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            {account.accountOverdue ? (
+                              <Bell className="w-4 h-4 text-amber-500" />
+                            ) : (
+                              <BellOff className="w-4 h-4 text-muted-foreground" />
+                            )}
+                            <Switch
+                              checked={account.accountOverdue}
+                              onCheckedChange={() => handleToggle(account)}
+                              disabled={flagMutation.isPending}
+                              data-testid={`toggle-overdue-${account.id}`}
                             />
                           </div>
-                          <Button size="icon" variant="ghost" className="h-6 w-6 text-emerald-600" onClick={() => saveAmount(account.id)}>
-                            <Check className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => setEditingAmount(null)}>
-                            <X className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() =>
-                            setEditingAmount({
-                              id: account.id,
-                              value: account.overdueAmount ? String(parseFloat(account.overdueAmount)) : "",
-                            })
-                          }
-                          className="cursor-pointer text-left"
-                          title="Click to edit amount shown to customer"
-                          data-testid={`button-edit-amount-${account.id}`}
-                        >
-                          {account.overdueAmount ? (
-                            <span className="font-semibold text-amber-700 dark:text-amber-400">
-                              ${fmtAud(parseFloat(account.overdueAmount))}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic underline underline-offset-2">
-                              click to set
-                            </span>
-                          )}
-                        </button>
-                      )}
-                    </td>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground mt-3">
+            Outstanding amounts come from Xero-synced invoices (updated every 15 min). The <strong>Shown to customer</strong> amount is what appears in their portal — click it to override.
+          </p>
+        </TabsContent>
 
-                    {/* Flagged since */}
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {account.accountOverdue && account.overdueSince ? (
-                        <div>
-                          <p>{format(parseISO(account.overdueSince), "d MMM yyyy")}</p>
-                          <p className="text-amber-600 font-medium">{days} {days === 1 ? "day" : "days"}</p>
-                        </div>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-
-                    {/* Toggle */}
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        {account.accountOverdue ? (
-                          <Bell className="w-4 h-4 text-amber-500" />
-                        ) : (
-                          <BellOff className="w-4 h-4 text-muted-foreground" />
-                        )}
-                        <Switch
-                          checked={account.accountOverdue}
-                          onCheckedChange={() => handleToggle(account)}
-                          disabled={flagMutation.isPending}
-                          data-testid={`toggle-overdue-${account.id}`}
-                        />
-                      </div>
-                    </td>
+        {/* ── OUTSTANDING TAB ── */}
+        <TabsContent value="outstanding" className="mt-4">
+          {isLoading ? (
+            <div className="text-center py-12 text-muted-foreground">Loading...</div>
+          ) : outstandingAccounts.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+                <CheckCircle className="w-12 h-12 text-emerald-400" />
+                <p className="text-lg font-medium">No outstanding invoices</p>
+                <p className="text-sm text-muted-foreground">
+                  All accounts are fully paid up.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="rounded-lg border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Company</th>
+                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">Total outstanding</th>
+                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">Of which overdue</th>
+                    <th className="text-center px-4 py-3 font-medium text-muted-foreground">Portal warning</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                </thead>
+                <tbody className="divide-y">
+                  {outstandingAccounts.map((account) => {
+                    const name = account.tradingName || account.legalName;
+                    const totalUnpaid = account.invoiceTotalAll ?? 0;
+                    const overduePortion = account.invoiceOutstanding > 0
+                      ? account.invoiceOutstanding
+                      : parseFloat(account.overdueAmount || "0");
+                    const notYetDue = totalUnpaid - overduePortion;
 
-      <p className="text-xs text-muted-foreground">
-        Outstanding amounts come from Xero-synced invoices (updated every 15 min). The <strong>Shown to customer</strong> amount is what appears in their portal — click it to override.
-      </p>
+                    return (
+                      <tr
+                        key={account.id}
+                        className="bg-background hover:bg-muted/30 transition-colors"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                            <div>
+                              <Link
+                                href={`/companies/${account.id}`}
+                                className="font-medium hover:underline flex items-center gap-1"
+                                data-testid={`link-outstanding-company-${account.id}`}
+                              >
+                                {name}
+                                <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                              </Link>
+                              {account.tradingName && account.tradingName !== account.legalName && (
+                                <p className="text-xs text-muted-foreground">{account.legalName}</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          <span className="font-semibold text-blue-600">${fmtAud(totalUnpaid)}</span>
+                          {notYetDue > 0.005 && (
+                            <p className="text-xs text-muted-foreground mt-0.5">${fmtAud(notYetDue)} not yet due</p>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          {overduePortion > 0 ? (
+                            <span className="font-semibold text-red-600">${fmtAud(overduePortion)}</span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-center">
+                          {account.accountOverdue ? (
+                            <Badge variant="outline" className="border-amber-400 text-amber-600 gap-1">
+                              <Bell className="w-3 h-3" /> Active
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground mt-3">
+            Shows all companies with any unpaid Xero invoices — including invoices not yet past their due date. Sorted by largest balance first.
+          </p>
+        </TabsContent>
+      </Tabs>
 
       {/* Flag confirmation dialog */}
       <Dialog open={!!flagDialog} onOpenChange={(o) => !o && setFlagDialog(null)}>
