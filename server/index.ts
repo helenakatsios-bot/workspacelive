@@ -38,8 +38,15 @@ async function runAutoDeployBackup(): Promise<void> {
       }
     }
     await execAsync("git push origin main", { timeout: 60000 });
-    fs.writeFileSync(DEPLOY_MARKER, fingerprint, "utf8");
-    console.log(`[AUTO-BACKUP] Deploy backup pushed to GitHub (fingerprint ${fingerprint.slice(0, 8)}).`);
+    const [{ stdout: headOutFinal }, { stdout: statusOutFinal }] = await Promise.all([
+      execAsync("git rev-parse HEAD", { timeout: 10000 }),
+      execAsync("git status --porcelain", { timeout: 10000 }),
+    ]);
+    const finalFingerprint = createHash("sha256")
+      .update(headOutFinal.trim() + "\n" + statusOutFinal)
+      .digest("hex");
+    fs.writeFileSync(DEPLOY_MARKER, finalFingerprint, "utf8");
+    console.log(`[AUTO-BACKUP] Deploy backup pushed to GitHub (fingerprint ${finalFingerprint.slice(0, 8)}).`);
   } catch (err: any) {
     console.error("[AUTO-BACKUP] Failed to push deploy backup to GitHub:", err?.message || err);
   }
