@@ -2,18 +2,85 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
-import { Settings, Users, Shield, Clock, FileText, Download, Search, ChevronRight, Link2, Unlink, Loader2, CheckCircle, CheckCircle2, XCircle, RefreshCw, Mail, ShoppingCart, Copy, ExternalLink, Plus, Eye, EyeOff, Trash2, Webhook, Key, Globe, Building2, Pencil, Save, AlertCircle, Database, Github } from "lucide-react";
+import {
+  Settings,
+  Users,
+  Shield,
+  Clock,
+  FileText,
+  Download,
+  Search,
+  ChevronRight,
+  Link2,
+  Unlink,
+  Loader2,
+  CheckCircle,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  Mail,
+  ShoppingCart,
+  Copy,
+  ExternalLink,
+  Plus,
+  Eye,
+  EyeOff,
+  Trash2,
+  Webhook,
+  Key,
+  Globe,
+  Building2,
+  Pencil,
+  Save,
+  AlertCircle,
+  Database,
+  Github,
+} from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/lib/auth";
@@ -108,7 +175,12 @@ export default function AdminPage() {
   const saveUserMutation = useMutation({
     mutationFn: async () => {
       if (editingUser) {
-        const body: any = { name: userName, email: userEmail, role: userRole, active: userActive };
+        const body: any = {
+          name: userName,
+          email: userEmail,
+          role: userRole,
+          active: userActive,
+        };
         if (userPassword) body.password = userPassword;
         return apiRequest("PATCH", `/api/admin/users/${editingUser.id}`, body);
       } else {
@@ -122,7 +194,10 @@ export default function AdminPage() {
       }
     },
     onSuccess: () => {
-      toast({ title: editingUser ? "User updated" : "User created", description: `${userName} has been ${editingUser ? "updated" : "added"} successfully.` });
+      toast({
+        title: editingUser ? "User updated" : "User created",
+        description: `${userName} has been ${editingUser ? "updated" : "added"} successfully.`,
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setUserDialogOpen(false);
     },
@@ -140,7 +215,10 @@ export default function AdminPage() {
       return apiRequest("DELETE", `/api/admin/users/${userId}`);
     },
     onSuccess: () => {
-      toast({ title: "User deleted", description: `${deletingUser?.name} has been deleted.` });
+      toast({
+        title: "User deleted",
+        description: `${deletingUser?.name} has been deleted.`,
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setDeleteDialogOpen(false);
       setDeletingUser(null);
@@ -159,17 +237,27 @@ export default function AdminPage() {
     enabled: isAdmin,
   });
 
-  const { data: auditLogs, isLoading: loadingAudit } = useQuery<AuditLogWithUser[]>({
+  const { data: auditLogs, isLoading: loadingAudit } = useQuery<
+    AuditLogWithUser[]
+  >({
     queryKey: ["/api/admin/audit-logs"],
     enabled: isAdmin,
   });
 
-  const { data: xeroStatus, isLoading: loadingXero, refetch: refetchXero } = useQuery<XeroStatus>({
+  const {
+    data: xeroStatus,
+    isLoading: loadingXero,
+    refetch: refetchXero,
+  } = useQuery<XeroStatus>({
     queryKey: ["/api/xero/status"],
     enabled: isAdmin,
   });
 
-  const { data: outlookStatus, isLoading: loadingOutlook, refetch: refetchOutlook } = useQuery<OutlookStatus>({
+  const {
+    data: outlookStatus,
+    isLoading: loadingOutlook,
+    refetch: refetchOutlook,
+  } = useQuery<OutlookStatus>({
     queryKey: ["/api/outlook/status"],
   });
 
@@ -178,7 +266,7 @@ export default function AdminPage() {
     const params = new URLSearchParams(window.location.search);
     const xeroParam = params.get("xero");
     const outlookParam = params.get("outlook");
-    
+
     if (xeroParam === "connected") {
       toast({ title: "Xero connected successfully" });
       refetchXero();
@@ -187,14 +275,18 @@ export default function AdminPage() {
       toast({ title: "Failed to connect Xero", variant: "destructive" });
       window.history.replaceState({}, "", "/admin");
     }
-    
+
     if (outlookParam === "success") {
       toast({ title: "Outlook connected successfully" });
       refetchOutlook();
       window.history.replaceState({}, "", "/admin");
     } else if (outlookParam === "error") {
       const reason = params.get("reason") || "unknown";
-      toast({ title: "Failed to connect Outlook", description: reason, variant: "destructive" });
+      toast({
+        title: "Failed to connect Outlook",
+        description: reason,
+        variant: "destructive",
+      });
       window.history.replaceState({}, "", "/admin");
     }
   }, [location, toast, refetchXero, refetchOutlook]);
@@ -206,7 +298,10 @@ export default function AdminPage() {
     const tryScroll = (attempts = 0) => {
       const el = document.getElementById(hash.replace("#", ""));
       if (el) {
-        setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+        setTimeout(
+          () => el.scrollIntoView({ behavior: "smooth", block: "start" }),
+          100,
+        );
       } else if (attempts < 10) {
         setTimeout(() => tryScroll(attempts + 1), 200);
       }
@@ -223,7 +318,10 @@ export default function AdminPage() {
       window.location.href = data.url;
     },
     onError: () => {
-      toast({ title: "Failed to start Xero connection", variant: "destructive" });
+      toast({
+        title: "Failed to start Xero connection",
+        variant: "destructive",
+      });
     },
   });
 
@@ -269,10 +367,15 @@ export default function AdminPage() {
       if (data.status === "running") {
         setXeroImportRunning(true);
         setXeroImportProgress(data.progress || "Starting import...");
-        toast({ title: "Import started", description: "Importing invoices from Xero in the background..." });
+        toast({
+          title: "Import started",
+          description: "Importing invoices from Xero in the background...",
+        });
         const pollInterval = setInterval(async () => {
           try {
-            const res = await fetch("/api/xero/import-invoices/status", { credentials: "include" });
+            const res = await fetch("/api/xero/import-invoices/status", {
+              credentials: "include",
+            });
             const status = await res.json();
             setXeroImportProgress(status.progress || "");
             if (!status.running) {
@@ -282,13 +385,20 @@ export default function AdminPage() {
                 queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
                 queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
                 queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
-                const errorMsg = status.result.errors?.length > 0 ? ` (${status.result.errors.length} errors)` : "";
+                const errorMsg =
+                  status.result.errors?.length > 0
+                    ? ` (${status.result.errors.length} errors)`
+                    : "";
                 toast({
                   title: "Orders imported from Xero",
                   description: `${status.result.imported} new orders created, ${status.result.skipped} already synced${errorMsg}`,
                 });
               } else if (status.error) {
-                toast({ title: "Import failed", description: status.error, variant: "destructive" });
+                toast({
+                  title: "Import failed",
+                  description: status.error,
+                  variant: "destructive",
+                });
               }
             }
           } catch {
@@ -299,7 +409,8 @@ export default function AdminPage() {
       } else if (data.imported !== undefined) {
         queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
         queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
-        const errorMsg = data.errors?.length > 0 ? ` (${data.errors.length} errors)` : "";
+        const errorMsg =
+          data.errors?.length > 0 ? ` (${data.errors.length} errors)` : "";
         toast({
           title: "Orders imported from Xero",
           description: `${data.imported} new orders created, ${data.skipped} already synced${errorMsg}`,
@@ -307,7 +418,11 @@ export default function AdminPage() {
       }
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to import orders", description: error.message, variant: "destructive" });
+      toast({
+        title: "Failed to import orders",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -323,10 +438,15 @@ export default function AdminPage() {
       if (data.status === "running") {
         setXeroRepairRunning(true);
         setXeroRepairProgress(data.progress || "Scanning...");
-        toast({ title: "Repair started", description: "Scanning Xero for missing invoice records..." });
+        toast({
+          title: "Repair started",
+          description: "Scanning Xero for missing invoice records...",
+        });
         const pollInterval = setInterval(async () => {
           try {
-            const res = await fetch("/api/xero/repair-invoices/status", { credentials: "include" });
+            const res = await fetch("/api/xero/repair-invoices/status", {
+              credentials: "include",
+            });
             const status = await res.json();
             setXeroRepairProgress(status.progress || "");
             if (!status.running) {
@@ -339,7 +459,11 @@ export default function AdminPage() {
                   description: `${status.result.fixed} missing invoice records created, ${status.result.skipped} already up to date`,
                 });
               } else if (status.error) {
-                toast({ title: "Repair failed", description: status.error, variant: "destructive" });
+                toast({
+                  title: "Repair failed",
+                  description: status.error,
+                  variant: "destructive",
+                });
               }
             }
           } catch {
@@ -350,7 +474,11 @@ export default function AdminPage() {
       }
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to repair invoices", description: error.message, variant: "destructive" });
+      toast({
+        title: "Failed to repair invoices",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -363,7 +491,10 @@ export default function AdminPage() {
       window.location.href = data.url;
     },
     onError: () => {
-      toast({ title: "Failed to start Outlook connection", variant: "destructive" });
+      toast({
+        title: "Failed to start Outlook connection",
+        variant: "destructive",
+      });
     },
   });
 
@@ -382,7 +513,9 @@ export default function AdminPage() {
 
   const syncEmailsMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/outlook/sync", { folder: "inbox" });
+      const response = await apiRequest("POST", "/api/outlook/sync", {
+        folder: "inbox",
+      });
       return response.json();
     },
     onSuccess: (data: { synced: number }) => {
@@ -408,12 +541,17 @@ export default function AdminPage() {
   const [showShopifySecret, setShowShopifySecret] = useState(false);
   const [showShopifyClientSecret, setShowShopifyClientSecret] = useState(false);
 
-  const { data: allCompaniesForShopify } = useQuery<{ id: string; legalName: string; tradingName: string | null }[]>({
+  const { data: allCompaniesForShopify } = useQuery<
+    { id: string; legalName: string; tradingName: string | null }[]
+  >({
     queryKey: ["/api/companies"],
     enabled: isAdmin,
   });
 
-  const { data: shopifyCompanySetting } = useQuery<{ key: string; value: string }>({
+  const { data: shopifyCompanySetting } = useQuery<{
+    key: string;
+    value: string;
+  }>({
     queryKey: ["/api/settings", "shopify_company_id"],
     queryFn: async () => {
       const res = await fetch("/api/settings/shopify_company_id");
@@ -423,10 +561,20 @@ export default function AdminPage() {
     enabled: isAdmin,
   });
 
-  const { data: shopifyConfig, isLoading: loadingShopify, refetch: refetchShopify } = useQuery<{
-    storeDomain: string; apiToken: string; webhookSecret: string; webhookUrl: string;
-    oauthCallbackUrl: string; clientId: string; clientSecret: string;
-    isConnected: boolean; hasOAuthCredentials: boolean;
+  const {
+    data: shopifyConfig,
+    isLoading: loadingShopify,
+    refetch: refetchShopify,
+  } = useQuery<{
+    storeDomain: string;
+    apiToken: string;
+    webhookSecret: string;
+    webhookUrl: string;
+    oauthCallbackUrl: string;
+    clientId: string;
+    clientSecret: string;
+    isConnected: boolean;
+    hasOAuthCredentials: boolean;
   }>({
     queryKey: ["/api/admin/shopify-config"],
     enabled: isAdmin,
@@ -438,21 +586,38 @@ export default function AdminPage() {
     const success = params.get("shopify_success");
     const error = params.get("shopify_error");
     if (success) {
-      toast({ title: "Shopify connected!", description: "Access token saved. You can now sync fulfillments." });
+      toast({
+        title: "Shopify connected!",
+        description: "Access token saved. You can now sync fulfillments.",
+      });
       refetchShopify();
-      window.history.replaceState({}, "", window.location.pathname + "?tab=integrations#shopify-config");
+      window.history.replaceState(
+        {},
+        "",
+        window.location.pathname + "?tab=integrations#shopify-config",
+      );
     } else if (error) {
       const messages: Record<string, string> = {
-        missing_config: "Store domain and Client ID are required before connecting.",
+        missing_config:
+          "Store domain and Client ID are required before connecting.",
         missing_credentials: "Client ID and Secret not configured.",
         invalid_state: "OAuth state mismatch — please try again.",
         hmac_failed: "Shopify signature verification failed.",
-        token_exchange: "Failed to exchange code for token — check your Client Secret.",
+        token_exchange:
+          "Failed to exchange code for token — check your Client Secret.",
         callback_failed: "OAuth callback failed — please try again.",
         start_failed: "Failed to start OAuth — please try again.",
       };
-      toast({ title: "Shopify connection failed", description: messages[error] || error, variant: "destructive" });
-      window.history.replaceState({}, "", window.location.pathname + "?tab=integrations#shopify-config");
+      toast({
+        title: "Shopify connection failed",
+        description: messages[error] || error,
+        variant: "destructive",
+      });
+      window.history.replaceState(
+        {},
+        "",
+        window.location.pathname + "?tab=integrations#shopify-config",
+      );
     }
   }, []);
 
@@ -467,7 +632,8 @@ export default function AdminPage() {
   }, [shopifyConfig, shopifyFormDirty]);
 
   useEffect(() => {
-    if (shopifyCompanySetting?.value) setShopifyCompanyId(shopifyCompanySetting.value);
+    if (shopifyCompanySetting?.value)
+      setShopifyCompanyId(shopifyCompanySetting.value);
   }, [shopifyCompanySetting?.value]);
 
   const saveShopifyConfigMutation = useMutation({
@@ -480,7 +646,9 @@ export default function AdminPage() {
         siteUrl: shopifySiteUrl,
       });
       if (shopifyCompanyId) {
-        await apiRequest("PUT", "/api/settings/shopify_company_id", { value: shopifyCompanyId });
+        await apiRequest("PUT", "/api/settings/shopify_company_id", {
+          value: shopifyCompanyId,
+        });
       }
       return res.json();
     },
@@ -490,13 +658,20 @@ export default function AdminPage() {
       refetchShopify();
     },
     onError: () => {
-      toast({ title: "Failed to save Shopify configuration", variant: "destructive" });
+      toast({
+        title: "Failed to save Shopify configuration",
+        variant: "destructive",
+      });
     },
   });
 
   const disconnectShopifyMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("DELETE", "/api/admin/shopify-config/disconnect", {});
+      const res = await apiRequest(
+        "DELETE",
+        "/api/admin/shopify-config/disconnect",
+        {},
+      );
       return res.json();
     },
     onSuccess: () => {
@@ -510,37 +685,72 @@ export default function AdminPage() {
 
   const registerShopifyWebhookMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/shopify-register-webhook", {});
+      const res = await apiRequest(
+        "POST",
+        "/api/admin/shopify-register-webhook",
+        {},
+      );
       return res.json();
     },
-    onSuccess: (data: { message: string; created?: number; deleted?: number }) => {
+    onSuccess: (data: {
+      message: string;
+      created?: number;
+      deleted?: number;
+    }) => {
       toast({ title: "Webhook registered", description: data.message });
     },
     onError: async (error: any) => {
       let msg = "Could not register webhook";
-      try { const d = await error.response?.json(); if (d?.error) msg = d.error; } catch {}
-      toast({ title: "Webhook registration failed", description: msg, variant: "destructive" });
+      try {
+        const d = await error.response?.json();
+        if (d?.error) msg = d.error;
+      } catch {}
+      toast({
+        title: "Webhook registration failed",
+        description: msg,
+        variant: "destructive",
+      });
     },
   });
 
   const importShopifyOrdersMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/import-shopify-orders", { limit: 250 });
+      const res = await apiRequest("POST", "/api/admin/import-shopify-orders", {
+        limit: 250,
+      });
       return res.json();
     },
-    onSuccess: (data: { imported: number; skipped: number; message?: string }) => {
-      toast({ title: "Shopify orders imported", description: `${data.imported} new, ${data.skipped} already existed` });
+    onSuccess: (data: {
+      imported: number;
+      skipped: number;
+      message?: string;
+    }) => {
+      toast({
+        title: "Shopify orders imported",
+        description: `${data.imported} new, ${data.skipped} already existed`,
+      });
     },
     onError: async (error: any) => {
       let msg = "Could not import orders";
-      try { const d = await error.response?.json(); if (d?.error) msg = d.error; } catch {}
-      toast({ title: "Import failed", description: msg, variant: "destructive" });
+      try {
+        const d = await error.response?.json();
+        if (d?.error) msg = d.error;
+      } catch {}
+      toast({
+        title: "Import failed",
+        description: msg,
+        variant: "destructive",
+      });
     },
   });
 
   const testShopifyMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/shopify-config/test", {});
+      const res = await apiRequest(
+        "POST",
+        "/api/admin/shopify-config/test",
+        {},
+      );
       return res.json();
     },
     onSuccess: (data: { message: string }) => {
@@ -548,12 +758,20 @@ export default function AdminPage() {
     },
     onError: async (error: any) => {
       let msg = "Connection failed — check your credentials";
-      try { if (error?.message) msg = error.message; } catch {}
-      toast({ title: "Shopify test failed", description: msg, variant: "destructive" });
+      try {
+        if (error?.message) msg = error.message;
+      } catch {}
+      toast({
+        title: "Shopify test failed",
+        description: msg,
+        variant: "destructive",
+      });
     },
   });
 
-  const { data: backupList, refetch: refetchBackups } = useQuery<{ name: string; size: number; createdAt: string }[]>({
+  const { data: backupList, refetch: refetchBackups } = useQuery<
+    { name: string; size: number; createdAt: string }[]
+  >({
     queryKey: ["/api/admin/backup/list"],
     refetchOnWindowFocus: false,
   });
@@ -564,11 +782,18 @@ export default function AdminPage() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Backup created", description: "Database backup completed successfully." });
+      toast({
+        title: "Backup created",
+        description: "Database backup completed successfully.",
+      });
       refetchBackups();
     },
     onError: () => {
-      toast({ title: "Backup failed", description: "Could not create backup.", variant: "destructive" });
+      toast({
+        title: "Backup failed",
+        description: "Could not create backup.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -579,10 +804,17 @@ export default function AdminPage() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({ title: "Backed up to GitHub", description: data.message || "Code pushed successfully." });
+      toast({
+        title: "Backed up to GitHub",
+        description: data.message || "Code pushed successfully.",
+      });
     },
     onError: (err: any) => {
-      toast({ title: "GitHub backup failed", description: err?.message || "Could not push to GitHub.", variant: "destructive" });
+      toast({
+        title: "GitHub backup failed",
+        description: err?.message || "Could not push to GitHub.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -593,7 +825,8 @@ export default function AdminPage() {
         log.user?.name?.toLowerCase().includes(auditSearch.toLowerCase()) ||
         log.entityType?.toLowerCase().includes(auditSearch.toLowerCase()) ||
         log.action.toLowerCase().includes(auditSearch.toLowerCase());
-      const matchesAction = actionFilter === "all" || log.action === actionFilter;
+      const matchesAction =
+        actionFilter === "all" || log.action === actionFilter;
       return matchesSearch && matchesAction;
     });
   }, [auditLogs, auditSearch, actionFilter]);
@@ -603,7 +836,9 @@ export default function AdminPage() {
       <div className="text-center py-12">
         <Shield className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
         <h3 className="font-medium mb-1">Access Denied</h3>
-        <p className="text-sm text-muted-foreground">You need administrator access to view this page</p>
+        <p className="text-sm text-muted-foreground">
+          You need administrator access to view this page
+        </p>
       </div>
     );
   }
@@ -615,7 +850,11 @@ export default function AdminPage() {
         description="Manage users, view audit logs, and configure system settings"
       />
 
-      <Tabs defaultValue={new URLSearchParams(window.location.search).get("tab") || "users"}>
+      <Tabs
+        defaultValue={
+          new URLSearchParams(window.location.search).get("tab") || "users"
+        }
+      >
         <TabsList className="flex-wrap">
           <TabsTrigger value="users" className="gap-2">
             <Users className="w-4 h-4" />
@@ -625,7 +864,11 @@ export default function AdminPage() {
             <Clock className="w-4 h-4" />
             Audit Log
           </TabsTrigger>
-          <TabsTrigger value="integrations" className="gap-2" data-testid="tab-integrations">
+          <TabsTrigger
+            value="integrations"
+            className="gap-2"
+            data-testid="tab-integrations"
+          >
             <Link2 className="w-4 h-4" />
             Integrations
           </TabsTrigger>
@@ -633,15 +876,27 @@ export default function AdminPage() {
             <Download className="w-4 h-4" />
             Exports
           </TabsTrigger>
-          <TabsTrigger value="order-form" className="gap-2" data-testid="tab-order-form">
+          <TabsTrigger
+            value="order-form"
+            className="gap-2"
+            data-testid="tab-order-form"
+          >
             <ShoppingCart className="w-4 h-4" />
             Order Form
           </TabsTrigger>
-          <TabsTrigger value="portal" className="gap-2" data-testid="tab-portal">
+          <TabsTrigger
+            value="portal"
+            className="gap-2"
+            data-testid="tab-portal"
+          >
             <Globe className="w-4 h-4" />
             Portal
           </TabsTrigger>
-          <TabsTrigger value="imports" className="gap-2" data-testid="tab-imports">
+          <TabsTrigger
+            value="imports"
+            className="gap-2"
+            data-testid="tab-imports"
+          >
             <FileText className="w-4 h-4" />
             Imports
           </TabsTrigger>
@@ -652,7 +907,9 @@ export default function AdminPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-lg">User Management</CardTitle>
-                <CardDescription>Manage user accounts and permissions</CardDescription>
+                <CardDescription>
+                  Manage user accounts and permissions
+                </CardDescription>
               </div>
               <Button data-testid="button-add-user" onClick={openAddUser}>
                 <Plus className="w-4 h-4 mr-2" />
@@ -680,7 +937,9 @@ export default function AdminPage() {
                       <TableHead>Email</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="hidden md:table-cell">Last Login</TableHead>
+                      <TableHead className="hidden md:table-cell">
+                        Last Login
+                      </TableHead>
                       <TableHead className="w-24"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -697,29 +956,50 @@ export default function AdminPage() {
                             <span className="font-medium">{user.name}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {user.email}
+                        </TableCell>
                         <TableCell>
-                          <Badge className={roleColors[user.role] || roleColors.readonly}>
+                          <Badge
+                            className={
+                              roleColors[user.role] || roleColors.readonly
+                            }
+                          >
                             {roleLabels[user.role] || user.role}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={user.active ? "outline" : "secondary"}>
+                          <Badge
+                            variant={user.active ? "outline" : "secondary"}
+                          >
                             {user.active ? "Active" : "Inactive"}
                           </Badge>
                         </TableCell>
                         <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
-                          {user.lastLogin ? format(new Date(user.lastLogin), "MMM d, yyyy h:mm a") : "Never"}
+                          {user.lastLogin
+                            ? format(
+                                new Date(user.lastLogin),
+                                "MMM d, yyyy h:mm a",
+                              )
+                            : "Never"}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => openEditUser(user)} data-testid={`button-edit-user-${user.id}`}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEditUser(user)}
+                              data-testid={`button-edit-user-${user.id}`}
+                            >
                               <ChevronRight className="w-4 h-4" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => { setDeletingUser(user); setDeleteDialogOpen(true); }}
+                              onClick={() => {
+                                setDeletingUser(user);
+                                setDeleteDialogOpen(true);
+                              }}
                               data-testid={`button-delete-user-${user.id}`}
                             >
                               <Trash2 className="w-4 h-4 text-destructive" />
@@ -746,7 +1026,9 @@ export default function AdminPage() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                   <CardTitle className="text-lg">Audit Log</CardTitle>
-                  <CardDescription>Track all system activities and changes</CardDescription>
+                  <CardDescription>
+                    Track all system activities and changes
+                  </CardDescription>
                 </div>
                 <div className="flex gap-2">
                   <div className="relative">
@@ -760,7 +1042,10 @@ export default function AdminPage() {
                     />
                   </div>
                   <Select value={actionFilter} onValueChange={setActionFilter}>
-                    <SelectTrigger className="w-32" data-testid="select-action-filter">
+                    <SelectTrigger
+                      className="w-32"
+                      data-testid="select-action-filter"
+                    >
                       <SelectValue placeholder="Action" />
                     </SelectTrigger>
                     <SelectContent>
@@ -794,19 +1079,27 @@ export default function AdminPage() {
                       <TableHead>Action</TableHead>
                       <TableHead>User</TableHead>
                       <TableHead>Entity</TableHead>
-                      <TableHead className="hidden md:table-cell">Timestamp</TableHead>
+                      <TableHead className="hidden md:table-cell">
+                        Timestamp
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredAuditLogs.slice(0, 50).map((log) => (
                       <TableRow key={log.id}>
                         <TableCell>
-                          <Badge className={actionColors[log.action] || actionColors.update}>
+                          <Badge
+                            className={
+                              actionColors[log.action] || actionColors.update
+                            }
+                          >
                             {log.action}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <span className="font-medium">{log.user?.name || "System"}</span>
+                          <span className="font-medium">
+                            {log.user?.name || "System"}
+                          </span>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {log.entityType ? (
@@ -816,7 +1109,10 @@ export default function AdminPage() {
                           )}
                         </TableCell>
                         <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
-                          {format(new Date(log.timestamp), "MMM d, yyyy h:mm a")}
+                          {format(
+                            new Date(log.timestamp),
+                            "MMM d, yyyy h:mm a",
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -836,7 +1132,9 @@ export default function AdminPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Xero Accounting</CardTitle>
-              <CardDescription>Connect to Xero to sync contacts and invoices</CardDescription>
+              <CardDescription>
+                Connect to Xero to sync contacts and invoices
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {loadingXero ? (
@@ -849,7 +1147,9 @@ export default function AdminPage() {
                   <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/10 border border-green-500/20">
                     <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
                     <div className="flex-1">
-                      <p className="font-medium text-green-700 dark:text-green-300">Connected to Xero</p>
+                      <p className="font-medium text-green-700 dark:text-green-300">
+                        Connected to Xero
+                      </p>
                       {xeroStatus.tenantName && (
                         <p className="text-sm text-green-600/80 dark:text-green-400/80">
                           Organization: {xeroStatus.tenantName}
@@ -892,18 +1192,25 @@ export default function AdminPage() {
                   <div className="flex flex-wrap items-center gap-3">
                     <Button
                       onClick={() => importInvoicesMutation.mutate()}
-                      disabled={importInvoicesMutation.isPending || xeroImportRunning}
+                      disabled={
+                        importInvoicesMutation.isPending || xeroImportRunning
+                      }
                       data-testid="button-xero-import-invoices"
                     >
-                      {(importInvoicesMutation.isPending || xeroImportRunning) ? (
+                      {importInvoicesMutation.isPending || xeroImportRunning ? (
                         <Loader2 className="w-4 h-4 animate-spin mr-2" />
                       ) : (
                         <Download className="w-4 h-4 mr-2" />
                       )}
-                      {xeroImportRunning ? xeroImportProgress || "Importing..." : importInvoicesMutation.isPending ? "Starting..." : "Import All Orders from Xero"}
+                      {xeroImportRunning
+                        ? xeroImportProgress || "Importing..."
+                        : importInvoicesMutation.isPending
+                          ? "Starting..."
+                          : "Import All Orders from Xero"}
                     </Button>
                     <p className="text-sm text-muted-foreground">
-                      Imports all invoices from Xero as orders matched to customer profiles
+                      Imports all invoices from Xero as orders matched to
+                      customer profiles
                     </p>
                   </div>
 
@@ -911,18 +1218,28 @@ export default function AdminPage() {
                     <Button
                       variant="outline"
                       onClick={() => repairInvoicesMutation.mutate()}
-                      disabled={repairInvoicesMutation.isPending || xeroRepairRunning || xeroImportRunning}
+                      disabled={
+                        repairInvoicesMutation.isPending ||
+                        xeroRepairRunning ||
+                        xeroImportRunning
+                      }
                       data-testid="button-xero-repair-invoices"
                     >
-                      {(repairInvoicesMutation.isPending || xeroRepairRunning) ? (
+                      {repairInvoicesMutation.isPending || xeroRepairRunning ? (
                         <Loader2 className="w-4 h-4 animate-spin mr-2" />
                       ) : (
                         <RefreshCw className="w-4 h-4 mr-2" />
                       )}
-                      {xeroRepairRunning ? xeroRepairProgress || "Repairing..." : repairInvoicesMutation.isPending ? "Starting..." : "Fix Missing Portal Invoice Records"}
+                      {xeroRepairRunning
+                        ? xeroRepairProgress || "Repairing..."
+                        : repairInvoicesMutation.isPending
+                          ? "Starting..."
+                          : "Fix Missing Portal Invoice Records"}
                     </Button>
                     <p className="text-sm text-muted-foreground">
-                      Finds orders imported from Xero that are missing invoice records and creates them — fixes blank invoice history in the customer portal
+                      Finds orders imported from Xero that are missing invoice
+                      records and creates them — fixes blank invoice history in
+                      the customer portal
                     </p>
                   </div>
                 </div>
@@ -960,7 +1277,10 @@ export default function AdminPage() {
                 <Mail className="w-5 h-5" />
                 Outlook Email
               </CardTitle>
-              <CardDescription>Connect your Outlook account to send and receive emails within the CRM</CardDescription>
+              <CardDescription>
+                Connect your Outlook account to send and receive emails within
+                the CRM
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {loadingOutlook ? (
@@ -973,7 +1293,9 @@ export default function AdminPage() {
                   <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/10 border border-green-500/20">
                     <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
                     <div className="flex-1">
-                      <p className="font-medium text-green-700 dark:text-green-300">Connected to Outlook</p>
+                      <p className="font-medium text-green-700 dark:text-green-300">
+                        Connected to Outlook
+                      </p>
                       {outlookStatus.email && (
                         <p className="text-sm text-green-600/80 dark:text-green-400/80">
                           {outlookStatus.email}
@@ -1043,37 +1365,56 @@ export default function AdminPage() {
 
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle className="text-lg">Purax Feather Holdings App</CardTitle>
-              <CardDescription>Sync orders from this CRM to your Purax order management app, which then sends them to Xero</CardDescription>
+              <CardTitle className="text-lg">
+                Purax Feather Holdings App
+              </CardTitle>
+              <CardDescription>
+                Sync orders from this CRM to your Purax order management app,
+                which then sends them to Xero
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/10 border border-green-200 dark:border-green-800">
                   <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
                   <div className="flex-1">
-                    <p className="font-medium text-green-700 dark:text-green-300">Configured</p>
+                    <p className="font-medium text-green-700 dark:text-green-300">
+                      Configured
+                    </p>
                     <p className="text-sm text-muted-foreground">
-                      Orders can be sent to <span className="font-mono text-xs">order-manager-pro.replit.app</span>
+                      Orders can be sent to{" "}
+                      <span className="font-mono text-xs">
+                        order-manager-pro.replit.app
+                      </span>
                     </p>
                   </div>
                 </div>
                 <div className="rounded-lg border p-4 space-y-2">
                   <h4 className="text-sm font-medium">How it works</h4>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">1</span>
+                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">
+                      1
+                    </span>
                     Create an order in this CRM
                   </div>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">2</span>
+                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">
+                      2
+                    </span>
                     Click "Send to Purax" on the order detail page
                   </div>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">3</span>
+                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold">
+                      3
+                    </span>
                     Purax app processes the order and sends it to Xero
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  The Purax app needs a webhook endpoint at <span className="font-mono">/api/webhook/crm-order</span> to receive orders. Contact your administrator if this hasn't been set up yet.
+                  The Purax app needs a webhook endpoint at{" "}
+                  <span className="font-mono">/api/webhook/crm-order</span> to
+                  receive orders. Contact your administrator if this hasn't been
+                  set up yet.
                 </p>
               </div>
             </CardContent>
@@ -1088,7 +1429,10 @@ export default function AdminPage() {
                 </div>
                 <div className="flex-1">
                   <CardTitle className="text-lg">Shopify</CardTitle>
-                  <CardDescription>Automatically import Shopify orders into the CRM and push fulfillment status back to Shopify</CardDescription>
+                  <CardDescription>
+                    Automatically import Shopify orders into the CRM and push
+                    fulfillment status back to Shopify
+                  </CardDescription>
                 </div>
                 {shopifyConfig?.isConnected ? (
                   <span className="flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400 bg-green-500/10 border border-green-200 dark:border-green-800 rounded-full px-2.5 py-1">
@@ -1104,24 +1448,32 @@ export default function AdminPage() {
             <CardContent className="space-y-4">
               {loadingShopify ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading configuration...
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading
+                  configuration...
                 </div>
               ) : (
                 <>
                   {/* Step 1 — App Credentials */}
                   <div className="rounded-lg border p-4 space-y-3">
                     <h4 className="text-sm font-semibold flex items-center gap-2">
-                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold">1</span>
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                        1
+                      </span>
                       Enter your Shopify app credentials
                     </h4>
                     <div className="space-y-3 pl-7">
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Store Domain</label>
+                        <label className="text-sm font-medium">
+                          Store Domain
+                        </label>
                         <input
                           className="w-full border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                           placeholder="yourstore.myshopify.com"
                           value={shopifyStoreDomain}
-                          onChange={(e) => { setShopifyStoreDomain(e.target.value); setShopifyFormDirty(true); }}
+                          onChange={(e) => {
+                            setShopifyStoreDomain(e.target.value);
+                            setShopifyFormDirty(true);
+                          }}
                           data-testid="input-shopify-store-domain"
                         />
                       </div>
@@ -1131,71 +1483,124 @@ export default function AdminPage() {
                           className="w-full border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
                           placeholder="Your Shopify app Client ID"
                           value={shopifyClientId}
-                          onChange={(e) => { setShopifyClientId(e.target.value); setShopifyFormDirty(true); }}
+                          onChange={(e) => {
+                            setShopifyClientId(e.target.value);
+                            setShopifyFormDirty(true);
+                          }}
                           data-testid="input-shopify-client-id"
                         />
-                        <p className="text-xs text-muted-foreground">Found in Shopify Partner Dashboard → Your app → Settings → Credentials</p>
+                        <p className="text-xs text-muted-foreground">
+                          Found in Shopify Partner Dashboard → Your app →
+                          Settings → Credentials
+                        </p>
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Client Secret</label>
+                        <label className="text-sm font-medium">
+                          Client Secret
+                        </label>
                         <div className="relative">
                           <input
                             className="w-full border rounded-md px-3 py-2 pr-10 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
                             placeholder="Your Shopify app Client Secret"
                             type={showShopifyClientSecret ? "text" : "password"}
                             value={shopifyClientSecret}
-                            onChange={(e) => { setShopifyClientSecret(e.target.value); setShopifyFormDirty(true); }}
+                            onChange={(e) => {
+                              setShopifyClientSecret(e.target.value);
+                              setShopifyFormDirty(true);
+                            }}
                             data-testid="input-shopify-client-secret"
                           />
                           <button
                             type="button"
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                            onClick={() => setShowShopifyClientSecret(!showShopifyClientSecret)}
+                            onClick={() =>
+                              setShowShopifyClientSecret(
+                                !showShopifyClientSecret,
+                              )
+                            }
                           >
-                            {showShopifyClientSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            {showShopifyClientSecret ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
-                        <p className="text-xs text-muted-foreground">Found in Shopify Partner Dashboard → Your app → Settings → Credentials → Show Secret</p>
+                        <p className="text-xs text-muted-foreground">
+                          Found in Shopify Partner Dashboard → Your app →
+                          Settings → Credentials → Show Secret
+                        </p>
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Production URL <span className="text-destructive font-bold">*</span></label>
+                        <label className="text-sm font-medium">
+                          Production URL{" "}
+                          <span className="text-destructive font-bold">*</span>
+                        </label>
                         <input
                           className="w-full border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
                           placeholder="https://workspacelive.com.au"
                           value={shopifySiteUrl}
-                          onChange={(e) => { setShopifySiteUrl(e.target.value); setShopifyFormDirty(true); }}
+                          onChange={(e) => {
+                            setShopifySiteUrl(e.target.value);
+                            setShopifyFormDirty(true);
+                          }}
                           data-testid="input-shopify-site-url"
                         />
                         <p className="text-xs text-muted-foreground">
-                          <strong>Important:</strong> This must be your live production URL (e.g. <code>https://workspacelive.com.au</code>). All Shopify webhooks will be registered to this address. If left blank, the current server's URL is used — which will be wrong when set up from a development environment.
+                          <strong>Important:</strong> This must be your live
+                          production URL (e.g.{" "}
+                          <code>https://workspacelive.com.au</code>). All
+                          Shopify webhooks will be registered to this address.
+                          If left blank, the current server's URL is used —
+                          which will be wrong when set up from a development
+                          environment.
                         </p>
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Webhook Secret</label>
+                        <label className="text-sm font-medium">
+                          Webhook Secret
+                        </label>
                         <div className="relative">
                           <input
                             className="w-full border rounded-md px-3 py-2 pr-10 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
                             placeholder="Webhook signing secret"
                             type={showShopifySecret ? "text" : "password"}
                             value={shopifyWebhookSecret}
-                            onChange={(e) => { setShopifyWebhookSecret(e.target.value); setShopifyFormDirty(true); }}
+                            onChange={(e) => {
+                              setShopifyWebhookSecret(e.target.value);
+                              setShopifyFormDirty(true);
+                            }}
                             data-testid="input-shopify-webhook-secret"
                           />
                           <button
                             type="button"
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                            onClick={() => setShowShopifySecret(!showShopifySecret)}
+                            onClick={() =>
+                              setShowShopifySecret(!showShopifySecret)
+                            }
                           >
-                            {showShopifySecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            {showShopifySecret ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
-                        <p className="text-xs text-muted-foreground">Found in Shopify Admin → Settings → Notifications → Webhooks</p>
+                        <p className="text-xs text-muted-foreground">
+                          Found in Shopify Admin → Settings → Notifications →
+                          Webhooks
+                        </p>
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Assign Orders To</label>
+                        <label className="text-sm font-medium">
+                          Assign Orders To
+                        </label>
                         <Select
                           value={shopifyCompanyId}
-                          onValueChange={(v) => { setShopifyCompanyId(v); setShopifyFormDirty(true); }}
+                          onValueChange={(v) => {
+                            setShopifyCompanyId(v);
+                            setShopifyFormDirty(true);
+                          }}
                         >
                           <SelectTrigger data-testid="select-shopify-company">
                             <SelectValue placeholder="Select a company..." />
@@ -1203,7 +1608,11 @@ export default function AdminPage() {
                           <SelectContent>
                             {(allCompaniesForShopify || [])
                               .slice()
-                              .sort((a, b) => (a.tradingName || a.legalName).localeCompare(b.tradingName || b.legalName))
+                              .sort((a, b) =>
+                                (a.tradingName || a.legalName).localeCompare(
+                                  b.tradingName || b.legalName,
+                                ),
+                              )
                               .map((c) => (
                                 <SelectItem key={c.id} value={c.id}>
                                   {c.tradingName || c.legalName}
@@ -1211,14 +1620,19 @@ export default function AdminPage() {
                               ))}
                           </SelectContent>
                         </Select>
-                        <p className="text-xs text-muted-foreground">All incoming Shopify orders will be assigned to this company.</p>
+                        <p className="text-xs text-muted-foreground">
+                          All incoming Shopify orders will be assigned to this
+                          company.
+                        </p>
                       </div>
                       <Button
                         onClick={() => saveShopifyConfigMutation.mutate()}
                         disabled={saveShopifyConfigMutation.isPending}
                         data-testid="button-save-shopify-config"
                       >
-                        {saveShopifyConfigMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                        {saveShopifyConfigMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : null}
                         Save Configuration
                       </Button>
                     </div>
@@ -1228,11 +1642,16 @@ export default function AdminPage() {
                   {shopifyConfig?.oauthCallbackUrl && (
                     <div className="rounded-lg border p-4 space-y-3">
                       <h4 className="text-sm font-semibold flex items-center gap-2">
-                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold">2</span>
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                          2
+                        </span>
                         Register this redirect URL in your Shopify app
                       </h4>
                       <div className="pl-7 space-y-2">
-                        <p className="text-xs text-muted-foreground">In Shopify Partner Dashboard → Your app → Configuration → Allowed redirection URL(s), add:</p>
+                        <p className="text-xs text-muted-foreground">
+                          In Shopify Partner Dashboard → Your app →
+                          Configuration → Allowed redirection URL(s), add:
+                        </p>
                         <div className="flex items-center gap-2">
                           <code className="text-xs font-mono bg-muted border rounded px-2 py-1 flex-1 break-all">
                             {shopifyConfig.oauthCallbackUrl}
@@ -1240,14 +1659,25 @@ export default function AdminPage() {
                           <button
                             type="button"
                             className="shrink-0 text-muted-foreground hover:text-foreground"
-                            onClick={() => { navigator.clipboard.writeText(shopifyConfig.oauthCallbackUrl); toast({ title: "Copied to clipboard" }); }}
+                            onClick={() => {
+                              navigator.clipboard.writeText(
+                                shopifyConfig.oauthCallbackUrl,
+                              );
+                              toast({ title: "Copied to clipboard" });
+                            }}
                             data-testid="button-copy-shopify-callback-url"
                             title="Copy redirect URL"
                           >
                             <Copy className="w-4 h-4" />
                           </button>
                         </div>
-                        <p className="text-xs text-muted-foreground">Also make sure your app's scopes include: <code className="bg-muted rounded px-1">read_orders, write_orders, write_fulfillments, read_analytics</code></p>
+                        <p className="text-xs text-muted-foreground">
+                          Also make sure your app's scopes include:{" "}
+                          <code className="bg-muted rounded px-1">
+                            read_orders, write_orders, write_fulfillments,
+                            read_analytics
+                          </code>
+                        </p>
                       </div>
                     </div>
                   )}
@@ -1255,7 +1685,9 @@ export default function AdminPage() {
                   {/* Step 3 — Connect */}
                   <div className="rounded-lg border p-4 space-y-3">
                     <h4 className="text-sm font-semibold flex items-center gap-2">
-                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold">3</span>
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                        3
+                      </span>
                       Connect with Shopify
                     </h4>
                     <div className="pl-7 space-y-3">
@@ -1272,41 +1704,71 @@ export default function AdminPage() {
                               disabled={testShopifyMutation.isPending}
                               data-testid="button-test-shopify"
                             >
-                              {testShopifyMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                              {testShopifyMutation.isPending ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                              )}
                               Test Connection
                             </Button>
                             <Button
                               variant="outline"
                               className="text-destructive border-destructive/30 hover:bg-destructive/10"
                               onClick={() => {
-                                if (confirm("Disconnect Shopify? You'll need to reconnect via OAuth to use fulfillment sync again.")) {
+                                if (
+                                  confirm(
+                                    "Disconnect Shopify? You'll need to reconnect via OAuth to use fulfillment sync again.",
+                                  )
+                                ) {
                                   disconnectShopifyMutation.mutate();
                                 }
                               }}
                               disabled={disconnectShopifyMutation.isPending}
                               data-testid="button-disconnect-shopify"
                             >
-                              {disconnectShopifyMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                              {disconnectShopifyMutation.isPending ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              ) : null}
                               Disconnect
                             </Button>
-                            <a href="/api/shopify/oauth/start" data-testid="button-reconnect-shopify">
-                              <Button variant="outline" size="sm">Re-connect</Button>
+                            <a
+                              href="/api/shopify/oauth/start"
+                              data-testid="button-reconnect-shopify"
+                            >
+                              <Button variant="outline" size="sm">
+                                Re-connect
+                              </Button>
                             </a>
                           </div>
                         </div>
                       ) : (
                         <div className="space-y-2">
                           <p className="text-sm text-muted-foreground">
-                            After saving your credentials above and registering the redirect URL, click below to authorise the CRM to access your Shopify store.
+                            After saving your credentials above and registering
+                            the redirect URL, click below to authorise the CRM
+                            to access your Shopify store.
                           </p>
-                          <a href="/api/shopify/oauth/start" data-testid="button-connect-shopify">
-                            <Button className="gap-2" disabled={!shopifyConfig?.hasOAuthCredentials || !shopifyConfig?.storeDomain}>
+                          <a
+                            href="/api/shopify/oauth/start"
+                            data-testid="button-connect-shopify"
+                          >
+                            <Button
+                              className="gap-2"
+                              disabled={
+                                !shopifyConfig?.hasOAuthCredentials ||
+                                !shopifyConfig?.storeDomain
+                              }
+                            >
                               <ShoppingCart className="w-4 h-4" />
                               Connect with Shopify
                             </Button>
                           </a>
-                          {(!shopifyConfig?.hasOAuthCredentials || !shopifyConfig?.storeDomain) && (
-                            <p className="text-xs text-amber-600 dark:text-amber-400">Save your Store Domain, Client ID and Client Secret first.</p>
+                          {(!shopifyConfig?.hasOAuthCredentials ||
+                            !shopifyConfig?.storeDomain) && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              Save your Store Domain, Client ID and Client
+                              Secret first.
+                            </p>
                           )}
                         </div>
                       )}
@@ -1318,13 +1780,22 @@ export default function AdminPage() {
                     <div className="rounded-lg border bg-muted/40 p-3 space-y-2">
                       <div className="flex items-center gap-2">
                         <Webhook className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <p className="text-xs font-medium">Webhook URL — used for automatic order import</p>
+                        <p className="text-xs font-medium">
+                          Webhook URL — used for automatic order import
+                        </p>
                       </div>
-                      {(shopifyConfig.webhookUrl.includes("replit.app") || shopifyConfig.webhookUrl.includes("replit.dev") || shopifyConfig.webhookUrl.includes("worf.replit")) && (
+                      {(shopifyConfig.webhookUrl.includes("replit.app") ||
+                        shopifyConfig.webhookUrl.includes("replit.dev") ||
+                        shopifyConfig.webhookUrl.includes("worf.replit")) && (
                         <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/30 rounded p-2">
                           <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
                           <p className="text-xs text-destructive">
-                            <strong>Warning:</strong> This webhook URL is pointing to the development environment, not production. Set your <strong>Production URL</strong> above (e.g. <code>https://workspacelive.com.au</code>), save, then click "Fix Webhook in Shopify".
+                            <strong>Warning:</strong> This webhook URL is
+                            pointing to the development environment, not
+                            production. Set your <strong>Production URL</strong>{" "}
+                            above (e.g.{" "}
+                            <code>https://workspacelive.com.au</code>), save,
+                            then click "Fix Webhook in Shopify".
                           </p>
                         </div>
                       )}
@@ -1335,7 +1806,12 @@ export default function AdminPage() {
                         <button
                           type="button"
                           className="shrink-0 text-muted-foreground hover:text-foreground"
-                          onClick={() => { navigator.clipboard.writeText(shopifyConfig.webhookUrl); toast({ title: "Copied to clipboard" }); }}
+                          onClick={() => {
+                            navigator.clipboard.writeText(
+                              shopifyConfig.webhookUrl,
+                            );
+                            toast({ title: "Copied to clipboard" });
+                          }}
                           data-testid="button-copy-shopify-webhook-url"
                           title="Copy webhook URL"
                         >
@@ -1348,10 +1824,16 @@ export default function AdminPage() {
                           size="sm"
                           variant="outline"
                           disabled={registerShopifyWebhookMutation.isPending}
-                          onClick={() => registerShopifyWebhookMutation.mutate()}
+                          onClick={() =>
+                            registerShopifyWebhookMutation.mutate()
+                          }
                           data-testid="button-register-shopify-webhook"
                         >
-                          {registerShopifyWebhookMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Webhook className="w-3 h-3 mr-1" />}
+                          {registerShopifyWebhookMutation.isPending ? (
+                            <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                          ) : (
+                            <Webhook className="w-3 h-3 mr-1" />
+                          )}
                           Fix Webhook in Shopify
                         </Button>
                         <Button
@@ -1362,11 +1844,20 @@ export default function AdminPage() {
                           onClick={() => importShopifyOrdersMutation.mutate()}
                           data-testid="button-import-shopify-orders"
                         >
-                          {importShopifyOrdersMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Download className="w-3 h-3 mr-1" />}
+                          {importShopifyOrdersMutation.isPending ? (
+                            <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                          ) : (
+                            <Download className="w-3 h-3 mr-1" />
+                          )}
                           Import Missing Orders
                         </Button>
                       </div>
-                      <p className="text-xs text-muted-foreground">"Fix Webhook" updates the webhook URL in your Shopify store so new orders reach this CRM automatically. "Import Missing Orders" pulls any orders that were missed.</p>
+                      <p className="text-xs text-muted-foreground">
+                        "Fix Webhook" updates the webhook URL in your Shopify
+                        store so new orders reach this CRM automatically.
+                        "Import Missing Orders" pulls any orders that were
+                        missed.
+                      </p>
                     </div>
                   )}
                 </>
@@ -1384,7 +1875,9 @@ export default function AdminPage() {
                 Database Backup
               </CardTitle>
               <CardDescription>
-                A full backup runs automatically every 24 hours. The last 7 backups are kept. Download any backup to store it safely offsite.
+                A full backup runs automatically every 24 hours. The last 7
+                backups are kept. Download any backup to store it safely
+                offsite.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1393,19 +1886,33 @@ export default function AdminPage() {
                 disabled={createBackupMutation.isPending}
                 data-testid="button-create-backup"
               >
-                {createBackupMutation.isPending
-                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating backup…</>
-                  : <><Download className="w-4 h-4 mr-2" />Create Backup Now</>}
+                {createBackupMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating backup…
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    Create Backup Now
+                  </>
+                )}
               </Button>
 
               {backupList && backupList.length > 0 ? (
                 <div className="rounded-lg border divide-y">
                   {backupList.map((b) => (
-                    <div key={b.name} className="flex items-center justify-between px-4 py-3">
+                    <div
+                      key={b.name}
+                      className="flex items-center justify-between px-4 py-3"
+                    >
                       <div>
-                        <p className="text-sm font-medium font-mono">{b.name}</p>
+                        <p className="text-sm font-medium font-mono">
+                          {b.name}
+                        </p>
                         <p className="text-xs text-muted-foreground">
-                          {(b.size / 1024 / 1024).toFixed(1)} MB &middot; {new Date(b.createdAt).toLocaleString("en-AU")}
+                          {(b.size / 1024 / 1024).toFixed(1)} MB &middot;{" "}
+                          {new Date(b.createdAt).toLocaleString("en-AU")}
                         </p>
                       </div>
                       <a
@@ -1421,7 +1928,9 @@ export default function AdminPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No backups found yet — create one above.</p>
+                <p className="text-sm text-muted-foreground">
+                  No backups found yet — create one above.
+                </p>
               )}
             </CardContent>
           </Card>
@@ -1434,7 +1943,8 @@ export default function AdminPage() {
                 Code Backup (GitHub)
               </CardTitle>
               <CardDescription>
-                Push the current codebase to GitHub. Safe to run at any time — if there's nothing new, it will still succeed.
+                Push the current codebase to GitHub. Safe to run at any time —
+                if there's nothing new, it will still succeed.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1444,25 +1954,41 @@ export default function AdminPage() {
                 disabled={gitBackupMutation.isPending}
                 data-testid="button-git-backup"
               >
-                {gitBackupMutation.isPending
-                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Backing up…</>
-                  : <><Github className="w-4 h-4 mr-2" />Backup to GitHub</>}
+                {gitBackupMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Backing up…
+                  </>
+                ) : (
+                  <>
+                    <Github className="w-4 h-4 mr-2" />
+                    Backup to GitHub
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
 
-          <AlertDialog open={showGitBackupDialog} onOpenChange={setShowGitBackupDialog}>
+          <AlertDialog
+            open={showGitBackupDialog}
+            onOpenChange={setShowGitBackupDialog}
+          >
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Backup code to GitHub?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will commit all current changes and push them to the main branch on GitHub. The website will keep running normally during this process.
+                  This will commit all current changes and push them to the main
+                  branch on GitHub. The website will keep running normally
+                  during this process.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
-                  onClick={() => { setShowGitBackupDialog(false); gitBackupMutation.mutate(); }}
+                  onClick={() => {
+                    setShowGitBackupDialog(false);
+                    gitBackupMutation.mutate();
+                  }}
                   data-testid="button-confirm-git-backup"
                 >
                   Yes, back up now
@@ -1475,7 +2001,9 @@ export default function AdminPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Data Exports</CardTitle>
-              <CardDescription>Export your data for backup or analysis</CardDescription>
+              <CardDescription>
+                Export your data for backup or analysis
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <ExportGrid />
@@ -1500,9 +2028,13 @@ export default function AdminPage() {
       <Dialog open={userDialogOpen} onOpenChange={setUserDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingUser ? "Edit User" : "Add New User"}</DialogTitle>
+            <DialogTitle>
+              {editingUser ? "Edit User" : "Add New User"}
+            </DialogTitle>
             <DialogDescription>
-              {editingUser ? "Update this user's details, role, or password." : "Create a new user account with a role and password."}
+              {editingUser
+                ? "Update this user's details, role, or password."
+                : "Create a new user account with a role and password."}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -1518,7 +2050,7 @@ export default function AdminPage() {
                 id="user-name"
                 placeholder="e.g. Helena Katsios"
                 value={userName}
-                onChange={e => setUserName(e.target.value)}
+                onChange={(e) => setUserName(e.target.value)}
                 required
                 data-testid="input-user-name"
               />
@@ -1530,26 +2062,44 @@ export default function AdminPage() {
                 type="email"
                 placeholder="e.g. helena@purax.com"
                 value={userEmail}
-                onChange={e => setUserEmail(e.target.value)}
+                onChange={(e) => setUserEmail(e.target.value)}
                 required
                 data-testid="input-user-email"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="user-password">{editingUser ? "New Password (leave blank to keep current)" : "Password"}</Label>
+              <Label htmlFor="user-password">
+                {editingUser
+                  ? "New Password (leave blank to keep current)"
+                  : "Password"}
+              </Label>
               <div className="flex gap-2">
                 <Input
                   id="user-password"
                   type={showPassword ? "text" : "password"}
-                  placeholder={editingUser ? "Leave blank to keep current" : "Min 6 characters"}
+                  placeholder={
+                    editingUser
+                      ? "Leave blank to keep current"
+                      : "Min 6 characters"
+                  }
                   value={userPassword}
-                  onChange={e => setUserPassword(e.target.value)}
+                  onChange={(e) => setUserPassword(e.target.value)}
                   required={!editingUser}
                   minLength={editingUser && !userPassword ? 0 : 6}
                   data-testid="input-user-password"
                 />
-                <Button type="button" variant="outline" size="icon" onClick={() => setShowPassword(!showPassword)} data-testid="button-toggle-password">
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowPassword(!showPassword)}
+                  data-testid="button-toggle-password"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </Button>
               </div>
             </div>
@@ -1579,11 +2129,22 @@ export default function AdminPage() {
               </div>
             )}
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setUserDialogOpen(false)} data-testid="button-cancel-user">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setUserDialogOpen(false)}
+                data-testid="button-cancel-user"
+              >
                 Cancel
               </Button>
-              <Button type="submit" disabled={saveUserMutation.isPending} data-testid="button-save-user">
-                {saveUserMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              <Button
+                type="submit"
+                disabled={saveUserMutation.isPending}
+                data-testid="button-save-user"
+              >
+                {saveUserMutation.isPending && (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                )}
                 {editingUser ? "Save Changes" : "Create User"}
               </Button>
             </div>
@@ -1596,18 +2157,27 @@ export default function AdminPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete User</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <strong>{deletingUser?.name}</strong> ({deletingUser?.email})? This action cannot be undone and will also remove their audit history.
+              Are you sure you want to delete{" "}
+              <strong>{deletingUser?.name}</strong> ({deletingUser?.email})?
+              This action cannot be undone and will also remove their audit
+              history.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogCancel data-testid="button-cancel-delete">
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deletingUser && deleteUserMutation.mutate(deletingUser.id)}
+              onClick={() =>
+                deletingUser && deleteUserMutation.mutate(deletingUser.id)
+              }
               className="bg-destructive text-destructive-foreground border-destructive-border"
               disabled={deleteUserMutation.isPending}
               data-testid="button-confirm-delete"
             >
-              {deleteUserMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              {deleteUserMutation.isPending && (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              )}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1638,19 +2208,26 @@ function MillieWebhookCard() {
   const save = async () => {
     setIsSaving(true);
     try {
-      await apiRequest("PUT", "/api/settings/millie_webhook_url", { value: webhookUrl.trim() });
+      await apiRequest("PUT", "/api/settings/millie_webhook_url", {
+        value: webhookUrl.trim(),
+      });
       toast({ title: "Saved", description: "Millie webhook URL updated." });
       refetch();
     } catch {
-      toast({ title: "Error", description: "Failed to save webhook URL.", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to save webhook URL.",
+        variant: "destructive",
+      });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const crmWebhookUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/api/webhook/order-completed`
-    : "/api/webhook/order-completed";
+  const crmWebhookUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/webhook/order-completed`
+      : "/api/webhook/order-completed";
 
   return (
     <Card>
@@ -1660,15 +2237,19 @@ function MillieWebhookCard() {
           Millie Notification Webhook
         </CardTitle>
         <CardDescription>
-          Two-way sync: the CRM notifies Millie when orders are invoiced, and Millie can notify the CRM back using the receiving URL below.
+          Two-way sync: the CRM notifies Millie when orders are invoiced, and
+          Millie can notify the CRM back using the receiving URL below.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-
         {/* Outbound — CRM → Millie */}
         <div className="space-y-2">
-          <p className="text-sm font-semibold">Outbound — CRM notifies Millie</p>
-          <label className="text-sm text-muted-foreground">Millie's webhook URL (paste Millie's endpoint here)</label>
+          <p className="text-sm font-semibold">
+            Outbound — CRM notifies Millie
+          </p>
+          <label className="text-sm text-muted-foreground">
+            Millie's webhook URL (paste Millie's endpoint here)
+          </label>
           <div className="flex gap-2">
             <Input
               placeholder="https://millie-app.replit.app/api/webhook/order-completed"
@@ -1676,47 +2257,75 @@ function MillieWebhookCard() {
               onChange={(e) => setWebhookUrl(e.target.value)}
               data-testid="input-millie-webhook-url"
             />
-            <Button onClick={save} disabled={isSaving} data-testid="button-save-millie-webhook">
-              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            <Button
+              onClick={save}
+              disabled={isSaving}
+              data-testid="button-save-millie-webhook"
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Sent with <code>Authorization: Bearer [CRM_API_KEY]</code>. Fires automatically whenever an invoice is marked sent, paid, or synced to Xero.
+            Sent with <code>Authorization: Bearer [CRM_API_KEY]</code>. Fires
+            automatically whenever an invoice is marked sent, paid, or synced to
+            Xero.
           </p>
         </div>
 
         {/* Inbound — Millie → CRM */}
         <div className="space-y-2 pt-3 border-t">
-          <p className="text-sm font-semibold">Inbound — Millie notifies this CRM</p>
-          <label className="text-sm text-muted-foreground">Give this URL to Millie so it can POST back here</label>
+          <p className="text-sm font-semibold">
+            Inbound — Millie notifies this CRM
+          </p>
+          <label className="text-sm text-muted-foreground">
+            Give this URL to Millie so it can POST back here
+          </label>
           <div className="flex gap-2">
-            <Input readOnly value={crmWebhookUrl} className="font-mono text-xs" data-testid="text-crm-webhook-url" />
+            <Input
+              readOnly
+              value={crmWebhookUrl}
+              className="font-mono text-xs"
+              data-testid="text-crm-webhook-url"
+            />
             <Button
               variant="outline"
-              onClick={() => { navigator.clipboard.writeText(crmWebhookUrl); }}
+              onClick={() => {
+                navigator.clipboard.writeText(crmWebhookUrl);
+              }}
               data-testid="button-copy-crm-webhook-url"
             >
               <Copy className="w-4 h-4" />
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Millie must send <code>Authorization: Bearer [CRM_API_KEY]</code> — the same key used on both sides.
+            Millie must send <code>Authorization: Bearer [CRM_API_KEY]</code> —
+            the same key used on both sides.
           </p>
         </div>
 
         {/* Payload reference */}
         <div className="rounded-md bg-muted p-3 text-xs space-y-1 pt-3 border-t">
           <p className="font-medium">Payload format (sent and received):</p>
-          <pre className="whitespace-pre-wrap text-muted-foreground">{JSON.stringify({
-            event: "order_invoiced",
-            orderId: "...",
-            orderNumber: "ORD-0042",
-            companyName: "VINOD",
-            customerName: "Tracy McAllery",
-            xeroInvoiceNumber: "INV-154005",
-            totalAmount: "1250.00",
-            completedAt: new Date().toISOString(),
-          }, null, 2)}</pre>
+          <pre className="whitespace-pre-wrap text-muted-foreground">
+            {JSON.stringify(
+              {
+                event: "order_invoiced",
+                orderId: "...",
+                orderNumber: "ORD-0042",
+                companyName: "VINOD",
+                customerName: "Tracy McAllery",
+                xeroInvoiceNumber: "INV-154005",
+                totalAmount: "1250.00",
+                completedAt: new Date().toISOString(),
+              },
+              null,
+              2,
+            )}
+          </pre>
         </div>
       </CardContent>
     </Card>
@@ -1729,8 +2338,14 @@ function OrderFormSettings() {
   const [isSaving, setIsSaving] = useState(false);
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
 
-  const orderFormUrl = typeof window !== "undefined" ? `${window.location.origin}/order` : "/order";
-  const webhookUrl = typeof window !== "undefined" ? `${window.location.origin}/api/public/email-order-webhook` : "/api/public/email-order-webhook";
+  const orderFormUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/order`
+      : "/order";
+  const webhookUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/public/email-order-webhook`
+      : "/api/public/email-order-webhook";
 
   const { data: emailSetting } = useQuery<{ key: string; value: string }>({
     queryKey: ["/api/settings", "notification_email"],
@@ -1741,7 +2356,10 @@ function OrderFormSettings() {
     },
   });
 
-  const { data: webhookSecretSetting } = useQuery<{ key: string; value: string }>({
+  const { data: webhookSecretSetting } = useQuery<{
+    key: string;
+    value: string;
+  }>({
     queryKey: ["/api/settings", "email_order_webhook_secret"],
     queryFn: async () => {
       const res = await fetch("/api/settings/email_order_webhook_secret");
@@ -1763,28 +2381,43 @@ function OrderFormSettings() {
   const saveEmail = async () => {
     setIsSaving(true);
     try {
-      await apiRequest("PUT", "/api/settings/notification_email", { value: notificationEmail });
+      await apiRequest("PUT", "/api/settings/notification_email", {
+        value: notificationEmail,
+      });
       toast({ title: "Saved", description: "Notification email updated." });
-      queryClient.invalidateQueries({ queryKey: ["/api/settings", "notification_email"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/settings", "notification_email"],
+      });
     } catch {
-      toast({ title: "Error", description: "Failed to save.", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to save.",
+        variant: "destructive",
+      });
     }
     setIsSaving(false);
   };
 
   const copyLink = () => {
     navigator.clipboard.writeText(orderFormUrl);
-    toast({ title: "Copied", description: "Order form link copied to clipboard." });
+    toast({
+      title: "Copied",
+      description: "Order form link copied to clipboard.",
+    });
   };
 
-  const pendingRequests = orderRequests?.filter(r => r.status === "pending") || [];
+  const pendingRequests =
+    orderRequests?.filter((r) => r.status === "pending") || [];
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Customer Order Form Link</CardTitle>
-          <CardDescription>Share this link with your customers so they can place orders directly</CardDescription>
+          <CardDescription>
+            Share this link with your customers so they can place orders
+            directly
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-2">
@@ -1794,15 +2427,27 @@ function OrderFormSettings() {
               className="font-mono text-sm"
               data-testid="input-order-form-url"
             />
-            <Button variant="outline" size="icon" onClick={copyLink} data-testid="button-copy-link">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={copyLink}
+              data-testid="button-copy-link"
+            >
               <Copy className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="icon" onClick={() => window.open(orderFormUrl, "_blank")} data-testid="button-open-form">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => window.open(orderFormUrl, "_blank")}
+              data-testid="button-open-form"
+            >
               <ExternalLink className="w-4 h-4" />
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            Send this link to your customers via email or message. They can browse your product catalogue, select items and quantities, and submit their order. The order will appear in your CRM for review.
+            Send this link to your customers via email or message. They can
+            browse your product catalogue, select items and quantities, and
+            submit their order. The order will appear in your CRM for review.
           </p>
         </CardContent>
       </Card>
@@ -1810,7 +2455,9 @@ function OrderFormSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Email Notifications</CardTitle>
-          <CardDescription>Get notified when a customer submits an order through the form</CardDescription>
+          <CardDescription>
+            Get notified when a customer submits an order through the form
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-2">
@@ -1818,15 +2465,21 @@ function OrderFormSettings() {
               type="text"
               placeholder="e.g. helena@purax.com, sales@purax.com"
               value={notificationEmail}
-              onChange={e => setNotificationEmail(e.target.value)}
+              onChange={(e) => setNotificationEmail(e.target.value)}
               data-testid="input-notification-email"
             />
-            <Button onClick={saveEmail} disabled={isSaving} data-testid="button-save-email">
+            <Button
+              onClick={saveEmail}
+              disabled={isSaving}
+              data-testid="button-save-email"
+            >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            Enter one or more email addresses separated by commas. When Outlook is connected, order notifications will be sent to all listed addresses. Make sure Outlook is connected in the Integrations tab.
+            Enter one or more email addresses separated by commas. When Outlook
+            is connected, order notifications will be sent to all listed
+            addresses. Make sure Outlook is connected in the Integrations tab.
           </p>
         </CardContent>
       </Card>
@@ -1837,7 +2490,10 @@ function OrderFormSettings() {
             <Webhook className="w-5 h-5" />
             Email-to-Order Webhook
           </CardTitle>
-          <CardDescription>Forward order emails from Outlook directly into your CRM using Power Automate</CardDescription>
+          <CardDescription>
+            Forward order emails from Outlook directly into your CRM using Power
+            Automate
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {webhookSecretSetting?.value ? (
@@ -1857,7 +2513,10 @@ function OrderFormSettings() {
                       size="icon"
                       onClick={() => {
                         navigator.clipboard.writeText(webhookUrl);
-                        toast({ title: "Copied", description: "Webhook URL copied to clipboard." });
+                        toast({
+                          title: "Copied",
+                          description: "Webhook URL copied to clipboard.",
+                        });
                       }}
                       data-testid="button-copy-webhook-url"
                     >
@@ -1870,7 +2529,11 @@ function OrderFormSettings() {
                   <Label className="text-sm font-medium">Webhook Secret</Label>
                   <div className="flex items-center gap-2">
                     <Input
-                      value={showWebhookSecret ? webhookSecretSetting.value : "****" + webhookSecretSetting.value.slice(-8)}
+                      value={
+                        showWebhookSecret
+                          ? webhookSecretSetting.value
+                          : "****" + webhookSecretSetting.value.slice(-8)
+                      }
                       readOnly
                       className="font-mono text-sm"
                       data-testid="input-webhook-secret"
@@ -1881,14 +2544,23 @@ function OrderFormSettings() {
                       onClick={() => setShowWebhookSecret(!showWebhookSecret)}
                       data-testid="button-toggle-webhook-secret"
                     >
-                      {showWebhookSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showWebhookSecret ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
                     </Button>
                     <Button
                       variant="outline"
                       size="icon"
                       onClick={() => {
-                        navigator.clipboard.writeText(webhookSecretSetting.value);
-                        toast({ title: "Copied", description: "Webhook secret copied to clipboard." });
+                        navigator.clipboard.writeText(
+                          webhookSecretSetting.value,
+                        );
+                        toast({
+                          title: "Copied",
+                          description: "Webhook secret copied to clipboard.",
+                        });
                       }}
                       data-testid="button-copy-webhook-secret"
                     >
@@ -1901,21 +2573,58 @@ function OrderFormSettings() {
               <div className="rounded-md bg-muted p-4 space-y-3 text-sm">
                 <p className="font-medium">How to set up in Power Automate:</p>
                 <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
-                  <li>Go to <strong>Power Automate</strong> (flow.microsoft.com)</li>
-                  <li>Create a new <strong>Automated Flow</strong></li>
-                  <li>Trigger: <strong>"When a new email arrives"</strong> in Outlook</li>
-                  <li>Add a filter for the sender or subject (e.g. orders from specific customers)</li>
-                  <li>Add an <strong>HTTP action</strong> with:
+                  <li>
+                    Go to <strong>Power Automate</strong> (flow.microsoft.com)
+                  </li>
+                  <li>
+                    Create a new <strong>Automated Flow</strong>
+                  </li>
+                  <li>
+                    Trigger: <strong>"When a new email arrives"</strong> in
+                    Outlook
+                  </li>
+                  <li>
+                    Add a filter for the sender or subject (e.g. orders from
+                    specific customers)
+                  </li>
+                  <li>
+                    Add an <strong>HTTP action</strong> with:
                     <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
-                      <li>Method: <strong>POST</strong></li>
+                      <li>
+                        Method: <strong>POST</strong>
+                      </li>
                       <li>URL: the Webhook URL above</li>
-                      <li>Header: <code className="bg-background px-1 rounded">X-Webhook-Secret</code> with the secret above</li>
-                      <li>Header: <code className="bg-background px-1 rounded">Content-Type: application/json</code></li>
-                      <li>Body: <code className="bg-background px-1 rounded text-xs">{"{"}"subject": "@triggerOutputs()?['body/subject']", "body": "@triggerOutputs()?['body/bodyPreview']", "senderEmail": "@triggerOutputs()?['body/from']?['emailAddress']?['address']", "senderName": "@triggerOutputs()?['body/from']?['emailAddress']?['name']"{"}"}</code></li>
+                      <li>
+                        Header:{" "}
+                        <code className="bg-background px-1 rounded">
+                          X-Webhook-Secret
+                        </code>{" "}
+                        with the secret above
+                      </li>
+                      <li>
+                        Header:{" "}
+                        <code className="bg-background px-1 rounded">
+                          Content-Type: application/json
+                        </code>
+                      </li>
+                      <li>
+                        Body:{" "}
+                        <code className="bg-background px-1 rounded text-xs">
+                          {"{"}"subject": "@triggerOutputs()?['body/subject']",
+                          "body": "@triggerOutputs()?['body/bodyPreview']",
+                          "senderEmail":
+                          "@triggerOutputs()?['body/from']?['emailAddress']?['address']",
+                          "senderName":
+                          "@triggerOutputs()?['body/from']?['emailAddress']?['name']"
+                          {"}"}
+                        </code>
+                      </li>
                     </ul>
                   </li>
                 </ol>
-                <p className="text-muted-foreground mt-2">Orders will appear below as "pending" for your team to review.</p>
+                <p className="text-muted-foreground mt-2">
+                  Orders will appear below as "pending" for your team to review.
+                </p>
               </div>
 
               <Button
@@ -1923,11 +2632,24 @@ function OrderFormSettings() {
                 className="w-full"
                 onClick={async () => {
                   try {
-                    await apiRequest("POST", "/api/settings/generate-webhook-secret");
-                    queryClient.invalidateQueries({ queryKey: ["/api/settings", "email_order_webhook_secret"] });
-                    toast({ title: "Regenerated", description: "New webhook secret generated. Update your Power Automate flow with the new secret." });
+                    await apiRequest(
+                      "POST",
+                      "/api/settings/generate-webhook-secret",
+                    );
+                    queryClient.invalidateQueries({
+                      queryKey: ["/api/settings", "email_order_webhook_secret"],
+                    });
+                    toast({
+                      title: "Regenerated",
+                      description:
+                        "New webhook secret generated. Update your Power Automate flow with the new secret.",
+                    });
                   } catch {
-                    toast({ title: "Error", description: "Failed to regenerate secret.", variant: "destructive" });
+                    toast({
+                      title: "Error",
+                      description: "Failed to regenerate secret.",
+                      variant: "destructive",
+                    });
                   }
                 }}
                 data-testid="button-regenerate-webhook-secret"
@@ -1939,16 +2661,31 @@ function OrderFormSettings() {
           ) : (
             <div className="text-center py-4 space-y-3">
               <p className="text-sm text-muted-foreground">
-                Set up a webhook so you can forward order emails from Outlook directly into your CRM. Orders will appear for your team to review and convert.
+                Set up a webhook so you can forward order emails from Outlook
+                directly into your CRM. Orders will appear for your team to
+                review and convert.
               </p>
               <Button
                 onClick={async () => {
                   try {
-                    await apiRequest("POST", "/api/settings/generate-webhook-secret");
-                    queryClient.invalidateQueries({ queryKey: ["/api/settings", "email_order_webhook_secret"] });
-                    toast({ title: "Webhook Enabled", description: "Your webhook is ready. Follow the setup instructions to connect Power Automate." });
+                    await apiRequest(
+                      "POST",
+                      "/api/settings/generate-webhook-secret",
+                    );
+                    queryClient.invalidateQueries({
+                      queryKey: ["/api/settings", "email_order_webhook_secret"],
+                    });
+                    toast({
+                      title: "Webhook Enabled",
+                      description:
+                        "Your webhook is ready. Follow the setup instructions to connect Power Automate.",
+                    });
                   } catch {
-                    toast({ title: "Error", description: "Failed to generate webhook secret.", variant: "destructive" });
+                    toast({
+                      title: "Error",
+                      description: "Failed to generate webhook secret.",
+                      variant: "destructive",
+                    });
                   }
                 }}
                 data-testid="button-enable-webhook"
@@ -1967,7 +2704,10 @@ function OrderFormSettings() {
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <div>
             <CardTitle className="text-lg">Incoming Order Requests</CardTitle>
-            <CardDescription>Orders submitted by customers through the public form or email webhook</CardDescription>
+            <CardDescription>
+              Orders submitted by customers through the public form or email
+              webhook
+            </CardDescription>
           </div>
           {pendingRequests.length > 0 && (
             <Badge variant="secondary">{pendingRequests.length} pending</Badge>
@@ -1975,7 +2715,10 @@ function OrderFormSettings() {
         </CardHeader>
         <CardContent>
           {!orderRequests || orderRequests.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No order requests yet. Share your order form link with customers to start receiving orders.</p>
+            <p className="text-sm text-muted-foreground text-center py-8">
+              No order requests yet. Share your order form link with customers
+              to start receiving orders.
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -1989,30 +2732,53 @@ function OrderFormSettings() {
               </TableHeader>
               <TableBody>
                 {orderRequests.map((req: any) => (
-                  <TableRow key={req.id} data-testid={`order-request-${req.id}`}>
-                    <TableCell className="text-sm">{format(new Date(req.createdAt), "dd MMM yyyy HH:mm")}</TableCell>
-                    <TableCell className="font-medium">{req.companyName}</TableCell>
-                    <TableCell>
-                      <div className="text-sm">{req.contactName}</div>
-                      <div className="text-xs text-muted-foreground">{req.contactEmail}</div>
+                  <TableRow
+                    key={req.id}
+                    data-testid={`order-request-${req.id}`}
+                  >
+                    <TableCell className="text-sm">
+                      {format(new Date(req.createdAt), "dd MMM yyyy HH:mm")}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {req.companyName}
                     </TableCell>
                     <TableCell>
-                      <div className="space-y-0.5">
-                        {Array.isArray(req.items) ? req.items.map((item: any, idx: number) => (
-                          <div key={idx} className="text-xs">
-                            {item.quantity}x {item.description || item.productName || "Item"}
-                            {item.unitPrice > 0 ? ` @ $${Number(item.unitPrice).toFixed(2)}` : ""}
-                          </div>
-                        )) : <span className="text-xs text-muted-foreground">No items</span>}
+                      <div className="text-sm">{req.contactName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {req.contactEmail}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge className={
-                        req.status === "pending" ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400" :
-                        req.status === "converted" ? "bg-green-500/10 text-green-700 dark:text-green-400" :
-                        req.status === "reviewed" ? "bg-blue-500/10 text-blue-700 dark:text-blue-400" :
-                        "bg-red-500/10 text-red-700 dark:text-red-400"
-                      }>
+                      <div className="space-y-0.5">
+                        {Array.isArray(req.items) ? (
+                          req.items.map((item: any, idx: number) => (
+                            <div key={idx} className="text-xs">
+                              {item.quantity}x{" "}
+                              {item.description || item.productName || "Item"}
+                              {item.unitPrice > 0
+                                ? ` @ $${Number(item.unitPrice).toFixed(2)}`
+                                : ""}
+                            </div>
+                          ))
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            No items
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        className={
+                          req.status === "pending"
+                            ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
+                            : req.status === "converted"
+                              ? "bg-green-500/10 text-green-700 dark:text-green-400"
+                              : req.status === "reviewed"
+                                ? "bg-blue-500/10 text-blue-700 dark:text-blue-400"
+                                : "bg-red-500/10 text-red-700 dark:text-red-400"
+                        }
+                      >
                         {req.status}
                       </Badge>
                     </TableCell>
@@ -2045,14 +2811,26 @@ function AdminCategoryOrder() {
 
   const saveMutation = useMutation({
     mutationFn: async (order: string[]) => {
-      const res = await apiRequest("POST", "/api/admin/portal-category-order", { order });
+      const res = await apiRequest("POST", "/api/admin/portal-category-order", {
+        order,
+      });
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-category-order"] });
-      toast({ title: "Category order saved", description: "Default portal category order updated." });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/portal-category-order"],
+      });
+      toast({
+        title: "Category order saved",
+        description: "Default portal category order updated.",
+      });
     },
-    onError: () => toast({ title: "Error", description: "Failed to save category order", variant: "destructive" }),
+    onError: () =>
+      toast({
+        title: "Error",
+        description: "Failed to save category order",
+        variant: "destructive",
+      }),
   });
 
   const moveUp = (idx: number) => {
@@ -2066,33 +2844,68 @@ function AdminCategoryOrder() {
     setDraft(next);
   };
 
-  if (isLoading) return <div className="text-sm text-muted-foreground">Loading category order…</div>;
+  if (isLoading)
+    return (
+      <div className="text-sm text-muted-foreground">
+        Loading category order…
+      </div>
+    );
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Default Portal Category Order</CardTitle>
-        <CardDescription>Set the default order categories appear in for all portal customers. Individual customers can override this in their own New Order page.</CardDescription>
+        <CardTitle className="text-base">
+          Default Portal Category Order
+        </CardTitle>
+        <CardDescription>
+          Set the default order categories appear in for all portal customers.
+          Individual customers can override this in their own New Order page.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-1 mb-4 max-h-[500px] overflow-y-auto pr-1">
           {draft.map((cat, idx) => (
-            <div key={cat} className="flex items-center gap-2 bg-muted/40 rounded-md px-3 py-2">
-              <span className="w-6 text-xs text-muted-foreground text-right shrink-0">{idx + 1}.</span>
+            <div
+              key={cat}
+              className="flex items-center gap-2 bg-muted/40 rounded-md px-3 py-2"
+            >
+              <span className="w-6 text-xs text-muted-foreground text-right shrink-0">
+                {idx + 1}.
+              </span>
               <span className="flex-1 text-sm font-medium">{cat}</span>
               <div className="flex gap-1">
-                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={idx === 0} onClick={() => moveUp(idx)} data-testid={`button-admin-move-up-${idx}`}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={idx === 0}
+                  onClick={() => moveUp(idx)}
+                  data-testid={`button-admin-move-up-${idx}`}
+                >
                   <ChevronRight className="w-4 h-4 -rotate-90" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={idx === draft.length - 1} onClick={() => moveDown(idx)} data-testid={`button-admin-move-down-${idx}`}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={idx === draft.length - 1}
+                  onClick={() => moveDown(idx)}
+                  data-testid={`button-admin-move-down-${idx}`}
+                >
                   <ChevronRight className="w-4 h-4 rotate-90" />
                 </Button>
               </div>
             </div>
           ))}
         </div>
-        <Button onClick={() => saveMutation.mutate(draft)} disabled={saveMutation.isPending} data-testid="button-save-admin-category-order">
-          {saveMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+        <Button
+          onClick={() => saveMutation.mutate(draft)}
+          disabled={saveMutation.isPending}
+          data-testid="button-save-admin-category-order"
+        >
+          {saveMutation.isPending ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : null}
           Save Category Order
         </Button>
       </CardContent>
@@ -2132,16 +2945,21 @@ function PortalUsersManagement() {
     if (!companies) return [];
     if (!companySearch) return companies.slice(0, 30);
     const q = companySearch.toLowerCase();
-    return companies.filter((c: any) =>
-      (c.tradingName || "").toLowerCase().includes(q) ||
-      c.legalName.toLowerCase().includes(q)
-    ).slice(0, 30);
+    return companies
+      .filter(
+        (c: any) =>
+          (c.tradingName || "").toLowerCase().includes(q) ||
+          c.legalName.toLowerCase().includes(q),
+      )
+      .slice(0, 30);
   }, [companies, companySearch]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
       if (newPriceListId && newPriceListId !== "none" && newCompanyId) {
-        await apiRequest("PATCH", `/api/companies/${newCompanyId}`, { priceListId: newPriceListId });
+        await apiRequest("PATCH", `/api/companies/${newCompanyId}`, {
+          priceListId: newPriceListId,
+        });
       }
       return apiRequest("POST", "/api/admin/portal-users", {
         name: newName,
@@ -2162,7 +2980,11 @@ function PortalUsersManagement() {
       setNewPriceListId("");
     },
     onError: (error: any) => {
-      toast({ title: "Error", description: error?.message || "Failed to create portal user", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to create portal user",
+        variant: "destructive",
+      });
     },
   });
 
@@ -2177,21 +2999,44 @@ function PortalUsersManagement() {
   });
 
   const updatePaymentTermsMutation = useMutation({
-    mutationFn: async ({ companyId, paymentTerms }: { companyId: string; paymentTerms: string }) => {
-      return apiRequest("PATCH", `/api/companies/${companyId}`, { paymentTerms });
+    mutationFn: async ({
+      companyId,
+      paymentTerms,
+    }: {
+      companyId: string;
+      paymentTerms: string;
+    }) => {
+      return apiRequest("PATCH", `/api/companies/${companyId}`, {
+        paymentTerms,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-users"] });
       toast({ title: "Payment terms updated" });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to update payment terms", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to update payment terms",
+        variant: "destructive",
+      });
     },
   });
 
   const editMutation = useMutation({
-    mutationFn: async ({ id, name, email }: { id: string; name: string; email: string }) => {
-      return apiRequest("PATCH", `/api/admin/portal-users/${id}`, { name, email });
+    mutationFn: async ({
+      id,
+      name,
+      email,
+    }: {
+      id: string;
+      name: string;
+      email: string;
+    }) => {
+      return apiRequest("PATCH", `/api/admin/portal-users/${id}`, {
+        name,
+        email,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/portal-users"] });
@@ -2199,7 +3044,11 @@ function PortalUsersManagement() {
       setEditUser(null);
     },
     onError: (error: any) => {
-      toast({ title: "Error", description: error?.message || "Failed to update portal user", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to update portal user",
+        variant: "destructive",
+      });
     },
   });
 
@@ -2213,7 +3062,11 @@ function PortalUsersManagement() {
       setDeleteUserId(null);
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to delete portal user", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to delete portal user",
+        variant: "destructive",
+      });
     },
   });
 
@@ -2225,18 +3078,25 @@ function PortalUsersManagement() {
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <div>
             <CardTitle>Customer Portal</CardTitle>
-            <CardDescription>Manage portal access for your B2B customers</CardDescription>
+            <CardDescription>
+              Manage portal access for your B2B customers
+            </CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              onClick={() => window.open("/api/admin/portal-users/export-csv", "_blank")}
+              onClick={() =>
+                window.open("/api/admin/portal-users/export-csv", "_blank")
+              }
               data-testid="button-export-portal-csv"
             >
               <Download className="w-4 h-4 mr-2" />
               Export CSV
             </Button>
-            <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-create-portal-user">
+            <Button
+              onClick={() => setCreateDialogOpen(true)}
+              data-testid="button-create-portal-user"
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add Portal User
             </Button>
@@ -2247,7 +3107,12 @@ function PortalUsersManagement() {
             <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-xs text-muted-foreground">Portal URL</p>
-              <p className="text-sm font-mono truncate" data-testid="text-portal-url">{portalUrl}</p>
+              <p
+                className="text-sm font-mono truncate"
+                data-testid="text-portal-url"
+              >
+                {portalUrl}
+              </p>
             </div>
             <Button
               variant="outline"
@@ -2278,7 +3143,10 @@ function PortalUsersManagement() {
               <Input
                 placeholder="Search by name, email, or company..."
                 value={portalSearch}
-                onChange={(e) => { setPortalSearch(e.target.value); setPortalPage(0); }}
+                onChange={(e) => {
+                  setPortalSearch(e.target.value);
+                  setPortalPage(0);
+                }}
                 className="pl-8"
                 data-testid="input-search-portal-users"
               />
@@ -2293,137 +3161,172 @@ function PortalUsersManagement() {
             const filtered = (portalUsers || []).filter((pu: any) => {
               if (!portalSearch) return true;
               const q = portalSearch.toLowerCase();
-              return pu.name.toLowerCase().includes(q) || pu.email.toLowerCase().includes(q) || (pu.companyName || "").toLowerCase().includes(q);
+              return (
+                pu.name.toLowerCase().includes(q) ||
+                pu.email.toLowerCase().includes(q) ||
+                (pu.companyName || "").toLowerCase().includes(q)
+              );
             });
-            const paged = filtered.slice(portalPage * PAGE_SIZE, (portalPage + 1) * PAGE_SIZE);
+            const paged = filtered.slice(
+              portalPage * PAGE_SIZE,
+              (portalPage + 1) * PAGE_SIZE,
+            );
             const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
 
             return isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </div>
-          ) : paged.length > 0 ? (
-            <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Payment Days</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Last Login</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paged.map((pu: any) => (
-                  <TableRow key={pu.id} data-testid={`row-portal-user-${pu.id}`}>
-                    <TableCell className="font-medium">{pu.name}</TableCell>
-                    <TableCell className="text-sm">{pu.email}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="text-sm">{pu.companyName || "Unknown"}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        defaultValue={pu.paymentTerms || ""}
-                        className="h-8 w-24"
-                        placeholder="e.g. 30"
-                        onBlur={(e) => {
-                          const val = e.target.value.trim();
-                          if (val !== (pu.paymentTerms || "")) {
-                            updatePaymentTermsMutation.mutate({ companyId: pu.companyId, paymentTerms: val });
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                        }}
-                        data-testid={`input-payment-days-${pu.id}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={pu.active}
-                        onCheckedChange={(checked) => toggleActiveMutation.mutate({ id: pu.id, active: checked })}
-                        data-testid={`switch-active-${pu.id}`}
-                      />
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {pu.lastLogin ? format(new Date(pu.lastLogin), "MMM d, yyyy") : "Never"}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {format(new Date(pu.createdAt), "MMM d, yyyy")}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setEditUser(pu);
-                            setEditName(pu.name);
-                            setEditEmail(pu.email);
-                          }}
-                          title="Edit name/email"
-                          data-testid={`button-edit-portal-user-${pu.id}`}
-                        >
-                          <Pencil className="w-4 h-4 text-muted-foreground" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleteUserId(pu.id)}
-                          data-testid={`button-delete-portal-user-${pu.id}`}
-                        >
-                          <Trash2 className="w-4 h-4 text-muted-foreground" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between pt-4">
-                <p className="text-sm text-muted-foreground">
-                  Showing {portalPage * PAGE_SIZE + 1}–{Math.min((portalPage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length} users
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={portalPage === 0}
-                    onClick={() => setPortalPage(p => p - 1)}
-                    data-testid="button-portal-prev"
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-muted-foreground">Page {portalPage + 1} of {totalPages}</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={portalPage >= totalPages - 1}
-                    onClick={() => setPortalPage(p => p + 1)}
-                    data-testid="button-portal-next"
-                  >
-                    Next
-                  </Button>
-                </div>
+              <div className="space-y-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
               </div>
-            )}
-            </>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p>{portalSearch ? "No matching portal users" : "No portal users yet"}</p>
-              <p className="text-xs mt-1">{portalSearch ? "Try a different search term" : "Add portal users to give your customers access to view orders and invoices"}</p>
-            </div>
-          );
+            ) : paged.length > 0 ? (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Company</TableHead>
+                      <TableHead>Payment Days</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Last Login</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paged.map((pu: any) => (
+                      <TableRow
+                        key={pu.id}
+                        data-testid={`row-portal-user-${pu.id}`}
+                      >
+                        <TableCell className="font-medium">{pu.name}</TableCell>
+                        <TableCell className="text-sm">{pu.email}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                            <span className="text-sm">
+                              {pu.companyName || "Unknown"}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            defaultValue={pu.paymentTerms || ""}
+                            className="h-8 w-24"
+                            placeholder="e.g. 30"
+                            onBlur={(e) => {
+                              const val = e.target.value.trim();
+                              if (val !== (pu.paymentTerms || "")) {
+                                updatePaymentTermsMutation.mutate({
+                                  companyId: pu.companyId,
+                                  paymentTerms: val,
+                                });
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter")
+                                (e.target as HTMLInputElement).blur();
+                            }}
+                            data-testid={`input-payment-days-${pu.id}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Switch
+                            checked={pu.active}
+                            onCheckedChange={(checked) =>
+                              toggleActiveMutation.mutate({
+                                id: pu.id,
+                                active: checked,
+                              })
+                            }
+                            data-testid={`switch-active-${pu.id}`}
+                          />
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {pu.lastLogin
+                            ? format(new Date(pu.lastLogin), "MMM d, yyyy")
+                            : "Never"}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {format(new Date(pu.createdAt), "MMM d, yyyy")}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setEditUser(pu);
+                                setEditName(pu.name);
+                                setEditEmail(pu.email);
+                              }}
+                              title="Edit name/email"
+                              data-testid={`button-edit-portal-user-${pu.id}`}
+                            >
+                              <Pencil className="w-4 h-4 text-muted-foreground" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeleteUserId(pu.id)}
+                              data-testid={`button-delete-portal-user-${pu.id}`}
+                            >
+                              <Trash2 className="w-4 h-4 text-muted-foreground" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between pt-4">
+                    <p className="text-sm text-muted-foreground">
+                      Showing {portalPage * PAGE_SIZE + 1}–
+                      {Math.min((portalPage + 1) * PAGE_SIZE, filtered.length)}{" "}
+                      of {filtered.length} users
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={portalPage === 0}
+                        onClick={() => setPortalPage((p) => p - 1)}
+                        data-testid="button-portal-prev"
+                      >
+                        Previous
+                      </Button>
+                      <span className="text-sm text-muted-foreground">
+                        Page {portalPage + 1} of {totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={portalPage >= totalPages - 1}
+                        onClick={() => setPortalPage((p) => p + 1)}
+                        data-testid="button-portal-next"
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p>
+                  {portalSearch
+                    ? "No matching portal users"
+                    : "No portal users yet"}
+                </p>
+                <p className="text-xs mt-1">
+                  {portalSearch
+                    ? "Try a different search term"
+                    : "Add portal users to give your customers access to view orders and invoices"}
+                </p>
+              </div>
+            );
           })()}
         </CardContent>
       </Card>
@@ -2433,14 +3336,19 @@ function PortalUsersManagement() {
           <DialogHeader>
             <DialogTitle>Add Portal User</DialogTitle>
             <DialogDescription>
-              Create a login for a customer to access their orders and invoices via the portal.
+              Create a login for a customer to access their orders and invoices
+              via the portal.
             </DialogDescription>
           </DialogHeader>
           <form
             onSubmit={(e) => {
               e.preventDefault();
               if (!newCompanyId) {
-                toast({ title: "Error", description: "Please select a company", variant: "destructive" });
+                toast({
+                  title: "Error",
+                  description: "Please select a company",
+                  variant: "destructive",
+                });
                 return;
               }
               createMutation.mutate();
@@ -2485,13 +3393,18 @@ function PortalUsersManagement() {
             </div>
             <div className="space-y-2">
               <Label>Company</Label>
-              <Select value={newCompanyId} onValueChange={(val) => {
-                setNewCompanyId(val);
-                const selectedCompany = companies?.find((c: any) => c.id === val);
-                if (selectedCompany?.priceListId) {
-                  setNewPriceListId(selectedCompany.priceListId);
-                }
-              }}>
+              <Select
+                value={newCompanyId}
+                onValueChange={(val) => {
+                  setNewCompanyId(val);
+                  const selectedCompany = companies?.find(
+                    (c: any) => c.id === val,
+                  );
+                  if (selectedCompany?.priceListId) {
+                    setNewPriceListId(selectedCompany.priceListId);
+                  }
+                }}
+              >
                 <SelectTrigger data-testid="select-portal-company">
                   <SelectValue placeholder="Select a company..." />
                 </SelectTrigger>
@@ -2506,7 +3419,11 @@ function PortalUsersManagement() {
                     />
                   </div>
                   {filteredCompanies.map((c: any) => (
-                    <SelectItem key={c.id} value={c.id} data-testid={`option-portal-company-${c.id}`}>
+                    <SelectItem
+                      key={c.id}
+                      value={c.id}
+                      data-testid={`option-portal-company-${c.id}`}
+                    >
                       {c.tradingName || c.legalName}
                     </SelectItem>
                   ))}
@@ -2521,20 +3438,36 @@ function PortalUsersManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No price list</SelectItem>
-                  {priceLists?.filter((pl: any) => pl.active).map((pl: any) => (
-                    <SelectItem key={pl.id} value={pl.id} data-testid={`option-portal-pricelist-${pl.id}`}>
-                      {pl.name}
-                    </SelectItem>
-                  ))}
+                  {priceLists
+                    ?.filter((pl: any) => pl.active)
+                    .map((pl: any) => (
+                      <SelectItem
+                        key={pl.id}
+                        value={pl.id}
+                        data-testid={`option-portal-pricelist-${pl.id}`}
+                      >
+                        {pl.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setCreateDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreateDialogOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button type="submit" disabled={createMutation.isPending} data-testid="button-save-portal-user">
-                {createMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              <Button
+                type="submit"
+                disabled={createMutation.isPending}
+                data-testid="button-save-portal-user"
+              >
+                {createMutation.isPending && (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                )}
                 Create User
               </Button>
             </div>
@@ -2546,13 +3479,19 @@ function PortalUsersManagement() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Portal User</DialogTitle>
-            <DialogDescription>Update the name or email for this portal user.</DialogDescription>
+            <DialogDescription>
+              Update the name or email for this portal user.
+            </DialogDescription>
           </DialogHeader>
           <form
             onSubmit={(e) => {
               e.preventDefault();
               if (editUser) {
-                editMutation.mutate({ id: editUser.id, name: editName, email: editEmail });
+                editMutation.mutate({
+                  id: editUser.id,
+                  name: editName,
+                  email: editEmail,
+                });
               }
             }}
             className="space-y-4"
@@ -2577,14 +3516,26 @@ function PortalUsersManagement() {
                 required
                 data-testid="input-edit-portal-email"
               />
-              <p className="text-xs text-muted-foreground">This is the email they use to log in to the portal</p>
+              <p className="text-xs text-muted-foreground">
+                This is the email they use to log in to the portal
+              </p>
             </div>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setEditUser(null)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditUser(null)}
+              >
                 Cancel
               </Button>
-              <Button type="submit" disabled={editMutation.isPending} data-testid="button-save-edit-portal">
-                {editMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              <Button
+                type="submit"
+                disabled={editMutation.isPending}
+                data-testid="button-save-edit-portal"
+              >
+                {editMutation.isPending && (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                )}
                 Save Changes
               </Button>
             </div>
@@ -2592,18 +3543,24 @@ function PortalUsersManagement() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deleteUserId} onOpenChange={(open) => !open && setDeleteUserId(null)}>
+      <AlertDialog
+        open={!!deleteUserId}
+        onOpenChange={(open) => !open && setDeleteUserId(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Portal User</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove this customer's portal access. They will no longer be able to log in.
+              This will permanently remove this customer's portal access. They
+              will no longer be able to log in.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleteUserId && deleteMutation.mutate(deleteUserId)}
+              onClick={() =>
+                deleteUserId && deleteMutation.mutate(deleteUserId)
+              }
               data-testid="button-confirm-delete-portal-user"
             >
               Delete
@@ -2619,7 +3576,16 @@ function InvoiceCsvImport() {
   const { toast } = useToast();
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<{ imported: number; skipped: number; skippedDuplicates: number; duplicateInvoiceNumbers: string[]; unmatched: string[]; unmatchedDetails: { company: string; invoices: string[] }[]; errors: string[]; total: number } | null>(null);
+  const [result, setResult] = useState<{
+    imported: number;
+    skipped: number;
+    skippedDuplicates: number;
+    duplicateInvoiceNumbers: string[];
+    unmatched: string[];
+    unmatchedDetails: { company: string; invoices: string[] }[];
+    errors: string[];
+    total: number;
+  } | null>(null);
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [showUnmatched, setShowUnmatched] = useState(false);
 
@@ -2640,7 +3606,11 @@ function InvoiceCsvImport() {
       setResult(data);
       toast({ title: `Import complete — ${data.imported} invoices imported` });
     } catch (e: any) {
-      toast({ title: "Import failed", description: e.message, variant: "destructive" });
+      toast({
+        title: "Import failed",
+        description: e.message,
+        variant: "destructive",
+      });
     } finally {
       setImporting(false);
     }
@@ -2654,15 +3624,28 @@ function InvoiceCsvImport() {
           Import Invoices from CSV
         </CardTitle>
         <CardDescription>
-          Upload a CSV file exported from Excel or your accounting system to add historical invoices to customer accounts.
+          Upload a CSV file exported from Excel or your accounting system to add
+          historical invoices to customer accounts.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="rounded-lg border bg-muted/40 p-4 text-sm space-y-2">
-          <p className="font-medium">Required columns (flexible naming accepted):</p>
+          <p className="font-medium">
+            Required columns (flexible naming accepted):
+          </p>
           <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-            <li><span className="font-medium text-foreground">Invoice Number</span> — e.g. "Invoice Number", "Invoice No", "Ref"</li>
-            <li><span className="font-medium text-foreground">Company / Customer</span> — must match a company name in the CRM</li>
+            <li>
+              <span className="font-medium text-foreground">
+                Invoice Number
+              </span>{" "}
+              — e.g. "Invoice Number", "Invoice No", "Ref"
+            </li>
+            <li>
+              <span className="font-medium text-foreground">
+                Company / Customer
+              </span>{" "}
+              — must match a company name in the CRM
+            </li>
           </ul>
           <p className="font-medium pt-1">Optional columns:</p>
           <ul className="list-disc list-inside space-y-1 text-muted-foreground">
@@ -2674,7 +3657,9 @@ function InvoiceCsvImport() {
             <li>Balance Due / Outstanding — remaining balance</li>
             <li>Status — Paid, Overdue, Sent, Void</li>
           </ul>
-          <p className="text-xs text-muted-foreground pt-1">Duplicate invoice numbers are automatically skipped.</p>
+          <p className="text-xs text-muted-foreground pt-1">
+            Duplicate invoice numbers are automatically skipped.
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -2682,7 +3667,10 @@ function InvoiceCsvImport() {
             type="file"
             accept=".csv"
             data-testid="input-invoice-csv"
-            onChange={(e) => { setCsvFile(e.target.files?.[0] || null); setResult(null); }}
+            onChange={(e) => {
+              setCsvFile(e.target.files?.[0] || null);
+              setResult(null);
+            }}
             className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-border file:text-sm file:bg-background file:cursor-pointer cursor-pointer"
           />
           <Button
@@ -2690,7 +3678,14 @@ function InvoiceCsvImport() {
             disabled={!csvFile || importing}
             data-testid="button-import-invoice-csv"
           >
-            {importing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importing...</> : "Import Invoices"}
+            {importing ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Importing...
+              </>
+            ) : (
+              "Import Invoices"
+            )}
           </Button>
         </div>
 
@@ -2698,36 +3693,59 @@ function InvoiceCsvImport() {
           <div className="space-y-3 pt-1">
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-lg border p-3 text-center">
-                <p className="text-2xl font-bold text-green-600">{result.imported}</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {result.imported}
+                </p>
                 <p className="text-xs text-muted-foreground mt-0.5">Imported</p>
               </div>
               <button
                 className="rounded-lg border p-3 text-center hover:bg-muted/50 transition-colors cursor-pointer"
-                onClick={() => setShowDuplicates(v => !v)}
+                onClick={() => setShowDuplicates((v) => !v)}
                 data-testid="button-show-duplicates"
               >
-                <p className="text-2xl font-bold text-yellow-600">{result.skippedDuplicates}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Duplicates skipped {result.skippedDuplicates > 0 && <span className="underline">(click to view)</span>}</p>
+                <p className="text-2xl font-bold text-yellow-600">
+                  {result.skippedDuplicates}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Duplicates skipped{" "}
+                  {result.skippedDuplicates > 0 && (
+                    <span className="underline">(click to view)</span>
+                  )}
+                </p>
               </button>
               <button
                 className="rounded-lg border p-3 text-center hover:bg-muted/50 transition-colors cursor-pointer"
-                onClick={() => setShowUnmatched(v => !v)}
+                onClick={() => setShowUnmatched((v) => !v)}
                 data-testid="button-show-unmatched"
               >
-                <p className="text-2xl font-bold text-orange-600">{result.skipped}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Unmatched / skipped {result.skipped > 0 && <span className="underline">(click to view)</span>}</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {result.skipped}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Unmatched / skipped{" "}
+                  {result.skipped > 0 && (
+                    <span className="underline">(click to view)</span>
+                  )}
+                </p>
               </button>
             </div>
 
             {showDuplicates && result.duplicateInvoiceNumbers?.length > 0 && (
               <div className="rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20 p-3">
                 <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-2">
-                  Duplicate invoice numbers ({result.duplicateInvoiceNumbers.length}) — already exist in the CRM:
+                  Duplicate invoice numbers (
+                  {result.duplicateInvoiceNumbers.length}) — already exist in
+                  the CRM:
                 </p>
                 <div className="max-h-48 overflow-y-auto">
                   <div className="flex flex-wrap gap-1">
                     {result.duplicateInvoiceNumbers.map((inv, i) => (
-                      <span key={i} className="inline-block bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 text-xs px-2 py-0.5 rounded font-mono">{inv}</span>
+                      <span
+                        key={i}
+                        className="inline-block bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 text-xs px-2 py-0.5 rounded font-mono"
+                      >
+                        {inv}
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -2737,26 +3755,40 @@ function InvoiceCsvImport() {
             {showUnmatched && result.unmatchedDetails?.length > 0 && (
               <div className="rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 p-3">
                 <p className="text-sm font-medium text-orange-800 dark:text-orange-300 mb-2">
-                  Companies not found in CRM ({result.unmatchedDetails.length}) — check names match exactly:
+                  Companies not found in CRM ({result.unmatchedDetails.length})
+                  — check names match exactly:
                 </p>
                 <div className="max-h-64 overflow-y-auto space-y-2">
                   {result.unmatchedDetails.map((u, i) => (
                     <div key={i} className="text-xs">
-                      <span className="font-semibold text-orange-800 dark:text-orange-300">{u.company}</span>
-                      <span className="text-orange-600 dark:text-orange-400 ml-2">({u.invoices.length} invoice{u.invoices.length !== 1 ? "s" : ""}): </span>
-                      <span className="text-orange-700 dark:text-orange-400 font-mono">{u.invoices.join(", ")}</span>
+                      <span className="font-semibold text-orange-800 dark:text-orange-300">
+                        {u.company}
+                      </span>
+                      <span className="text-orange-600 dark:text-orange-400 ml-2">
+                        ({u.invoices.length} invoice
+                        {u.invoices.length !== 1 ? "s" : ""}):{" "}
+                      </span>
+                      <span className="text-orange-700 dark:text-orange-400 font-mono">
+                        {u.invoices.join(", ")}
+                      </span>
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">Add these companies to the CRM first, then re-import.</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Add these companies to the CRM first, then re-import.
+                </p>
               </div>
             )}
 
             {result.errors.length > 0 && (
               <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 p-3">
-                <p className="text-sm font-medium text-red-800 dark:text-red-300 mb-1">Errors ({result.errors.length}):</p>
+                <p className="text-sm font-medium text-red-800 dark:text-red-300 mb-1">
+                  Errors ({result.errors.length}):
+                </p>
                 <ul className="text-xs text-red-700 dark:text-red-400 space-y-0.5">
-                  {result.errors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}
+                  {result.errors.slice(0, 10).map((e, i) => (
+                    <li key={i}>{e}</li>
+                  ))}
                 </ul>
               </div>
             )}
@@ -2774,7 +3806,9 @@ function ExportGrid() {
   const handleExport = async (type: string, label: string) => {
     setExporting(type);
     try {
-      const response = await fetch(`/api/admin/export/${type}`, { credentials: "include" });
+      const response = await fetch(`/api/admin/export/${type}`, {
+        credentials: "include",
+      });
       if (!response.ok) throw new Error("Export failed");
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -2787,25 +3821,63 @@ function ExportGrid() {
       URL.revokeObjectURL(url);
       toast({ title: `${label} exported successfully` });
     } catch {
-      toast({ title: "Export failed", description: `Could not export ${label}`, variant: "destructive" });
+      toast({
+        title: "Export failed",
+        description: `Could not export ${label}`,
+        variant: "destructive",
+      });
     } finally {
       setExporting(null);
     }
   };
 
   const items = [
-    { type: "companies", name: "Companies", description: "All customer accounts", icon: FileText },
-    { type: "contacts", name: "Contacts", description: "All customer contacts", icon: Users },
-    { type: "orders", name: "Orders", description: "All orders with line items", icon: FileText },
-    { type: "invoices", name: "Invoices", description: "All invoices", icon: FileText },
-    { type: "products", name: "Products", description: "Product catalogue", icon: FileText },
-    { type: "audit-log", name: "Audit Log", description: "Complete audit trail", icon: Clock },
+    {
+      type: "companies",
+      name: "Companies",
+      description: "All customer accounts",
+      icon: FileText,
+    },
+    {
+      type: "contacts",
+      name: "Contacts",
+      description: "All customer contacts",
+      icon: Users,
+    },
+    {
+      type: "orders",
+      name: "Orders",
+      description: "All orders with line items",
+      icon: FileText,
+    },
+    {
+      type: "invoices",
+      name: "Invoices",
+      description: "All invoices",
+      icon: FileText,
+    },
+    {
+      type: "products",
+      name: "Products",
+      description: "Product catalogue",
+      icon: FileText,
+    },
+    {
+      type: "audit-log",
+      name: "Audit Log",
+      description: "Complete audit trail",
+      icon: Clock,
+    },
   ];
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((item) => (
-        <Card key={item.type} className="hover-elevate cursor-pointer" onClick={() => handleExport(item.type, item.name)}>
+        <Card
+          key={item.type}
+          className="hover-elevate cursor-pointer"
+          onClick={() => handleExport(item.type, item.name)}
+        >
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -2813,10 +3885,21 @@ function ExportGrid() {
               </div>
               <div className="flex-1">
                 <p className="font-medium">{item.name}</p>
-                <p className="text-sm text-muted-foreground">{item.description}</p>
+                <p className="text-sm text-muted-foreground">
+                  {item.description}
+                </p>
               </div>
-              <Button variant="ghost" size="icon" disabled={exporting === item.type} data-testid={`button-export-${item.type}`}>
-                {exporting === item.type ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={exporting === item.type}
+                data-testid={`button-export-${item.type}`}
+              >
+                {exporting === item.type ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
               </Button>
             </div>
           </CardContent>

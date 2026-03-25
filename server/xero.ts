@@ -369,7 +369,8 @@ async function createInvoiceFromXero(
   else if (xInv.Status === "SUBMITTED" || xInv.Status === "AUTHORISED") {
     // Xero never sends "OVERDUE" — unpaid invoices past their due date stay "AUTHORISED"
     const dueDate = parseXeroDate(xInv.DueDate);
-    invoiceStatus = (dueDate && dueDate < new Date()) ? "overdue" : "sent";
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    invoiceStatus = (dueDate && dueDate < thirtyDaysAgo) ? "overdue" : "sent";
   }
   else if (xInv.Status === "PAID") invoiceStatus = "paid";
   else if (xInv.Status === "VOIDED") invoiceStatus = "void";
@@ -651,7 +652,8 @@ export async function autoSyncXeroInvoices(accessToken: string, tenantId: string
       if (xInv.Status === "DRAFT") invoiceStatus = "draft";
       else if (xInv.Status === "SUBMITTED" || xInv.Status === "AUTHORISED") {
         const dueDate = parseXeroDate(xInv.DueDate);
-        invoiceStatus = (dueDate && dueDate < new Date()) ? "overdue" : "sent";
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        invoiceStatus = (dueDate && dueDate < thirtyDaysAgo) ? "overdue" : "sent";
       }
       else if (xInv.Status === "PAID") invoiceStatus = "paid";
       else if (xInv.Status === "VOIDED") invoiceStatus = "void";
@@ -776,8 +778,9 @@ export async function refreshOverdueFromXeroContacts(accessToken: string, tenant
     for (const inv of xeroInvoices) {
       if (!inv.Contact?.ContactID || !inv.AmountDue) continue;
       const dueDate = parseXeroDate(inv.DueDate);
-      // Only count as overdue if past due date
-      if (dueDate && dueDate < new Date()) {
+      // Only count as overdue if 30+ days past due date
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      if (dueDate && dueDate < thirtyDaysAgo) {
         overdueMap[inv.Contact.ContactID] = (overdueMap[inv.Contact.ContactID] ?? 0) + (inv.AmountDue ?? 0);
       }
     }
