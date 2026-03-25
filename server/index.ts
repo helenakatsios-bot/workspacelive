@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { exec as execCb } from "child_process";
 import { promisify } from "util";
+import { createHash } from "crypto";
 
 const execAsync = promisify(execCb);
 
@@ -10,15 +11,20 @@ const DEPLOY_MARKER = path.join(process.cwd(), ".deploy-backup-marker");
 
 async function runAutoDeployBackup(): Promise<void> {
   try {
-    const { stdout } = await execAsync("git rev-parse HEAD", { timeout: 10000 });
-    const currentHash = stdout.trim();
+    const [{ stdout: headOut }, { stdout: statusOut }] = await Promise.all([
+      execAsync("git rev-parse HEAD", { timeout: 10000 }),
+      execAsync("git status --porcelain", { timeout: 10000 }),
+    ]);
+    const fingerprint = createHash("sha256")
+      .update(headOut.trim() + "\n" + statusOut)
+      .digest("hex");
 
-    const lastHash = fs.existsSync(DEPLOY_MARKER)
+    const lastFingerprint = fs.existsSync(DEPLOY_MARKER)
       ? fs.readFileSync(DEPLOY_MARKER, "utf8").trim()
       : "";
 
-    if (currentHash === lastHash) {
-      console.log("[AUTO-BACKUP] Same commit as last backup — skipping.");
+    if (fingerprint === lastFingerprint) {
+      console.log("[AUTO-BACKUP] Project state unchanged since last backup — skipping.");
       return;
     }
 
@@ -32,8 +38,8 @@ async function runAutoDeployBackup(): Promise<void> {
       }
     }
     await execAsync("git push origin main", { timeout: 60000 });
-    fs.writeFileSync(DEPLOY_MARKER, currentHash, "utf8");
-    console.log(`[AUTO-BACKUP] Deploy backup pushed to GitHub (${currentHash.slice(0, 7)}).`);
+    fs.writeFileSync(DEPLOY_MARKER, fingerprint, "utf8");
+    console.log(`[AUTO-BACKUP] Deploy backup pushed to GitHub (fingerprint ${fingerprint.slice(0, 8)}).`);
   } catch (err: any) {
     console.error("[AUTO-BACKUP] Failed to push deploy backup to GitHub:", err?.message || err);
   }
