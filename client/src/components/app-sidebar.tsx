@@ -75,7 +75,6 @@ import { useTheme } from "@/components/theme-provider";
 
 // CRM — core items only
 const crmItems = [
-  { title: "Contacts", url: "/contacts", icon: Users },
   { title: "Companies", url: "/companies", icon: Building2 },
   { title: "Intelligence Hub", url: "/intelligence", icon: Brain },
   { title: "Supplier Order List", url: "/production-list", icon: ClipboardList },
@@ -197,11 +196,6 @@ export function AppSidebar() {
                       <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[20px] justify-center">{pendingRequestCount.count}</Badge>
                     ) : null}
                   </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild data-active={isActive("/products")} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
-                  <Link href="/products" data-testid="nav-products"><Package className="w-4 h-4" /><span className="flex-1">Products</span></Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
