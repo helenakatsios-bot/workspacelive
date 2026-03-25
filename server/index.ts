@@ -10,6 +10,11 @@ const execAsync = promisify(execCb);
 const DEPLOY_MARKER = path.join(process.cwd(), ".deploy-backup-marker");
 
 async function runAutoDeployBackup(): Promise<void> {
+  const gitDir = path.join(process.cwd(), ".git");
+  if (!fs.existsSync(gitDir)) {
+    console.log("[AUTO-BACKUP] .git not found — skipping (not a git-enabled environment).");
+    return;
+  }
   try {
     const [{ stdout: headOut }, { stdout: statusOut }] = await Promise.all([
       execAsync("git rev-parse HEAD", { timeout: 10000 }),

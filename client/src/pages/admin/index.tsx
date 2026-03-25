@@ -804,15 +804,22 @@ export default function AdminPage() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({
-        title: "Backed up to GitHub",
-        description: data.message || "Code pushed successfully.",
-      });
+      if (data.gitUnavailable) {
+        toast({
+          title: "GitHub backup unavailable",
+          description: data.message || "Git is not available in this environment.",
+        });
+      } else {
+        toast({
+          title: "Backed up to GitHub",
+          description: data.message || "Code pushed successfully.",
+        });
+      }
     },
     onError: (err: any) => {
       toast({
         title: "GitHub backup failed",
-        description: err?.message || "Could not push to GitHub.",
+        description: "Could not push to GitHub. This feature is only available inside the Replit workspace.",
         variant: "destructive",
       });
     },

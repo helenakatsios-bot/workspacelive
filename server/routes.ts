@@ -1,5 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
+import fs from "fs";
+import path from "path";
 import session from "express-session";
 import pgSession from "connect-pg-simple";
 import { pool, db } from "./db";
@@ -9927,6 +9929,14 @@ Rules:
   });
 
   app.post("/api/system/backup", requireAdmin, async (_req, res) => {
+    const gitDir = path.join(process.cwd(), ".git");
+    if (!fs.existsSync(gitDir)) {
+      return res.json({
+        success: false,
+        gitUnavailable: true,
+        message: "GitHub backup is only available inside the Replit workspace or a git-enabled server.",
+      });
+    }
     try {
       await execAsync2("git add -A", { timeout: 15000 });
       try {
