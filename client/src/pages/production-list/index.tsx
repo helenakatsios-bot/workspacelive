@@ -25,6 +25,7 @@ type ProductionItem = {
   qty_needed: number;
   notes: string | null;
   status: "pending" | "sent";
+  batch_name: string | null;
   added_at: string;
   sent_at: string | null;
 };
@@ -79,6 +80,12 @@ function EditableRow({ item, onSave, onDelete }: {
             <><CheckCircle className="w-3 h-3 mr-1" /> Sent</>
           ) : "Pending"}
         </Badge>
+        {item.status === "sent" && item.batch_name && (
+          <p className="text-xs text-muted-foreground mt-1 max-w-[140px] truncate" title={item.batch_name}>{item.batch_name}</p>
+        )}
+        {item.status === "sent" && item.sent_at && (
+          <p className="text-xs text-muted-foreground">{format(parseISO(item.sent_at), "d MMM yy")}</p>
+        )}
       </td>
       <td className="p-3">
         <p className="text-xs text-muted-foreground">{format(parseISO(item.added_at), "d MMM yy")}</p>
@@ -119,6 +126,7 @@ export default function ProductionListPage() {
   const [supplierEmail, setSupplierEmail] = useState("");
   const [supplierName, setSupplierName] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
+  const [orderName, setOrderName] = useState("");
   const [showSent, setShowSent] = useState(false);
 
   // Add item state
@@ -163,11 +171,11 @@ export default function ProductionListPage() {
   });
 
   const sendEmailMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/production-list/send-email", { supplierEmail, supplierName, additionalNotes }),
+    mutationFn: () => apiRequest("POST", "/api/production-list/send-email", { supplierEmail, supplierName, additionalNotes, orderName }),
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/production-list"] });
       setShowSendDialog(false);
-      setSupplierEmail(""); setSupplierName(""); setAdditionalNotes("");
+      setSupplierEmail(""); setSupplierName(""); setAdditionalNotes(""); setOrderName("");
       toast({ title: `Email sent! ${data?.itemsSent || 0} items marked as sent.`, description: `Sent to ${supplierEmail}` });
     },
     onError: (err: any) => toast({ title: "Failed to send email", description: err.message, variant: "destructive" }),
@@ -350,6 +358,13 @@ export default function ProductionListPage() {
               This will email all <strong>{pendingItems.length} pending items</strong> ({totalQty.toLocaleString()} units total) to your supplier and mark them as sent.
             </div>
             <div className="space-y-3">
+              <div>
+                <Label htmlFor="orderName">Order Name / Reference</Label>
+                <Input id="orderName" placeholder="e.g. April 2026 Production Run"
+                  value={orderName} onChange={e => setOrderName(e.target.value)}
+                  className="mt-1" data-testid="input-order-name" />
+                <p className="text-xs text-muted-foreground mt-1">Saved with the order so you can identify it later</p>
+              </div>
               <div>
                 <Label htmlFor="supplierEmail">Supplier Email *</Label>
                 <Input id="supplierEmail" type="email" placeholder="supplier@example.com"

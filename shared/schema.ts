@@ -448,6 +448,7 @@ export const productionScheduleItems = pgTable("production_schedule_items", {
   qtyNeeded: integer("qty_needed").notNull().default(0),
   notes: text("notes"),
   status: text("status").notNull().default("pending"), // pending | sent
+  batchName: text("batch_name"), // optional name/reference for the sent order batch
   addedAt: timestamp("added_at").notNull().defaultNow(),
   sentAt: timestamp("sent_at"),
 });

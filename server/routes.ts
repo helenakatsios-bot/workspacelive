@@ -9949,7 +9949,7 @@ Rules:
 
   app.post("/api/production-list/send-email", requireAuth, async (req, res) => {
     try {
-      const { supplierEmail, supplierName, additionalNotes } = req.body;
+      const { supplierEmail, supplierName, additionalNotes, orderName } = req.body;
       if (!supplierEmail) return res.status(400).json({ message: "Supplier email required" });
 
       const items = await pool.query(
@@ -10011,18 +10011,24 @@ Rules:
         </div>`;
 
       // Get Outlook token to send
-      const tokenRow = await pool.query("SELECT * FROM outlook_tokens LIMIT 1");
+      const tokenRow = await pool.query("SELECT user_id FROM outlook_tokens LIMIT 1");
       if (tokenRow.rows.length === 0) return res.status(400).json({ message: "No Outlook account connected. Please connect Outlook in Email settings." });
 
-      const { getStoredOutlookToken, refreshOutlookTokenIfNeeded } = await import("./outlook");
-      let tokenData = tokenRow.rows[0];
-      tokenData = await refreshOutlookTokenIfNeeded(tokenData);
-      const { sendEmail: sendOutlookEmail } = await import("./outlook");
-      await sendOutlookEmail(tokenData.access_token, [supplierEmail], `Production Order Request — ${today}`, emailBody);
+      const { refreshOutlookTokenIfNeeded, sendEmail: sendOutlookEmail } = await import("./outlook");
+      const userId = tokenRow.rows[0].user_id;
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/outlook/callback`;
+      const accessToken = await refreshOutlookTokenIfNeeded(userId, redirectUri);
+      if (!accessToken) return res.status(400).json({ message: "Outlook session expired. Please reconnect your Outlook account in Email settings." });
 
-      // Mark all pending items as sent
+      const subject = orderName
+        ? `Production Order — ${orderName} — ${today}`
+        : `Production Order Request — ${today}`;
+      await sendOutlookEmail(accessToken, [supplierEmail], subject, emailBody);
+
+      // Mark all pending items as sent, storing the batch name
       await pool.query(
-        `UPDATE production_schedule_items SET status = 'sent', sent_at = NOW() WHERE status = 'pending'`
+        `UPDATE production_schedule_items SET status = 'sent', sent_at = NOW(), batch_name = $1 WHERE status = 'pending'`,
+        [orderName || null]
       );
 
       res.json({ success: true, itemsSent: items.rows.length });
