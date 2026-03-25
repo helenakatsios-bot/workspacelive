@@ -366,10 +366,13 @@ async function createInvoiceFromXero(
 ) {
   let invoiceStatus = "draft";
   if (xInv.Status === "DRAFT") invoiceStatus = "draft";
-  else if (xInv.Status === "SUBMITTED" || xInv.Status === "AUTHORISED") invoiceStatus = "sent";
+  else if (xInv.Status === "SUBMITTED" || xInv.Status === "AUTHORISED") {
+    // Xero never sends "OVERDUE" — unpaid invoices past their due date stay "AUTHORISED"
+    const dueDate = parseXeroDate(xInv.DueDate);
+    invoiceStatus = (dueDate && dueDate < new Date()) ? "overdue" : "sent";
+  }
   else if (xInv.Status === "PAID") invoiceStatus = "paid";
   else if (xInv.Status === "VOIDED") invoiceStatus = "void";
-  else if (xInv.Status === "OVERDUE") invoiceStatus = "overdue";
 
   const onlineUrl = await fetchXeroOnlineInvoiceUrl(accessToken, tenantId, xInv.InvoiceID);
 
@@ -646,10 +649,12 @@ export async function autoSyncXeroInvoices(accessToken: string, tenantId: string
 
       let invoiceStatus = "draft";
       if (xInv.Status === "DRAFT") invoiceStatus = "draft";
-      else if (xInv.Status === "SUBMITTED" || xInv.Status === "AUTHORISED") invoiceStatus = "sent";
+      else if (xInv.Status === "SUBMITTED" || xInv.Status === "AUTHORISED") {
+        const dueDate = parseXeroDate(xInv.DueDate);
+        invoiceStatus = (dueDate && dueDate < new Date()) ? "overdue" : "sent";
+      }
       else if (xInv.Status === "PAID") invoiceStatus = "paid";
       else if (xInv.Status === "VOIDED") invoiceStatus = "void";
-      else if (xInv.Status === "OVERDUE") invoiceStatus = "overdue";
 
       const balanceDue = xInv.Status === "PAID" ? "0" : String(xInv.AmountDue ?? xInv.Total ?? 0);
 
@@ -728,20 +733,32 @@ export async function autoSyncXeroInvoices(accessToken: string, tenantId: string
       FROM (
         SELECT company_id, COALESCE(SUM(balance_due::numeric), 0) AS total
         FROM invoices
-        WHERE status = 'overdue'
+        WHERE (
+          status = 'overdue'
+          OR (status = 'sent' AND due_date IS NOT NULL AND due_date < NOW())
+        )
+        AND balance_due::numeric > 0
         GROUP BY company_id
+        HAVING SUM(balance_due::numeric) > 0
       ) sub
       WHERE c.id = sub.company_id
-        AND sub.total > 0
     `);
-    // Zero out companies that no longer have any overdue invoices
+    // Zero out companies that no longer have any overdue invoices,
+    // but ONLY if they are NOT manually flagged (account_overdue = false)
     await db.execute(sql`
       UPDATE companies
       SET overdue_amount = 0
-      WHERE id NOT IN (
-        SELECT DISTINCT company_id FROM invoices WHERE status = 'overdue' AND company_id IS NOT NULL
-      )
-      AND overdue_amount > 0
+      WHERE account_overdue = false
+        AND id NOT IN (
+          SELECT DISTINCT company_id FROM invoices
+          WHERE (
+            status = 'overdue'
+            OR (status = 'sent' AND due_date IS NOT NULL AND due_date < NOW())
+          )
+          AND company_id IS NOT NULL
+          AND balance_due::numeric > 0
+        )
+        AND overdue_amount > 0
     `);
   } catch (refreshErr) {
     console.error("[XERO-AUTOSYNC] Could not refresh overdue_amount on companies:", refreshErr);

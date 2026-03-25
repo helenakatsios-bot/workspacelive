@@ -260,18 +260,26 @@ export default function OverdueAccountsPage() {
 
                     {/* Xero overdue */}
                     <td className="px-4 py-3">
-                      {account.invoiceOutstanding > 0 ? (
-                        <div>
-                          <span className="font-semibold text-red-600">${fmtAud(account.invoiceOutstanding)}</span>
-                          {(account.invoiceTotalAll ?? 0) > account.invoiceOutstanding && (
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              ${fmtAud(account.invoiceTotalAll)} total unpaid
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground text-xs italic">No overdue invoices</span>
-                      )}
+                      {(() => {
+                        const xeroAmt = account.invoiceOutstanding > 0
+                          ? account.invoiceOutstanding
+                          : parseFloat(account.overdueAmount || "0");
+                        return xeroAmt > 0 ? (
+                          <div>
+                            <span className="font-semibold text-red-600">${fmtAud(xeroAmt)}</span>
+                            {account.invoiceOutstanding <= 0 && (
+                              <p className="text-xs text-muted-foreground mt-0.5">manually recorded</p>
+                            )}
+                            {account.invoiceOutstanding > 0 && (account.invoiceTotalAll ?? 0) > account.invoiceOutstanding && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                ${fmtAud(account.invoiceTotalAll)} total unpaid
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-xs italic">No overdue invoices</span>
+                        );
+                      })()}
                     </td>
 
                     {/* Amount shown to customer — inline editable */}

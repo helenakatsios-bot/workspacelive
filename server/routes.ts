@@ -237,7 +237,11 @@ export async function registerRoutes(
         LEFT JOIN (
           SELECT company_id, SUM(balance_due::numeric) AS total_outstanding
           FROM invoices
-          WHERE status = 'overdue'
+          WHERE (
+            status = 'overdue'
+            OR (status = 'sent' AND due_date IS NOT NULL AND due_date < NOW())
+          )
+          AND balance_due::numeric > 0
           GROUP BY company_id
           HAVING SUM(balance_due::numeric) > 0
         ) inv ON inv.company_id = c.id
@@ -245,11 +249,12 @@ export async function registerRoutes(
           SELECT company_id, SUM(balance_due::numeric) AS total_all
           FROM invoices
           WHERE status NOT IN ('paid', 'void')
+          AND balance_due::numeric > 0
           GROUP BY company_id
           HAVING SUM(balance_due::numeric) > 0
         ) all_inv ON all_inv.company_id = c.id
-        WHERE inv.company_id IS NOT NULL OR c.account_overdue = true
-        ORDER BY inv.total_outstanding DESC NULLS LAST, c.legal_name ASC
+        WHERE inv.company_id IS NOT NULL OR c.account_overdue = true OR c.overdue_amount > 0
+        ORDER BY inv.total_outstanding DESC NULLS LAST, c.overdue_amount DESC NULLS LAST, c.legal_name ASC
       `);
       res.json(result.rows.map((r: any) => ({
         id: r.id,
