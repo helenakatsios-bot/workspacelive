@@ -6,8 +6,22 @@ import { promisify } from "util";
 
 const execAsync = promisify(execCb);
 
+const DEPLOY_MARKER = path.join(process.cwd(), ".deploy-backup-marker");
+
 async function runAutoDeployBackup(): Promise<void> {
   try {
+    const { stdout } = await execAsync("git rev-parse HEAD", { timeout: 10000 });
+    const currentHash = stdout.trim();
+
+    const lastHash = fs.existsSync(DEPLOY_MARKER)
+      ? fs.readFileSync(DEPLOY_MARKER, "utf8").trim()
+      : "";
+
+    if (currentHash === lastHash) {
+      console.log("[AUTO-BACKUP] Same commit as last backup — skipping.");
+      return;
+    }
+
     await execAsync("git add -A", { timeout: 15000 });
     try {
       await execAsync('git commit -m "auto deploy backup"', { timeout: 15000 });
@@ -18,7 +32,8 @@ async function runAutoDeployBackup(): Promise<void> {
       }
     }
     await execAsync("git push origin main", { timeout: 60000 });
-    console.log("[AUTO-BACKUP] Deploy backup pushed to GitHub successfully.");
+    fs.writeFileSync(DEPLOY_MARKER, currentHash, "utf8");
+    console.log(`[AUTO-BACKUP] Deploy backup pushed to GitHub (${currentHash.slice(0, 7)}).`);
   } catch (err: any) {
     console.error("[AUTO-BACKUP] Failed to push deploy backup to GitHub:", err?.message || err);
   }
