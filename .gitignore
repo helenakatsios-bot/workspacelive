@@ -40,3 +40,6 @@ temp
 
 # typescript cache
 *.tsbuildinfo
+
+# auto-backup deploy marker (local state only, should not be committed)
+.deploy-backup-marker
