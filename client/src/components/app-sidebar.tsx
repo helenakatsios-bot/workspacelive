@@ -193,7 +193,7 @@ export function AppSidebar() {
                     <ClipboardCheck className="w-4 h-4" />
                     <span className="flex-1">Order Requests</span>
                     {pendingRequestCount?.count ? (
-                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[20px] justify-center">{pendingRequestCount.count}</Badge>
+                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[20px] justify-center !bg-red-600 !text-white">{pendingRequestCount.count}</Badge>
                     ) : null}
                   </Link>
                 </SidebarMenuButton>
