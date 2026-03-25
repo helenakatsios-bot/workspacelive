@@ -9,11 +9,9 @@ import {
   Receipt,
   LayoutDashboard,
   Settings,
-  LogOut,
   ShoppingCart,
   Moon,
   Sun,
-  Calendar,
   BarChart3,
   ChevronDown,
   Briefcase,
@@ -43,7 +41,6 @@ import {
   MessageSquareText,
   TextSelect,
   Contact,
-  HelpCircle,
   Award,
   Bot,
   MessageCircle,
@@ -51,6 +48,8 @@ import {
   Globe,
   ClipboardCheck,
   AlertTriangle,
+  Megaphone,
+  LogOut,
 } from "lucide-react";
 import {
   Sidebar,
@@ -74,50 +73,54 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/components/theme-provider";
 
-const mainNavItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Orders", url: "/orders", icon: ShoppingCart },
-  { title: "Order Requests", url: "/orders/requests", icon: ClipboardCheck },
-  { title: "Products", url: "/products", icon: Package },
-  { title: "Email", url: "/marketing/email", icon: Mail },
-  { title: "Customer Portal", url: "/service/customer-portal", icon: Globe },
-  { title: "Overdue Accounts", url: "/service/overdue-accounts", icon: AlertTriangle },
-];
-
+// CRM — core items only
 const crmItems = [
   { title: "Contacts", url: "/contacts", icon: Users },
   { title: "Companies", url: "/companies", icon: Building2 },
-  { title: "Deals", url: "/deals", icon: Target },
-  { title: "Tickets", url: "/crm/tickets", icon: Ticket },
+  { title: "Intelligence Hub", url: "/intelligence", icon: Brain },
+  { title: "Supplier Order List", url: "/production-list", icon: ClipboardList },
   { title: "Orders", url: "/orders", icon: ShoppingCart },
-  { title: "Projects", url: "/crm/projects", icon: FolderKanban, badge: "BETA" },
-  { title: "Segments (Lists)", url: "/crm/segments", icon: ListFilter },
-  { title: "Inbox", url: "/crm/inbox", icon: Inbox },
-  { title: "Calls", url: "/crm/calls", icon: Phone },
-  { title: "Tasks", url: "/crm/tasks", icon: CheckSquare },
-  { title: "Forms", url: "/marketing/forms", icon: ClipboardList },
-  { title: "Playbooks", url: "/crm/playbooks", icon: BookOpen },
-  { title: "Message Templates", url: "/crm/message-templates", icon: MessageSquareText },
-  { title: "Snippets", url: "/crm/snippets", icon: TextSelect },
+  { title: "Goals", url: "/reporting/goals", icon: Target },
 ];
 
-const transactionItems = [
-  { title: "Quotes", url: "/quotes", icon: FileText },
-  { title: "Invoices", url: "/invoices", icon: Receipt },
-];
-
+// Sales
 const salesItems = [
+  { title: "Deals", url: "/deals", icon: Target },
   { title: "Sales Workspace", url: "/sales/workspace", icon: Briefcase },
-  { title: "Documents", url: "/sales/documents", icon: FolderOpen },
   { title: "Activity Feed", url: "/sales/activity-feed", icon: Activity },
   { title: "Forecast", url: "/sales/forecast", icon: TrendingUp },
+  { title: "Calls", url: "/crm/calls", icon: Phone },
+  { title: "Tasks", url: "/crm/tasks", icon: CheckSquare },
+  { title: "Playbooks", url: "/crm/playbooks", icon: BookOpen },
+  { title: "Documents", url: "/sales/documents", icon: FolderOpen },
   { title: "Sales Analytics", url: "/sales/analytics", icon: BarChart2 },
 ];
 
+// Marketing
+const marketingItems = [
+  { title: "Email", url: "/marketing/email", icon: Mail },
+  { title: "Forms", url: "/marketing/forms", icon: ClipboardList },
+  { title: "Message Templates", url: "/crm/message-templates", icon: MessageSquareText },
+  { title: "Snippets", url: "/crm/snippets", icon: TextSelect },
+  { title: "Segments (Lists)", url: "/crm/segments", icon: ListFilter },
+];
 
+// Commerce
+const commerceItems = [
+  { title: "Commerce Hub", url: "/commerce/hub", icon: Store },
+  { title: "Quotes", url: "/quotes", icon: FileText },
+  { title: "Orders", url: "/orders", icon: ShoppingCart },
+  { title: "Invoices", url: "/invoices", icon: Receipt },
+  { title: "Products", url: "/products", icon: Package },
+  { title: "Inventory", url: "/inventory", icon: Warehouse },
+];
+
+// Service
 const serviceItems = [
   { title: "Customer Success", url: "/service/customer-success", icon: Award },
   { title: "Ask Millie", url: "/service/customer-agent", icon: Bot },
+  { title: "Tickets", url: "/crm/tickets", icon: Ticket },
+  { title: "Inbox", url: "/crm/inbox", icon: Inbox },
   { title: "Chatflows", url: "/service/chatflows", icon: MessageCircle },
   { title: "Knowledge Base", url: "/service/knowledge-base", icon: BookOpenCheck },
   { title: "Customer Portal", url: "/service/customer-portal", icon: Globe },
@@ -125,12 +128,10 @@ const serviceItems = [
   { title: "Service Analytics", url: "/service/analytics", icon: BarChart3 },
 ];
 
+// Reporting
 const reportingItems = [
-  { title: "Intelligence Hub", url: "/intelligence", icon: Brain },
-  { title: "Supplier Order List", url: "/production-list", icon: ClipboardList },
   { title: "Dashboards", url: "/reporting/dashboards", icon: BarChart3 },
   { title: "Reports", url: "/reporting/reports", icon: FileText },
-  { title: "Goals", url: "/reporting/goals", icon: Target },
 ];
 
 export function AppSidebar() {
@@ -148,14 +149,13 @@ export function AppSidebar() {
     return location.startsWith(url);
   };
 
-  const isCrmActive = location.startsWith("/crm") || location.startsWith("/marketing") || ["/contacts", "/companies", "/deals", "/orders"].some(p => location.startsWith(p)) || location === "/orders/requests";
-  const isTransactionsActive = ["/quotes", "/invoices"].some(p => location.startsWith(p));
-  const isSalesActive = location.startsWith("/sales");
-
-  const isCommerceActive = location.startsWith("/commerce");
-  const isServiceActive = location.startsWith("/service");
+  const isCrmActive = ["/contacts", "/companies", "/intelligence", "/production-list", "/orders", "/reporting/goals"].some(p => location.startsWith(p));
+  const isSalesActive = location.startsWith("/sales") || location.startsWith("/deals") || ["/crm/calls", "/crm/tasks", "/crm/playbooks"].some(p => location.startsWith(p));
+  const isMarketingActive = location.startsWith("/marketing") || ["/crm/segments", "/crm/message-templates", "/crm/snippets"].some(p => location.startsWith(p));
+  const isCommerceActive = location.startsWith("/commerce") || ["/quotes", "/invoices", "/products", "/inventory"].some(p => location.startsWith(p));
+  const isServiceActive = location.startsWith("/service") || ["/crm/tickets", "/crm/inbox"].some(p => location.startsWith(p));
   const isDataMgmtActive = location.startsWith("/data-management");
-  const isReportingActive = location.startsWith("/reporting") || location.startsWith("/reports") || location.startsWith("/intelligence") || location.startsWith("/production-list");
+  const isReportingActive = location.startsWith("/reporting/dashboards") || location.startsWith("/reporting/reports");
 
   return (
     <Sidebar>
@@ -172,41 +172,38 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-2">
+
+        {/* Main quick-links */}
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1">
-            Main
-          </SidebarGroupLabel>
+          <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1">Main</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNavItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    data-active={isActive(item.url)}
-                    className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                  >
-                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                      <item.icon className="w-4 h-4" />
-                      <span className="flex-1">{item.title}</span>
-                      {item.title === "Order Requests" && pendingRequestCount?.count ? (
-                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[20px] justify-center">{pendingRequestCount.count}</Badge>
-                      ) : null}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild data-active={isActive("/")} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
+                  <Link href="/" data-testid="nav-dashboard"><LayoutDashboard className="w-4 h-4" /><span className="flex-1">Dashboard</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild data-active={isActive("/orders/requests")} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
+                  <Link href="/orders/requests" data-testid="nav-order-requests">
+                    <ClipboardCheck className="w-4 h-4" />
+                    <span className="flex-1">Order Requests</span>
+                    {pendingRequestCount?.count ? (
+                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0 min-w-[20px] justify-center">{pendingRequestCount.count}</Badge>
+                    ) : null}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* CRM */}
         <SidebarGroup>
           <Collapsible defaultOpen={isCrmActive} className="group/crm">
             <CollapsibleTrigger className="w-full">
               <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
-                <div className="flex items-center gap-2">
-                  <Contact className="w-3.5 h-3.5" />
-                  <span>CRM</span>
-                </div>
+                <div className="flex items-center gap-2"><Contact className="w-3.5 h-3.5" /><span>CRM</span></div>
                 <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/crm:rotate-180" />
               </SidebarGroupLabel>
             </CollapsibleTrigger>
@@ -215,17 +212,9 @@ export function AppSidebar() {
                 <SidebarMenu>
                   {crmItems.map((item) => (
                     <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        data-active={isActive(item.url)}
-                        className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                      >
+                      <SidebarMenuButton asChild data-active={isActive(item.url)} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
                         <Link href={item.url} data-testid={`nav-crm-${item.title.toLowerCase().replace(/[\s()]+/g, "-")}`}>
-                          <item.icon className="w-4 h-4" />
-                          <span className="flex-1">{item.title}</span>
-                          {"badge" in item && item.badge && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{item.badge}</Badge>
-                          )}
+                          <item.icon className="w-4 h-4" /><span>{item.title}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -236,48 +225,12 @@ export function AppSidebar() {
           </Collapsible>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <Collapsible defaultOpen={isTransactionsActive} className="group/transactions">
-            <CollapsibleTrigger className="w-full">
-              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
-                <div className="flex items-center gap-2">
-                  <Receipt className="w-3.5 h-3.5" />
-                  <span>Transactions</span>
-                </div>
-                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/transactions:rotate-180" />
-              </SidebarGroupLabel>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {transactionItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        data-active={isActive(item.url)}
-                        className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                      >
-                        <Link href={item.url} data-testid={`nav-${item.title.toLowerCase()}`}>
-                          <item.icon className="w-4 h-4" />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </Collapsible>
-        </SidebarGroup>
-
+        {/* Sales */}
         <SidebarGroup>
           <Collapsible defaultOpen={isSalesActive} className="group/sales">
             <CollapsibleTrigger className="w-full">
               <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
-                <div className="flex items-center gap-2">
-                  <Briefcase className="w-3.5 h-3.5" />
-                  <span>Sales</span>
-                </div>
+                <div className="flex items-center gap-2"><Briefcase className="w-3.5 h-3.5" /><span>Sales</span></div>
                 <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/sales:rotate-180" />
               </SidebarGroupLabel>
             </CollapsibleTrigger>
@@ -286,14 +239,9 @@ export function AppSidebar() {
                 <SidebarMenu>
                   {salesItems.map((item) => (
                     <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        data-active={isActive(item.url)}
-                        className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                      >
+                      <SidebarMenuButton asChild data-active={isActive(item.url)} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
                         <Link href={item.url} data-testid={`nav-sales-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                          <item.icon className="w-4 h-4" />
-                          <span>{item.title}</span>
+                          <item.icon className="w-4 h-4" /><span>{item.title}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -304,107 +252,66 @@ export function AppSidebar() {
           </Collapsible>
         </SidebarGroup>
 
-
+        {/* Marketing */}
         <SidebarGroup>
-          <Collapsible defaultOpen={isCommerceActive} className="group/commerce">
+          <Collapsible defaultOpen={isMarketingActive} className="group/marketing">
             <CollapsibleTrigger className="w-full">
               <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
-                <div className="flex items-center gap-2">
-                  <Store className="w-3.5 h-3.5" />
-                  <span>Commerce</span>
-                </div>
-                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/commerce:rotate-180" />
+                <div className="flex items-center gap-2"><Megaphone className="w-3.5 h-3.5" /><span>Marketing</span></div>
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/marketing:rotate-180" />
               </SidebarGroupLabel>
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/commerce/hub")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/commerce/hub" data-testid="nav-commerce-hub">
-                        <Store className="w-4 h-4" />
-                        <span>Commerce Hub</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/quotes")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/quotes" data-testid="nav-commerce-quotes">
-                        <FileText className="w-4 h-4" />
-                        <span>Quotes</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/orders")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/orders" data-testid="nav-commerce-orders">
-                        <ShoppingCart className="w-4 h-4" />
-                        <span>Orders</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/invoices")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/invoices" data-testid="nav-commerce-invoices">
-                        <Receipt className="w-4 h-4" />
-                        <span>Invoices</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/products")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/products" data-testid="nav-commerce-products">
-                        <Package className="w-4 h-4" />
-                        <span>Products</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/inventory")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/inventory" data-testid="nav-inventory">
-                        <Warehouse className="w-4 h-4" />
-                        <span>Inventory</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                  {marketingItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild data-active={isActive(item.url)} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
+                        <Link href={item.url} data-testid={`nav-marketing-${item.title.toLowerCase().replace(/[\s()]+/g, "-")}`}>
+                          <item.icon className="w-4 h-4" /><span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>
           </Collapsible>
         </SidebarGroup>
 
+        {/* Commerce */}
+        <SidebarGroup>
+          <Collapsible defaultOpen={isCommerceActive} className="group/commerce">
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
+                <div className="flex items-center gap-2"><Store className="w-3.5 h-3.5" /><span>Commerce</span></div>
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/commerce:rotate-180" />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {commerceItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild data-active={isActive(item.url)} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
+                        <Link href={item.url} data-testid={`nav-commerce-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                          <item.icon className="w-4 h-4" /><span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </SidebarGroup>
+
+        {/* Service */}
         <SidebarGroup>
           <Collapsible defaultOpen={isServiceActive} className="group/service">
             <CollapsibleTrigger className="w-full">
               <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
-                <div className="flex items-center gap-2">
-                  <Headphones className="w-3.5 h-3.5" />
-                  <span>Service</span>
-                </div>
+                <div className="flex items-center gap-2"><Headphones className="w-3.5 h-3.5" /><span>Service</span></div>
                 <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/service:rotate-180" />
               </SidebarGroupLabel>
             </CollapsibleTrigger>
@@ -413,14 +320,9 @@ export function AppSidebar() {
                 <SidebarMenu>
                   {serviceItems.map((item) => (
                     <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        data-active={isActive(item.url)}
-                        className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                      >
+                      <SidebarMenuButton asChild data-active={isActive(item.url)} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
                         <Link href={item.url} data-testid={`nav-service-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                          <item.icon className="w-4 h-4" />
-                          <span>{item.title}</span>
+                          <item.icon className="w-4 h-4" /><span>{item.title}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -431,118 +333,12 @@ export function AppSidebar() {
           </Collapsible>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <Collapsible defaultOpen={isDataMgmtActive} className="group/datamgmt">
-            <CollapsibleTrigger className="w-full">
-              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
-                <div className="flex items-center gap-2">
-                  <Database className="w-3.5 h-3.5" />
-                  <span>Data Management</span>
-                </div>
-                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/datamgmt:rotate-180" />
-              </SidebarGroupLabel>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/data-management/data-agent")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/data-management/data-agent" data-testid="nav-data-agent">
-                        <Sparkles className="w-4 h-4" />
-                        <span>Data Agent</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/data-management/data-integration")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/data-management/data-integration" data-testid="nav-data-integration">
-                        <Plug className="w-4 h-4" />
-                        <span>Data Integration</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/data-management/event-management")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/data-management/event-management" data-testid="nav-event-management">
-                        <CalendarCheck className="w-4 h-4" />
-                        <span>Event Management</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/data-management/data-quality")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/data-management/data-quality" data-testid="nav-data-quality">
-                        <ShieldCheck className="w-4 h-4" />
-                        <span>Data Quality</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/data-management/data-studio")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/data-management/data-studio" data-testid="nav-data-studio">
-                        <BarChart3 className="w-4 h-4" />
-                        <span>Data Studio</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/data-management/data-model")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/data-management/data-model" data-testid="nav-data-model">
-                        <Blocks className="w-4 h-4" />
-                        <span>Data Model</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive("/data-management/data-enrichment")}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href="/data-management/data-enrichment" data-testid="nav-data-enrichment">
-                        <Database className="w-4 h-4" />
-                        <span>Data Enrichment</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </Collapsible>
-        </SidebarGroup>
-
+        {/* Reporting */}
         <SidebarGroup>
           <Collapsible defaultOpen={isReportingActive} className="group/reporting">
             <CollapsibleTrigger className="w-full">
               <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="w-3.5 h-3.5" />
-                  <span>Reporting</span>
-                </div>
+                <div className="flex items-center gap-2"><BarChart3 className="w-3.5 h-3.5" /><span>Reporting</span></div>
                 <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/reporting:rotate-180" />
               </SidebarGroupLabel>
             </CollapsibleTrigger>
@@ -551,14 +347,9 @@ export function AppSidebar() {
                 <SidebarMenu>
                   {reportingItems.map((item) => (
                     <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        data-active={isActive(item.url)}
-                        className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                      >
+                      <SidebarMenuButton asChild data-active={isActive(item.url)} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
                         <Link href={item.url} data-testid={`nav-reporting-${item.title.toLowerCase()}`}>
-                          <item.icon className="w-4 h-4" />
-                          <span>{item.title}</span>
+                          <item.icon className="w-4 h-4" /><span>{item.title}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -569,72 +360,81 @@ export function AppSidebar() {
           </Collapsible>
         </SidebarGroup>
 
+        {/* Data Management */}
+        <SidebarGroup>
+          <Collapsible defaultOpen={isDataMgmtActive} className="group/datamgmt">
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1 cursor-pointer flex items-center justify-between gap-2 w-full">
+                <div className="flex items-center gap-2"><Database className="w-3.5 h-3.5" /><span>Data Management</span></div>
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]/datamgmt:rotate-180" />
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {[
+                    { title: "Data Agent", url: "/data-management/data-agent", icon: Sparkles },
+                    { title: "Data Integration", url: "/data-management/data-integration", icon: Plug },
+                    { title: "Event Management", url: "/data-management/event-management", icon: CalendarCheck },
+                    { title: "Data Quality", url: "/data-management/data-quality", icon: ShieldCheck },
+                    { title: "Data Studio", url: "/data-management/data-studio", icon: BarChart3 },
+                    { title: "Data Model", url: "/data-management/data-model", icon: Blocks },
+                    { title: "Data Enrichment", url: "/data-management/data-enrichment", icon: Database },
+                  ].map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild data-active={isActive(item.url)} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
+                        <Link href={item.url} data-testid={`nav-dm-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                          <item.icon className="w-4 h-4" /><span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </SidebarGroup>
+
+        {/* Admin */}
         {isAdmin && (
           <SidebarGroup>
-            <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1">
-              Admin
-            </SidebarGroupLabel>
+            <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2 py-1">Admin</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    data-active={isActive("/admin")}
-                    className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                  >
-                    <Link href="/admin" data-testid="nav-admin">
-                      <Settings className="w-4 h-4" />
-                      <span>Settings</span>
-                    </Link>
+                  <SidebarMenuButton asChild data-active={isActive("/admin")} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
+                    <Link href="/admin" data-testid="nav-admin"><Settings className="w-4 h-4" /><span>Settings</span></Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    data-active={isActive("/admin/price-lists")}
-                    className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                  >
-                    <Link href="/admin/price-lists" data-testid="nav-price-lists">
-                      <ListFilter className="w-4 h-4" />
-                      <span>Price Lists</span>
-                    </Link>
+                  <SidebarMenuButton asChild data-active={isActive("/admin/price-lists")} className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
+                    <Link href="/admin/price-lists" data-testid="nav-price-lists"><ListFilter className="w-4 h-4" /><span>Price Lists</span></Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
+
       </SidebarContent>
 
       <SidebarFooter className="p-3 border-t border-sidebar-border">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-medium text-primary">
-                {user?.name?.charAt(0).toUpperCase() || "U"}
-              </span>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-semibold text-primary">{user?.username?.[0]?.toUpperCase() ?? "U"}</span>
             </div>
-            <div className="flex flex-col min-w-0">
-              <span className="text-sm font-medium truncate">{user?.name || "User"}</span>
-              <span className="text-xs text-muted-foreground capitalize">{user?.role || "user"}</span>
+            <div className="min-w-0">
+              <p className="text-xs font-medium truncate">{user?.username}</p>
+              <p className="text-[10px] text-muted-foreground capitalize truncate">{user?.role}</p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={toggleTheme}
-              data-testid="button-theme-toggle"
-            >
-              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleTheme} data-testid="btn-toggle-theme">
+              {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={logout}
-              data-testid="button-logout"
-            >
-              <LogOut className="w-4 h-4" />
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={logout} data-testid="btn-logout">
+              <LogOut className="w-3.5 h-3.5" />
             </Button>
           </div>
         </div>
