@@ -318,59 +318,71 @@ function PortalDashboard({ onNavigate }: { onNavigate: (page: string) => void })
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold" data-testid="text-portal-dashboard-title">Dashboard</h1>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="cursor-pointer hover-elevate" onClick={() => onNavigate("orders")} data-testid="card-open-orders">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-md bg-blue-100 dark:bg-blue-900">
-                <Package className="w-5 h-5 text-blue-600 dark:text-blue-300" />
+      <div className="flex items-start gap-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 flex-1">
+          <Card className="cursor-pointer hover-elevate" onClick={() => onNavigate("orders")} data-testid="card-open-orders">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-md bg-blue-100 dark:bg-blue-900">
+                  <Package className="w-5 h-5 text-blue-600 dark:text-blue-300" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Open Orders</p>
+                  <p className="text-2xl font-semibold">{dashboard?.openOrders || 0}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Open Orders</p>
-                <p className="text-2xl font-semibold">{dashboard?.openOrders || 0}</p>
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer hover-elevate" onClick={() => onNavigate("orders")} data-testid="card-total-orders">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-md bg-indigo-100 dark:bg-indigo-900">
+                  <ShoppingCart className="w-5 h-5 text-indigo-600 dark:text-indigo-300" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Orders</p>
+                  <p className="text-2xl font-semibold">{dashboard?.totalOrders || 0}</p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="cursor-pointer hover-elevate" onClick={() => onNavigate("orders")} data-testid="card-total-orders">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-md bg-indigo-100 dark:bg-indigo-900">
-                <ShoppingCart className="w-5 h-5 text-indigo-600 dark:text-indigo-300" />
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer hover-elevate" onClick={() => onNavigate("invoices")} data-testid="card-unpaid-invoices">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-md bg-amber-100 dark:bg-amber-900">
+                  <FileText className="w-5 h-5 text-amber-600 dark:text-amber-300" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Unpaid Invoices</p>
+                  <p className="text-2xl font-semibold">{dashboard?.unpaidInvoices || 0}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Orders</p>
-                <p className="text-2xl font-semibold">{dashboard?.totalOrders || 0}</p>
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer hover-elevate" onClick={() => onNavigate("invoices")} data-testid="card-outstanding-balance">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-md bg-emerald-100 dark:bg-emerald-900">
+                  <DollarSign className="w-5 h-5 text-emerald-600 dark:text-emerald-300" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Outstanding</p>
+                  <p className="text-2xl font-semibold">${(dashboard?.outstandingBalance || 0).toLocaleString("en-AU", { minimumFractionDigits: 2 })}</p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="cursor-pointer hover-elevate" onClick={() => onNavigate("invoices")} data-testid="card-unpaid-invoices">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-md bg-amber-100 dark:bg-amber-900">
-                <FileText className="w-5 h-5 text-amber-600 dark:text-amber-300" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Unpaid Invoices</p>
-                <p className="text-2xl font-semibold">{dashboard?.unpaidInvoices || 0}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card data-testid="card-outstanding-balance">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-md bg-emerald-100 dark:bg-emerald-900">
-                <DollarSign className="w-5 h-5 text-emerald-600 dark:text-emerald-300" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Outstanding</p>
-                <p className="text-2xl font-semibold">${(dashboard?.outstandingBalance || 0).toLocaleString("en-AU", { minimumFractionDigits: 2 })}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Account Balance — total of all unpaid invoices */}
+        {(dashboard?.accountBalance || 0) > 0 && (
+          <div className="shrink-0 flex flex-col items-end justify-center py-3 px-1 min-w-[110px]" data-testid="stat-account-balance">
+            <p className="text-sm font-semibold text-muted-foreground">Account Balance</p>
+            <p className="text-2xl font-bold">
+              ${Math.round(dashboard?.accountBalance || 0).toLocaleString("en-AU")}
+            </p>
+          </div>
+        )}
       </div>
 
       <Card>
