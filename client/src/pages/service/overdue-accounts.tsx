@@ -36,7 +36,8 @@ interface AccountRow {
   accountOverdue: boolean;
   overdueAmount: string | null;
   overdueSince: string | null;
-  invoiceOutstanding: number;
+  invoiceOutstanding: number;  // past-due invoices only (status = 'overdue')
+  invoiceTotalAll: number;     // all unpaid invoices (sent + overdue)
 }
 
 function calcDays(overdueSince: string | null): number {
@@ -169,7 +170,7 @@ export default function OverdueAccountsPage() {
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-1 pt-4 px-4">
-            <CardTitle className="text-xs text-muted-foreground font-medium">With outstanding invoices</CardTitle>
+            <CardTitle className="text-xs text-muted-foreground font-medium">With overdue invoices</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <p className="text-3xl font-bold">{accounts.length}</p>
@@ -177,12 +178,18 @@ export default function OverdueAccountsPage() {
         </Card>
         <Card>
           <CardHeader className="pb-1 pt-4 px-4">
-            <CardTitle className="text-xs text-muted-foreground font-medium">Total owed (Xero)</CardTitle>
+            <CardTitle className="text-xs text-muted-foreground font-medium">Total overdue (Xero)</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <p className="text-3xl font-bold text-red-600">
               {totalInvoiceOutstanding > 0 ? `$${fmtAud(totalInvoiceOutstanding)}` : "—"}
             </p>
+            {(() => {
+              const totalAll = accounts.reduce((s, a) => s + (a.invoiceTotalAll ?? 0), 0);
+              return totalAll > totalInvoiceOutstanding ? (
+                <p className="text-xs text-muted-foreground mt-1">${fmtAud(totalAll)} total unpaid incl. not-yet-due</p>
+              ) : null;
+            })()}
           </CardContent>
         </Card>
         <Card>
@@ -214,7 +221,7 @@ export default function OverdueAccountsPage() {
             <thead className="bg-muted/50">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Company</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Outstanding (Xero)</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Overdue (Xero)</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Shown to customer</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Flagged since</th>
                 <th className="text-center px-4 py-3 font-medium text-muted-foreground">Notify in portal</th>
@@ -251,12 +258,19 @@ export default function OverdueAccountsPage() {
                       </div>
                     </td>
 
-                    {/* Xero outstanding */}
+                    {/* Xero overdue */}
                     <td className="px-4 py-3">
                       {account.invoiceOutstanding > 0 ? (
-                        <span className="font-semibold text-red-600">${fmtAud(account.invoiceOutstanding)}</span>
+                        <div>
+                          <span className="font-semibold text-red-600">${fmtAud(account.invoiceOutstanding)}</span>
+                          {(account.invoiceTotalAll ?? 0) > account.invoiceOutstanding && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              ${fmtAud(account.invoiceTotalAll)} total unpaid
+                            </p>
+                          )}
+                        </div>
                       ) : (
-                        <span className="text-muted-foreground text-xs italic">No open invoices</span>
+                        <span className="text-muted-foreground text-xs italic">No overdue invoices</span>
                       )}
                     </td>
 

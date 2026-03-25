@@ -231,15 +231,23 @@ export async function registerRoutes(
         SELECT
           c.id, c.legal_name, c.trading_name,
           c.account_overdue, c.overdue_amount, c.overdue_since, c.credit_status,
-          COALESCE(inv.total_outstanding, 0) AS invoice_outstanding
+          COALESCE(inv.total_outstanding, 0) AS invoice_outstanding,
+          COALESCE(all_inv.total_all, 0) AS invoice_total_all
         FROM companies c
         LEFT JOIN (
           SELECT company_id, SUM(balance_due::numeric) AS total_outstanding
           FROM invoices
-          WHERE status NOT IN ('paid', 'void')
+          WHERE status = 'overdue'
           GROUP BY company_id
           HAVING SUM(balance_due::numeric) > 0
         ) inv ON inv.company_id = c.id
+        LEFT JOIN (
+          SELECT company_id, SUM(balance_due::numeric) AS total_all
+          FROM invoices
+          WHERE status NOT IN ('paid', 'void')
+          GROUP BY company_id
+          HAVING SUM(balance_due::numeric) > 0
+        ) all_inv ON all_inv.company_id = c.id
         WHERE inv.company_id IS NOT NULL OR c.account_overdue = true
         ORDER BY inv.total_outstanding DESC NULLS LAST, c.legal_name ASC
       `);
@@ -252,6 +260,7 @@ export async function registerRoutes(
         overdueSince: r.overdue_since,
         creditStatus: r.credit_status,
         invoiceOutstanding: parseFloat(r.invoice_outstanding ?? "0"),
+        invoiceTotalAll: parseFloat(r.invoice_total_all ?? "0"),
       })));
     } catch (error) {
       console.error("Overdue accounts error:", error);

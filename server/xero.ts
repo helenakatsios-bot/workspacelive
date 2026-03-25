@@ -728,11 +728,20 @@ export async function autoSyncXeroInvoices(accessToken: string, tenantId: string
       FROM (
         SELECT company_id, COALESCE(SUM(balance_due::numeric), 0) AS total
         FROM invoices
-        WHERE status NOT IN ('paid', 'void')
+        WHERE status = 'overdue'
         GROUP BY company_id
       ) sub
       WHERE c.id = sub.company_id
         AND sub.total > 0
+    `);
+    // Zero out companies that no longer have any overdue invoices
+    await db.execute(sql`
+      UPDATE companies
+      SET overdue_amount = 0
+      WHERE id NOT IN (
+        SELECT DISTINCT company_id FROM invoices WHERE status = 'overdue' AND company_id IS NOT NULL
+      )
+      AND overdue_amount > 0
     `);
   } catch (refreshErr) {
     console.error("[XERO-AUTOSYNC] Could not refresh overdue_amount on companies:", refreshErr);
