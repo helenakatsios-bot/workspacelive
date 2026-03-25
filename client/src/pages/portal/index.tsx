@@ -2002,90 +2002,54 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
                         return rows;
                       })
                     ) : sizeGroups ? (
-                      sizeGroups.map(({ size, options }) => {
-                        // Standard size-group render (PIPED PILLOWS, CHAMBER PILLOW, HUNGARIAN PILLOW, etc.)
-                        const sgKey = `${category}__${size}`;
-                        const selectedFilling = options.length === 1
-                          ? options[0].filling
-                          : (sizeGroupFillings[sgKey] || "");
-                        const resolvedOpt = options.find(o => o.filling === selectedFilling) || null;
-                        const productId = resolvedOpt?.productId || "";
-                        const price = resolvedOpt?.price || "0";
-                        return (
-                          <TableRow key={size} data-testid={`row-product-sg-${size}`}>
-                            <TableCell>
-                              <p className="font-medium">{size}</p>
-                              {options.length === 1 && options[0].filling && (
-                                <p className="text-xs text-muted-foreground">{options[0].filling}</p>
-                              )}
-                            </TableCell>
-                            {hasMultipleFillings && (
+                      sizeGroups.flatMap(({ size, options }) =>
+                        options.map((opt) => {
+                          // Each filling option gets its own row so customers can order multiple fillings per size
+                          const productId = opt.productId;
+                          const price = opt.price;
+                          const rowKey = `${size}__${opt.productId}`;
+                          return (
+                            <TableRow key={rowKey} data-testid={`row-product-sg-${rowKey}`}>
                               <TableCell>
-                                {options.length === 1 ? (
-                                  <span className="text-sm text-muted-foreground">—</span>
-                                ) : (
-                                  <Select
-                                    value={selectedFilling}
-                                    onValueChange={(val) => {
-                                      if (productId) {
-                                        setCart(prev => { const { [productId]: _, ...rest } = prev; return rest; });
-                                        setFillings(prev => { const { [productId]: _, ...rest } = prev; return rest; });
-                                      }
-                                      // Find the new product for this filling so we can record it
-                                      const newOpt = options.find(o => o.filling === val);
-                                      if (newOpt?.productId) {
-                                        setFillings(prev => ({ ...prev, [newOpt.productId]: val }));
-                                      }
-                                      setSizeGroupFillings(prev => ({ ...prev, [sgKey]: val }));
-                                    }}
-                                  >
-                                    <SelectTrigger className="w-[130px]" data-testid={`select-filling-sg-${size}`}>
-                                      <SelectValue placeholder="Select..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {options.map(o => (
-                                        <SelectItem key={o.filling} value={o.filling}>{o.filling}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                <p className="font-medium">{size}</p>
+                                {!hasMultipleFillings && opt.filling && (
+                                  <p className="text-xs text-muted-foreground">{opt.filling}</p>
                                 )}
                               </TableCell>
-                            )}
-                            <TableCell>
-                              <Input
-                                type="number"
-                                inputMode="numeric"
-                                min={0}
-                                value={productId ? (cart[productId] || "") : ""}
-                                placeholder="0"
-                                disabled={hasMultipleFillings && !productId}
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => {
-                                  if (!productId) return;
-                                  const val = parseInt(e.target.value) || 0;
-                                  setCart(prev => {
-                                    if (val <= 0) { const { [productId]: _, ...rest } = prev; return rest; }
-                                    return { ...prev, [productId]: val };
-                                  });
-                                  // Record filling so submit validation passes for single-option size groups
-                                  if (options.length === 1 && options[0].filling) {
-                                    setFillings(prev => ({ ...prev, [productId]: options[0].filling }));
-                                  }
-                                }}
-                                className="h-8 w-[70px] text-center mx-auto"
-                                data-testid={`input-qty-sg-${size}`}
-                              />
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {productId ? (
-                                <span className="font-medium">${parseFloat(price).toFixed(2)}</span>
-                              ) : (
-                                <span className="text-muted-foreground text-sm">—</span>
+                              {hasMultipleFillings && (
+                                <TableCell>
+                                  <span className="text-sm">{opt.filling || "—"}</span>
+                                </TableCell>
                               )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min={0}
+                                  value={cart[productId] || ""}
+                                  placeholder="0"
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 0;
+                                    setCart(prev => {
+                                      if (val <= 0) { const { [productId]: _, ...rest } = prev; return rest; }
+                                      return { ...prev, [productId]: val };
+                                    });
+                                    if (opt.filling) {
+                                      setFillings(prev => ({ ...prev, [productId]: opt.filling }));
+                                    }
+                                  }}
+                                  className="h-8 w-[70px] text-center mx-auto"
+                                  data-testid={`input-qty-sg-${rowKey}`}
+                                />
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <span className="font-medium">${parseFloat(price).toFixed(2)}</span>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )
                     ) : (
                       prods.filter((product: any) => {
                         if (product.name === 'CUSTOM INSERT') return false;
