@@ -9928,16 +9928,16 @@ Rules:
 
   app.post("/api/system/backup", requireAdmin, async (_req, res) => {
     try {
-      await execAsync2("git add .");
+      await execAsync2("git add -A", { timeout: 15000 });
       try {
-        await execAsync2('git commit -m "manual backup"');
+        await execAsync2('git commit -m "manual backup"', { timeout: 15000 });
       } catch (commitErr: any) {
         const msg = commitErr?.message || String(commitErr);
         if (!msg.includes("nothing to commit") && !msg.includes("nothing added")) {
           throw commitErr;
         }
       }
-      await execAsync2("git push origin main");
+      await execAsync2("git push origin main", { timeout: 60000 });
       res.json({ success: true, message: "Backup pushed to GitHub successfully." });
     } catch (err: any) {
       console.error("[GIT-BACKUP] Failed:", err?.message || err);
