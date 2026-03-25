@@ -735,19 +735,26 @@ export async function autoSyncXeroInvoices(accessToken: string, tenantId: string
   return { updated, created };
 }
 
+// refreshOverdueFromXeroContacts: fetches ALL outstanding AUTHORISED invoices from Xero
+// (no If-Modified-Since filter) and sums AmountDue per contact to get accurate overdue amounts.
+// This matches exactly what Xero shows — even for invoices that haven't been modified recently.
 export async function refreshOverdueFromXeroContacts(accessToken: string, tenantId: string): Promise<{ updated: number }> {
-  let contactPage = 1;
-  let contactHasMore = true;
+  let page = 1;
+  let hasMore = true;
   let overdueUpdated = 0;
-  const overdueMap: Record<string, number> = {}; // xeroContactId → overdue amount
+  const overdueMap: Record<string, number> = {}; // xeroContactId → total overdue AmountDue
   let currentToken = accessToken;
 
-  while (contactHasMore) {
+  // Fetch ALL AUTHORISED invoices (accounts receivable) with a balance due — no date filter
+  // Use where filter: Status=="AUTHORISED" AND AmountDue>0 (overdue = DueDate < today)
+  const whereClause = encodeURIComponent(`Type=="ACCREC"&&Status=="AUTHORISED"&&AmountDue>0`);
+
+  while (hasMore) {
     const freshToken = await getFreshXeroToken(tenantId);
     if (freshToken) currentToken = freshToken;
 
-    const contactResp = await fetch(
-      `https://api.xero.com/api.xro/2.0/Contacts?page=${contactPage}&includeArchived=false&summaryOnly=false`,
+    const resp = await fetch(
+      `https://api.xero.com/api.xro/2.0/Invoices?page=${page}&where=${whereClause}&order=DueDate%20ASC`,
       {
         headers: {
           "Authorization": `Bearer ${currentToken}`,
@@ -757,28 +764,32 @@ export async function refreshOverdueFromXeroContacts(accessToken: string, tenant
       }
     );
 
-    if (!contactResp.ok) {
-      const errText = await contactResp.text();
-      console.error(`[XERO] Contacts API error (page ${contactPage}):`, errText);
-      throw new Error(`Xero Contacts API error: ${contactResp.status}`);
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error(`[XERO-OVERDUE] Invoices API error (page ${page}):`, errText);
+      throw new Error(`Xero Invoices API error: ${resp.status}`);
     }
 
-    const contactData = await contactResp.json();
-    const xeroContacts: any[] = contactData.Contacts || [];
+    const data = await resp.json();
+    const xeroInvoices: XeroInvoiceRaw[] = data.Invoices || [];
 
-    for (const contact of xeroContacts) {
-      const overdueAmt = contact.Balances?.AccountsReceivable?.Overdue ?? 0;
-      if (contact.ContactID && overdueAmt > 0) {
-        overdueMap[contact.ContactID] = overdueAmt;
+    for (const inv of xeroInvoices) {
+      if (!inv.Contact?.ContactID || !inv.AmountDue) continue;
+      const dueDate = parseXeroDate(inv.DueDate);
+      // Only count as overdue if past due date
+      if (dueDate && dueDate < new Date()) {
+        overdueMap[inv.Contact.ContactID] = (overdueMap[inv.Contact.ContactID] ?? 0) + (inv.AmountDue ?? 0);
       }
     }
 
-    if (xeroContacts.length < 100) {
-      contactHasMore = false;
+    if (xeroInvoices.length < 100) {
+      hasMore = false;
     } else {
-      contactPage++;
+      page++;
     }
   }
+
+  console.log(`[XERO-OVERDUE] Found ${Object.keys(overdueMap).length} contacts with overdue invoices from Xero`);
 
   // Apply overdue amounts to matching companies
   const mappedIds: string[] = [];
@@ -803,7 +814,6 @@ export async function refreshOverdueFromXeroContacts(accessToken: string, tenant
         AND overdue_amount > 0
     `);
   } else {
-    // No overdue contacts at all from Xero — clear all non-flagged companies
     await db.execute(sql`
       UPDATE companies SET overdue_amount = 0 WHERE account_overdue = false AND overdue_amount > 0
     `);
