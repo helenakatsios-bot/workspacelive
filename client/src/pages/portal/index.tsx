@@ -973,6 +973,8 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
   const [showReorderModal, setShowReorderModal] = useState(false);
   const [reorderDraft, setReorderDraft] = useState<string[]>([]);
   const [showExitDialog, setShowExitDialog] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState<any | null>(null);
+  const [showDraftChoice, setShowDraftChoice] = useState(false);
 
   const DRAFT_KEY = "portal_order_draft";
 
@@ -1042,31 +1044,38 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
     }
   }, [cart, fillings, weights, notes, packagingNotes, deliveryAddress, customerName, customerOrderNumber, customLines, customQuiltLines, sizeGroupFillings, insertGroupSelections]);
 
-  // Restore draft from localStorage on mount (new orders only)
+  // On mount: detect saved draft and show choice screen instead of auto-restoring
   useEffect(() => {
     if (isEditMode) return;
     try {
       const saved = localStorage.getItem(DRAFT_KEY);
       if (!saved) return;
       const draft = JSON.parse(saved);
-      if (draft.cart && Object.keys(draft.cart).length > 0) {
-        setCart(draft.cart);
-        setFillings(draft.fillings || {});
-        setWeights(draft.weights || {});
-        setNotes(draft.notes || "");
-        setPackagingNotes(draft.packagingNotes || "");
-        setDeliveryAddress(draft.deliveryAddress || "");
-        setCustomerName(draft.customerName || "");
-        setCustomerOrderNumber(draft.customerOrderNumber || "");
-        if (draft.customLines?.length) setCustomLines(draft.customLines);
-        if (draft.customQuiltLines?.length) setCustomQuiltLines(draft.customQuiltLines);
-        setSizeGroupFillings(draft.sizeGroupFillings || {});
-        setInsertGroupSelections(draft.insertGroupSelections || {});
-        toast({ title: "Draft restored", description: "Your saved order has been restored. Continue where you left off." });
+      const hasItems = (draft.cart && Object.keys(draft.cart).length > 0)
+        || draft.customLines?.some((l: any) => l.size && l.qty > 0)
+        || draft.customQuiltLines?.some((l: any) => l.description?.trim() && l.qty > 0);
+      if (hasItems) {
+        setPendingDraft(draft);
+        setShowDraftChoice(true);
       }
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadDraft = (draft: any) => {
+    setCart(draft.cart || {});
+    setFillings(draft.fillings || {});
+    setWeights(draft.weights || {});
+    setNotes(draft.notes || "");
+    setPackagingNotes(draft.packagingNotes || "");
+    setDeliveryAddress(draft.deliveryAddress || "");
+    setCustomerName(draft.customerName || "");
+    setCustomerOrderNumber(draft.customerOrderNumber || "");
+    if (draft.customLines?.length) setCustomLines(draft.customLines);
+    if (draft.customQuiltLines?.length) setCustomQuiltLines(draft.customQuiltLines);
+    setSizeGroupFillings(draft.sizeGroupFillings || {});
+    setInsertGroupSelections(draft.insertGroupSelections || {});
+  };
 
   useEffect(() => {
     if (!isEditMode || !editRequest || !products || editLoaded) return;
@@ -1647,6 +1656,67 @@ function PortalNewOrder({ onNavigate, editRequestId, minQty = 1 }: { onNavigate:
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Draft choice screen — shown when a saved draft is detected on mount
+  if (showDraftChoice && pendingDraft) {
+    const draftCartCount = Object.values(pendingDraft.cart || {}).reduce((s: number, q: any) => s + (q || 0), 0) as number;
+    const draftCustomCount = (pendingDraft.customLines || []).filter((l: any) => l.size && l.qty > 0).length
+      + (pendingDraft.customQuiltLines || []).filter((l: any) => l.description?.trim() && l.qty > 0).length;
+    const totalItems = draftCartCount + draftCustomCount;
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => onNavigate("orders")} data-testid="button-back-draft-choice">
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <h1 className="text-2xl font-semibold">New Order</h1>
+        </div>
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="max-w-md w-full rounded-2xl border bg-card shadow-sm p-8 flex flex-col items-center gap-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+              <FileText className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-xl font-semibold">You have a saved draft</h2>
+              <p className="text-muted-foreground text-sm">
+                {totalItems} item{totalItems !== 1 ? "s" : ""} saved from your last session.
+                {pendingDraft.customerOrderNumber ? ` Order ref: ${pendingDraft.customerOrderNumber}.` : ""}
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 w-full">
+              <Button
+                className="w-full gap-2"
+                size="lg"
+                onClick={() => {
+                  loadDraft(pendingDraft);
+                  setShowDraftChoice(false);
+                  setPendingDraft(null);
+                }}
+                data-testid="button-continue-draft"
+              >
+                <FileText className="w-4 h-4" />
+                Continue draft
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                size="lg"
+                onClick={() => {
+                  localStorage.removeItem(DRAFT_KEY);
+                  setPendingDraft(null);
+                  setShowDraftChoice(false);
+                }}
+                data-testid="button-discard-draft-new-order"
+              >
+                Start new order
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
