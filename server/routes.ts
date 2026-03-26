@@ -9928,6 +9928,11 @@ Rules:
     }
   });
 
+  app.get("/api/system/git-status", requireAdmin, (_req, res) => {
+    const gitDir = path.join(process.cwd(), ".git");
+    res.json({ gitAvailable: fs.existsSync(gitDir) });
+  });
+
   app.post("/api/system/backup", requireAdmin, async (_req, res) => {
     const gitDir = path.join(process.cwd(), ".git");
     if (!fs.existsSync(gitDir)) {

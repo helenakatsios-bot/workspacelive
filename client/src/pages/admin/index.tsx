@@ -797,6 +797,9 @@ export default function AdminPage() {
     },
   });
 
+  const { data: gitStatus } = useQuery<{ gitAvailable: boolean }>({
+    queryKey: ["/api/system/git-status"],
+  });
   const [showGitBackupDialog, setShowGitBackupDialog] = useState(false);
   const gitBackupMutation = useMutation({
     mutationFn: async () => {
@@ -1942,40 +1945,42 @@ export default function AdminPage() {
             </CardContent>
           </Card>
 
-          {/* GitHub Code Backup */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Github className="w-5 h-5" />
-                Code Backup (GitHub)
-              </CardTitle>
-              <CardDescription>
-                Push the current codebase to GitHub. Safe to run at any time —
-                if the code is already up to date, it will do nothing, but will
-                still succeed.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                variant="outline"
-                onClick={() => setShowGitBackupDialog(true)}
-                disabled={gitBackupMutation.isPending}
-                data-testid="button-git-backup"
-              >
-                {gitBackupMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Backing up…
-                  </>
-                ) : (
-                  <>
-                    <Github className="w-4 h-4 mr-2" />
-                    Backup to GitHub
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
+          {/* GitHub Code Backup — only shown in git-enabled environments (Replit workspace) */}
+          {gitStatus?.gitAvailable && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Github className="w-5 h-5" />
+                  Code Backup (GitHub)
+                </CardTitle>
+                <CardDescription>
+                  Push the current codebase to GitHub. Safe to run at any time —
+                  if the code is already up to date, it will do nothing, but will
+                  still succeed.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowGitBackupDialog(true)}
+                  disabled={gitBackupMutation.isPending}
+                  data-testid="button-git-backup"
+                >
+                  {gitBackupMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Backing up…
+                    </>
+                  ) : (
+                    <>
+                      <Github className="w-4 h-4 mr-2" />
+                      Backup to GitHub
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           <AlertDialog
             open={showGitBackupDialog}
