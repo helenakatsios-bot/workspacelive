@@ -1774,11 +1774,6 @@ async function runStartupTasks() {
       startRecurringOrderScheduler();
       startBackupScheduler();
 
-      // Auto-backup to GitHub on every production deploy
-      if (process.env.NODE_ENV === "production") {
-        runAutoDeployBackup();
-      }
-
       // Run all startup database tasks in the background after port is open
       runStartupTasks().catch(err => console.error("Startup tasks error:", err));
     },
