@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, MapPin, Phone, Mail, User, Building2, FileText, Clock, Trash2, Pencil, Check, X, Paperclip, Download, ShoppingBag, SendHorizonal, Package } from "lucide-react";
+import { Loader2, MapPin, Phone, Mail, User, Building2, FileText, Clock, Trash2, Pencil, Check, X, Paperclip, Download, ShoppingBag, SendHorizonal, Package, Hash } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -511,14 +511,29 @@ export default function OrderRequestsPage() {
 
               {selectedRequest.customerNotes && (() => {
                 const rawNotes = selectedRequest.customerNotes as string;
-                const packagingMatch = rawNotes.match(/^Packaging \/ Boxing Notes:\s*([\s\S]+?)(?=\n\n[A-Z]|\n\nFilling|\n\nWeight|\n\nCustom|$)/m);
+                // Extract customer PO / order number if present
+                const poMatch = rawNotes.match(/^PO\/Order #:\s*(.+?)(?:\n\n|$)/m);
+                const poNumber = poMatch ? poMatch[1].trim() : null;
+                const notesWithoutPO = poNumber
+                  ? rawNotes.replace(/^PO\/Order #:\s*.+?(?:\n\n|$)/m, "").trim()
+                  : rawNotes;
+                const packagingMatch = notesWithoutPO.match(/^Packaging \/ Boxing Notes:\s*([\s\S]+?)(?=\n\n[A-Z]|\n\nFilling|\n\nWeight|\n\nCustom|$)/m);
                 const packagingText = packagingMatch ? packagingMatch[1].trim() : null;
                 const otherNotes = packagingText
-                  ? rawNotes.replace(/^Packaging \/ Boxing Notes:\s*[\s\S]+?(?=\n\n[A-Z]|\n\nFilling|\n\nWeight|\n\nCustom|$)/m, "").trim()
-                  : rawNotes;
+                  ? notesWithoutPO.replace(/^Packaging \/ Boxing Notes:\s*[\s\S]+?(?=\n\n[A-Z]|\n\nFilling|\n\nWeight|\n\nCustom|$)/m, "").trim()
+                  : notesWithoutPO;
                 return (
                   <>
                     <Separator />
+                    {poNumber && (
+                      <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2 flex items-center gap-2">
+                        <Hash className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                        <div>
+                          <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">Customer Order / PO Number</span>
+                          <p className="text-sm font-medium text-blue-900 dark:text-blue-200">{poNumber}</p>
+                        </div>
+                      </div>
+                    )}
                     {packagingText && (
                       <div className="space-y-2">
                         <h3 className="text-sm font-semibold flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
